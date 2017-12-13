@@ -14,6 +14,13 @@ for d in ../catkin_ws/src/*; do
 done
 
 echo
+echo "*** documentation ***"
+echo
+cd ../documentation
+git status
+cd ../scripts
+
+echo
 echo "*** scripts ***"
 echo
 git status
