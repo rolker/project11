@@ -231,4 +231,15 @@ In our case, we'll build the open source version but install it in /usr/local, w
     make
     sudo make install
     
+AMP also depends on a leter version of GDAL.
+
+    cd ~/src
+    wget http://download.osgeo.org/gdal/2.2.3/gdal-2.2.3.tar.gz
+    tar -xvf gdal-2.2.3.tar.gz
+    cd gdal-2.2.3
+    ./configure
+    make -j8
+    sudo make install
+
+Note, the -j8 argument of make command specifies how many simultaneous jobs to launch. This allows multiple CPU cores to be used to speed up compilation. A rule of thumb is to use twice as many jobs as available cores.
 
