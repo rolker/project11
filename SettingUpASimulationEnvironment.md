@@ -213,25 +213,7 @@ The AutonomouMissionPlanner (AMP) is a QT5 based C++ application for mission pla
     
 The last command may fail due to cmake-gui not being installed. Follow the instructions to install it. Once installed and running, click the configure button to start configuring the mission planner. Accept the default Unix Makefile generator and native compilers.
 
-Since AMP was developed on a later version of Ubuntu, it used functionality found in QT 5.6, which is newer than version 5.5 found on Ubuntu 16.04. For that reason, cmake configuration will fail. One solution is to compile the latest QT5 from source. The following should download a recent version from the command line. If that doesn't work, a recent version should be downloaded from qt.io.
-
-    cd ~/src
-    wget http://download.qt.io/official_releases/qt/5.9/5.9.3/single/qt-everywhere-opensource-src-5.9.3.tar.xz
-    tar xvf qt-everywhere-opensource-src-5.9.3.tar.xz
-    cd qt-everywhere-opensource-src-5.9.3
-    
-Now that we have downloaded the source package and untared it, lets find documentation on how to build it.
-
-    ls
-    less README
-    
-In our case, we'll build the open source version but install it in /usr/local, which is typically the default for configure based build systems. (Notes for virtual machine users: The following can take quite a while build. Increasing the number of CPUs to match the host system will probably help.)
-
-    ./configure -opensource -nomake tests
-    make -j8
-    sudo make install
-    
-TODO: Would the online installer work? Compiling takes hours!
+Since AMP was developed on a later version of Ubuntu, it used functionality found in QT 5.6, which is newer than version 5.5 found on Ubuntu 16.04. For that reason, cmake configuration will fail. A recent version of QT5 may be downloaded and compiled, but that can be time consuming. The online installer may be a quicker alternative.
 
 Download installer from qt.io.
 
@@ -249,4 +231,15 @@ AMP also depends on a later version of GDAL.
     sudo make install
 
 Note, the -j8 argument of make command specifies how many simultaneous jobs to launch. This allows multiple CPU cores to be used to speed up compilation. A rule of thumb is to use twice as many jobs as available cores.
+
+Now that we have the prerequisits, lets go back to AMP's build directory where we can finish configuring and compiling it.
+
+    cd ~/src/AutonomousMissionPlanner/build
+    cmake-gui ../
+
+Make sure that cmake finds the appropriate versions of QT5 and GDAL. To help find QT5, you may need to set the Qt5_DIR variable to something like: ~/Qt/5.10.0/gcc_64/lib/cmake/Qt5
+
+Once configure and generate complete succesfuly, exit cmake and build AMP.
+
+    make
 
