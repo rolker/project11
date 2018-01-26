@@ -194,4 +194,10 @@ Once sim_local.launch is succesfully launch, we can verify that things are runni
 
 ## rviz
 
+With the simulation running, rviz may be launched in a new terminal.
+
+    rviz
+    
+A configuration file showing the map frame of reference as well as the simulated boat, named base_link, can be found at ~/project11/catkin_ws/src/project11/rviz/transforms.rviz. 
+
 ## Installing AutonomousMissionPlanner
