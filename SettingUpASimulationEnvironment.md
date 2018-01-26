@@ -58,7 +58,7 @@ These instructions were developed using VirtualBox on Ubuntu. Similar steps shou
 
   * Obtain an Ubuntu iso install image from the [Xenial release page](http://releases.ubuntu.com/xenial/). We are looking for the [64-bit PC (AMD64) desktop image.](http://releases.ubuntu.com/xenial/ubuntu-16.04.3-desktop-amd64.iso)
   * Create a virtual machine for a 64-bit Ubuntu install with the following specs:
-    * 1GB or more of memory. (TODO: do we need more?)
+    * 2GB or more of memory. (TODO: do we need more? At 1GB, ran out of memory compiling QT5)
     * 200GB or more of hard drive space.
   * Insert the downloaded Ubuntu iso image in the virtual machine's optical drive and start the virtual machine.
   * Chose "Install Ubuntu" when presented the choice.
@@ -228,10 +228,17 @@ Now that we have downloaded the source package and untared it, lets find documen
 In our case, we'll build the open source version but install it in /usr/local, which is typically the default for configure based build systems. (Notes for virtual machine users: The following can take quite a while build. Increasing the number of CPUs to match the host system will probably help.)
 
     ./configure -opensource -nomake tests
-    make
+    make -j8
     sudo make install
     
-AMP also depends on a leter version of GDAL.
+TODO: Would the online installer work? Compiling takes hours!
+
+Download installer from qt.io.
+
+Run the installer, skipping account creation. (You may use/create an account if you want.)
+
+    
+AMP also depends on a later version of GDAL.
 
     cd ~/src
     wget http://download.osgeo.org/gdal/2.2.3/gdal-2.2.3.tar.gz
