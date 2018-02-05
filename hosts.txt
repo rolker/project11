@@ -1,0 +1,57 @@
+####### Following should be appended to default system hosts file #######
+
+## UNH C-Worker 4
+192.168.100.10		vpc
+192.168.100.50		cobham_boat
+192.168.100.51		cobham_shore
+192.168.100.111		stormc		
+
+
+192.168.101.10		vpw
+192.168.101.50		wifi_boat
+192.168.101.51		wifi_shore
+192.168.101.111		stormw	
+
+# Payload
+192.168.15.110 operatorp
+192.168.15.111 stormp
+192.168.15.112 mystiquep
+192.168.15.4 EM2040p
+192.168.15.3 POSMVp
+192.168.15.115 switchp
+
+# Cobham
+192.168.100.110 operatorc
+192.168.100.111 stormc
+192.168.100.112 mystiquec
+192.168.100.10 vpc
+192.168.100.212 switch12c
+192.167.100.224 switch24c
+192.168.100.50 cobham_boat
+192.168.100.51 cobham_shore
+192.168.100.100 CW4c
+192.168.100.20 vsc
+
+# Wifi
+192.168.101.110 operatorw
+192.168.101.111 stormw
+192.168.101.112 mystiquew
+192.168.101.10 vpw
+192.168.101.50 wifi_boat
+192.168.101.51 wifi_shore
+192.168.101.103 bellypackwifiw
+192.168.101.101 bellypackhelmw bellypack
+192.168.101.100 CW4w
+192.168.101.20 vsw
+
+# Internal
+192.168.10.110 operatori
+192.168.10.111 stormi
+192.168.10.112 mystiquei
+192.168.10.60 color_camerai
+192.168.10.62 FLIRi
+192.168.10.200 radari
+
+# Other
+192.168.50.20  vs
+192.168.50.100 CW4
