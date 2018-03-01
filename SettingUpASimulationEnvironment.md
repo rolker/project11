@@ -66,7 +66,7 @@ These instructions were developed using VirtualBox on Ubuntu. Similar steps shou
   * Continue with default "Erase disk and install Ubuntu".
   * Pick reasonable values for timezone and languages.
   * Create a user account for yourself (for a shared machine, you may create a field account instead).
-  * Install guest additions or equivalent.
+  * Install guest additions or equivalent. (Caution, skipping this step with VMWare may have caused diplay errors on boot later on.)
 
 Once Ubuntu is installed, you can make sure it's up to date by doing a apt-get update followed by an apt-get upgrade.
 
