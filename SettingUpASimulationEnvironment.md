@@ -145,6 +145,9 @@ Normally, the Project 11 Catkin workspace is the only one used, so we can make i
     echo "source ~/project11/catkin_ws/devel/setup.bash" >> ~/.bashrc
     source ~/.bashrc
 
+## Fetching Project11 ROS Packages (non-contributor version)
+This step involves "cloning" the Project11 packages from github. These packages contain all the code and documentation for our vehicles. There are two-ways this can be done. This first "non-contributor" version is a bit quicker and allows one to pull the packages, make local modifications as you see fit, but does not easily faciltate contributing your changes back to the master Project11 repositories. If contributing your code back is important, see the contributor version below.
+
 Fetch a few more directories from github.
 
     cd ~/project11
@@ -164,20 +167,24 @@ Clone ROS packages from github:
     git clone https://github.com/CCOMJHC/marine_msgs.git
     git clone https://github.com/CCOMJHC/mission-plan.git
 
-Obtain the asv_msgs and asv_srvs packages from the shared drive. They cannot (yet) be made public on github or similar repository.
+Install additional ROS packages available for apt-get
 
+    sudo apt install ros-lunar-geographic-msgs
+    sudo apt install ros-lunar-geodesy
+
+Finally, obtain the asv_msgs and asv_srvs packages from the Project11 shared drive. They cannot (yet) be made public on github or similar repository.
+
+## Fetching Project11 ROS Packages (contributor version)
+The standard way in "git" to contribute code and other changes back into a repository is to "fork" the repository first. This creates a copy of the repository in your own github account that you can modify as you wish. But you cannot modify the code in the forked version of the repository directly, because it is on the github server. Rather you make a "clone" of if on your local machine where you can make changes and "push" them back to your forked copy on github. Finally, if you want to contribute your changes back to the original offical CCOMJHC repository you navigate to that repo on github and create a "pull request". This is a request for the maintainer of the CCOMJHC repository to "pull" your changes back into the original repository. If he/she agrees with your suggested changes, your request will be granted and your code will become part of the official archive.
+
+Thus instead of simply cloning the repositories as shown above, you may want to first fork them into your own github account and clone them from there. You can then set a "remote" upstream head which also allows you to pull changes from the CCOMJHC repository to keep your own version up to date. 
+
+## Build the packages
 Attempting to build the catkin workspace will reveal missing packages.
 
     cd ~/project11/catkin_ws
     catkin_make
 
-An error message complaining that CMake config files for geographic_msgs cannot be found. They can be installed from the package manager.
-
-    sudo apt install ros-lunar-geographic-msgs
-
-A similar error occurs for a missing geodesy package.
-
-    sudo apt install ros-lunar-geodesy
 
 Once catkin_make completes without error in ~/project11/catkin_ws/, we can try starting the simulation.
 
