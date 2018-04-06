@@ -1,0 +1,11 @@
+<launch>
+    <node pkg="moos_ivp_bridge" type="moos_ivp_bridge_node" name="moos_ivp_bridge"/>
+    <node pkg="asv_helm" type="asv_helm_node" name="asv_helm"/>
+    <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+    <node pkg="udp_bridge" type="vehicle_node" name="udp_bridge_vehicle"/>
+    <node pkg="remote_control" type="remote_control.py" name="remote_control" args="address=192.168.100.112"/>
+    <node pkg="westmountainradio" type="west_mountain_radio_node.py" name="west_mountain_radio"/>
+    <include file="$(find project11)/launch/camera_color.launch" />
+    <include file="$(find project11)/launch/camera_flir.launch" />
+    <include file="$(find project11)/launch/camera_flir_engine.launch" />
+</launch>
