@@ -6,7 +6,7 @@
         <!-- means video device 0, /dev/video0 -->
         <arg name="video_stream_provider" value="rtsp://192.168.15.6/mjpg" />
         <!-- throttling the querying of frames to -->
-        <arg name="fps" value="1" />
+        <arg name="fps" value="30" />
         <!-- setting frame_id -->
         <arg name="frame_id" value="camera_flir_engine" />
         <!-- camera info loading, take care as it needs the "file:///" at the start , e.g.:
