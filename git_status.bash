@@ -1,26 +1,24 @@
 #!/bin/bash
 
+STATUS_CMD="git status | egrep --color '[1-9] commit|modified|'"
+GREEN=`tput setaf 2`
+NORMAL_COLOR=`tput sgr0`
+
 for d in ../catkin_ws/src/*; do
     if [[ -d $d ]]; then
         if [[ -d $d/.git ]]; then
-            echo
-            echo "*** $d ***"
-            echo
+            echo "${GREEN}*** $d ***${NORMAL_COLOR}"
             cd $d
-            git status
+            eval $STATUS_CMD
             cd ../../../scripts
         fi
     fi
 done
 
-echo
-echo "*** documentation ***"
-echo
+echo "${GREEN}*** documentation ***${NORMAL_COLOR}"
 cd ../documentation
-git status
+eval $STATUS_CMD
 cd ../scripts
 
-echo
-echo "*** scripts ***"
-echo
-git status
+echo "${GREEN}*** scripts ***${NORMAL_COLOR}"
+eval $STATUS_CMD
