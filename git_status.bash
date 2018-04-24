@@ -1,6 +1,6 @@
 #!/bin/bash
 
-STATUS_CMD="git status | egrep --color '[1-9] commit|modified|'"
+STATUS_CMD="git status | egrep --color '[1-9] commit|modified|Untracked files|'"
 GREEN=`tput setaf 2`
 NORMAL_COLOR=`tput sgr0`
 
