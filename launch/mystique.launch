@@ -9,4 +9,5 @@
     <include file="$(find project11)/launch/camera_color.launch" />
     <include file="$(find project11)/launch/camera_flir.launch" />
     <include file="$(find project11)/launch/camera_flir_engine.launch" />
+    <node pkg="br24_radar" type="br24_radar_node.py" name="br24_radar_node"/>
 </launch>
