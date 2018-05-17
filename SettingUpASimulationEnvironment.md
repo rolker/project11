@@ -120,7 +120,6 @@ Part of the direcotry structure is created by and while others are cloned from g
     mkdir -p ~/project11/catkin_ws/src
     mkdir -p ~/project11/log/moos
     mkdir -p ~/project11/log/nodes
-    mkdir -p ~/project11/config
     mkdir -p ~/project11/executed_missions
 
 To be able to contain all the relevant data inside the project11 directory, ROS' default working directory, ~/.ros, gets moved and replaced with a symlink.
@@ -153,6 +152,7 @@ Fetch a few more directories from github.
     cd ~/project11
     git clone https://github.com/CCOMJHC/project11_documentation.git documentation
     git clone https://github.com/CCOMJHC/project11_scripts.git scripts
+    git clone https://github.com/CCOMJHC/project11_configuration.git config
 
 Clone ROS packages from github:
 
