@@ -1,4 +1,5 @@
 <launch>
+    <rosparam command="load" file="$(find project11)/parameters/mystique.yaml" />
     <node pkg="moos_ivp_bridge" type="moos_ivp_bridge_node" name="moos_ivp_bridge"/>
     <node pkg="asv_helm" type="asv_helm_node" name="asv_helm"/>
     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
