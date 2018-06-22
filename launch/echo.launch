@@ -1,0 +1,26 @@
+<launch>
+    <node pkg="moos_ivp_bridge" type="moos_ivp_bridge_node" name="moos_ivp_bridge"/>
+    <!--node pkg="echo_helm" type="echo_helm_node" name="echo_helm"/-->
+    <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+    <node pkg="udp_bridge" type="vehicle_node" name="udp_bridge_vehicle" args="192.168.88.255"/>
+    <node pkg="posmv" type="posmv_node.py" name="posmv"/>
+    <node pkg="remote_control" type="remote_control.py" name="remote_control" args="address=192.168.88.7"/>
+
+    <!--arg name="fcu_url" default="/dev/ttyUSB0:57600" /--> <!-- Port et baudrate of the connexion with Pixhawk -->
+    <arg name="fcu_url" default="/dev/ttyACM0:9600" /> <!-- Port et baudrate of the connexion with Pixhawk -->
+    <arg name="gcs_url" default="" /> <!-- Retransmission to a GCS like Mavproxy does -->
+    <arg name="tgt_system" default="1" /> <!-- Mavlink id of your drone, default is 1 -->
+    <arg name="tgt_component" default="1" /> <!-- Mavlink component id of your drone, default is 1 -->
+    <arg name="log_output" default="screen" /> <!-- Where ROS will ouput its message, screen is your current terminal -->
+
+    <include file="$(find mavros)/launch/node.launch"> <!-- This launch file will launch another launch file -->
+        <arg name="pluginlists_yaml" value="$(find mavros)/launch/apm_pluginlists.yaml" /> <!-- Mavros plugin configuration, we will modify that later -->
+        <arg name="config_yaml" value="$(find mavros)/launch/apm_config.yaml" /> <!-- Mavros plugin list to use -->
+
+        <arg name="fcu_url" value="$(arg fcu_url)" /> <!-- Pass the parameter to the other launch file -->
+        <arg name="gcs_url" value="$(arg gcs_url)" />
+        <arg name="tgt_system" value="$(arg tgt_system)" />
+        <arg name="tgt_component" value="$(arg tgt_component)" />
+        <arg name="log_output" value="$(arg log_output)" />
+    </include>
+</launch>
