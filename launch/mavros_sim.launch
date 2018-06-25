@@ -3,6 +3,10 @@
     <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle"/>
     <node pkg="udp_bridge" type="operator_node" name="udp_operator"/>
     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+    <node pkg="remote_control" type="remote_control.py" name="remote_control"/>
+    <node pkg="echo_helm" type="echo_helm_node" name="echo_helm"/>
+
+
 
 	<arg name="fcu_url" default="udp://127.0.0.1:14551@14555" />
 	<arg name="gcs_url" default="" />
