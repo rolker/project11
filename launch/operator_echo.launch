@@ -1,0 +1,7 @@
+<launch>
+    <arg name="host" default="192.168.88.7"/>
+    <node pkg="udp_bridge" type="operator_node" name="udp_bridge_operator" args="$(arg host)"/>
+</launch>
+
+
+
