@@ -1,6 +1,6 @@
 <launch>
     <node pkg="moos_ivp_bridge" type="moos_ivp_bridge_node" name="moos_ivp_bridge"/>
-    <!--node pkg="echo_helm" type="echo_helm_node" name="echo_helm"/-->
+    <node pkg="echo_helm" type="echo_helm_node" name="echo_helm"/>
     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
     <node pkg="udp_bridge" type="vehicle_node" name="udp_bridge_vehicle" args="192.168.88.255"/>
     <node pkg="posmv" type="posmv_node.py" name="posmv"/>
