@@ -7,7 +7,7 @@
     <node pkg="remote_control" type="remote_control.py" name="remote_control" args="address=192.168.88.7"/>
 
     <!--arg name="fcu_url" default="/dev/ttyUSB0:57600" /--> <!-- Port et baudrate of the connexion with Pixhawk -->
-    <arg name="fcu_url" default="/dev/ttyACM0:9600" /> <!-- Port et baudrate of the connexion with Pixhawk -->
+    <arg name="fcu_url" default="/dev/ttyUSB0:57600" /> <!-- Port et baudrate of the connexion with Pixhawk -->
     <arg name="gcs_url" default="" /> <!-- Retransmission to a GCS like Mavproxy does -->
     <arg name="tgt_system" default="1" /> <!-- Mavlink id of your drone, default is 1 -->
     <arg name="tgt_component" default="1" /> <!-- Mavlink component id of your drone, default is 1 -->
