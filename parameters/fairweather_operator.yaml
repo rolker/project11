@@ -1,3 +1,4 @@
+project11/role: operator
 posmv_nmea/input: /dev/ttyUSB0
 posmv_nmea/input_type: serial
 posmv_nmea/input_speed: 9600
