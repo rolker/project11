@@ -18,6 +18,8 @@ while ! ping -c 1 -W 1 mystique; do
     sleep 1
 done
 
+echo "Wait 10 seconds before launching ROS..."
+sleep 10
 
 set -e
 set -v
