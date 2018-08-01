@@ -1,0 +1,3 @@
+project11/role: observer
+posmv_nmea/input_port: 4994
+posmv_nmea/input_type: udp
