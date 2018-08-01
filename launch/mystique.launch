@@ -14,4 +14,5 @@
     <node pkg="posmv" type="posmv_node.py" name="posmv"/>
     <!--node pkg="radar_obstacle_detection" type="radar_obstacle_detection_node.py" name="radar_obstacle_detection"/-->
     <node pkg="kongsberg_em_control" type="kongsberg_em_control_node.py" name="kongsberg_em_control"/>
+    <node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/>
 </launch>
