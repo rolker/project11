@@ -48,18 +48,18 @@ TODO C++ tutorials.
 
 ## Prerequisite
 
-The Project 11 system is based on ROS Lunar so it is designed to run on an Ubuntu 16.04 system. It can also run on Ubuntu 17.04, but it is not recomended since that Ubuntu version is no longer suported.
+The Project 11 system is based on ROS Melodic so it is designed to run on an Ubuntu 18.04 system.
 
-If an Ubuntu 16.04 machine is not readily available, a virtual machine may be setup for this purpose.
+If an Ubuntu 18.04 machine is not readily available, a virtual machine may be setup for this purpose.
 
 ### Setting up an Ubuntu virtual machine
 
 These instructions were developed using VirtualBox on Ubuntu. Similar steps should work with VMWare as well.
 
-  * Obtain an Ubuntu iso install image from the [Xenial release page](http://releases.ubuntu.com/xenial/). We are looking for the [64-bit PC (AMD64) desktop image.](http://releases.ubuntu.com/xenial/ubuntu-16.04.3-desktop-amd64.iso)
+  * Obtain an Ubuntu iso install image from the [Bionic release page](http://releases.ubuntu.com/bionic/). We are looking for the [64-bit PC (AMD64) desktop image.](http://releases.ubuntu.com/xenial/ubuntu-18.04.1-desktop-amd64.iso)
   * Create a virtual machine for a 64-bit Ubuntu install with the following specs:
-    * 2GB or more of memory. (TODO: do we need more? At 1GB, ran out of memory compiling QT5)
-    * 200GB or more of hard drive space.
+    * 4GB or more of memory. (TODO: do we need more? At 1GB, ran out of memory compiling QT5)
+    * 50GB or more of hard drive space.
   * Insert the downloaded Ubuntu iso image in the virtual machine's optical drive and start the virtual machine.
   * Chose "Install Ubuntu" when presented the choice.
   * Select "Download updates while installing Ubuntu" and optonally select "Install third-party software" (TODO: do this last one make a difference?)
@@ -75,7 +75,7 @@ Once Ubuntu is installed, you can make sure it's up to date by doing a apt-get u
 
 ## Installing ROS
 
-Follow the instructions on the [Ubuntu install of ROS Lunar](http://wiki.ros.org/lunar/Installation/Ubuntu) page.
+Follow the instructions on the [Ubuntu install of ROS Melodic](http://wiki.ros.org/melodic/installation/Ubuntu) page, picking the Desktop-Full installation.
 
 If you are new to ROS, now is a good time to follow the ROS tutorials.
 
@@ -95,7 +95,7 @@ Once downloaded, cd into the directory and look at the README file for installat
 
 Follow those instrutions to build and install MOOS and IvP.
 
-If you encounter an error with libtiff4-dev, replace it with libtiff5-dev.
+If you encounter an error with libtiff4-dev, replace it with libtiff5-dev. Similarly, replace libpng12-dev with libpng-dev.
 
 The README file recommends adding the bin directory to the system's PATH variable. You can use the nano editor for this.
 
@@ -115,7 +115,7 @@ The version control client git should already be installed so it only needs to b
 
 ## Creating the Project 11 directory structure.
 
-Part of the direcotry structure is created by and while others are cloned from git repositories.
+Part of the direcotry structure is created by hand while others are cloned from git repositories.
 
     mkdir -p ~/project11/catkin_ws/src
     mkdir -p ~/project11/log/moos
@@ -169,8 +169,8 @@ Clone ROS packages from github:
 
 Install additional ROS packages available for apt-get
 
-    sudo apt install ros-lunar-geographic-msgs
-    sudo apt install ros-lunar-geodesy
+    sudo apt install ros-melodic-geographic-msgs
+    sudo apt install ros-melodic-geodesy
 
 Finally, obtain the asv_msgs and asv_srvs packages from the Project11 shared drive. They cannot (yet) be made public on github or similar repository.
 
@@ -180,7 +180,7 @@ The standard way in "git" to contribute code and other changes back into a repos
 Thus instead of simply cloning the repositories as shown above, you may want to first fork them into your own github account and clone them from there. You can then set a "remote" upstream head which also allows you to pull changes from the CCOMJHC repository to keep your own version up to date. 
 
 ## Build the packages
-Attempting to build the catkin workspace will reveal missing packages.
+Build in the catkin workspace.
 
     cd ~/project11/catkin_ws
     catkin_make
@@ -220,33 +220,22 @@ The AutonomouMissionPlanner (AMP) is a QT5 based C++ application for mission pla
     
 The last command may fail due to cmake-gui not being installed. Follow the instructions to install it. Once installed and running, click the configure button to start configuring the mission planner. Accept the default Unix Makefile generator and native compilers.
 
-Since AMP was developed on a later version of Ubuntu, it used functionality found in QT 5.6, which is newer than version 5.5 found on Ubuntu 16.04. For that reason, cmake configuration will fail. A recent version of QT5 may be downloaded and compiled, but that can be time consuming. The online installer may be a quicker alternative.
+Some QT5 development libraries may be missing. Install then with apt.
 
-Download installer from qt.io.
-
-Run the installer, skipping account creation. (You may use/create an account if you want.)
-
+    sudo apt install qtpositioning5-dev libqt5svg5-dev
     
-AMP also depends on a later version of GDAL.
-
-    cd ~/src
-    wget http://download.osgeo.org/gdal/2.2.3/gdal-2.2.3.tar.gz
-    tar -xvf gdal-2.2.3.tar.gz
-    cd gdal-2.2.3
-    ./configure
-    make -j8
-    sudo make install
-
-Note, the -j8 argument of make command specifies how many simultaneous jobs to launch. This allows multiple CPU cores to be used to speed up compilation. A rule of thumb is to use twice as many jobs as available cores.
-
+    
 Now that we have the prerequisits, lets go back to AMP's build directory where we can finish configuring and compiling it.
 
     cd ~/src/AutonomousMissionPlanner/build
     cmake-gui ../
 
-Make sure that cmake finds the appropriate versions of QT5 and GDAL. To help find QT5, you may need to set the Qt5_DIR variable to something like: ~/Qt/5.10.0/gcc_64/lib/cmake/Qt5
 
 Once configure and generate complete succesfuly, exit cmake and build AMP.
 
     make
+
+From the build direcotry, run the mission planner.
+
+    ./AutonomouMissionPlanner
 
