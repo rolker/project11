@@ -28,7 +28,7 @@ The ROS tutorials recommend [this page](http://www.ee.surrey.ac.uk/Teaching/Unix
 
 ### ROS
 
-Project 11 uses the Lunar version of ROS. It is recomended to go through the [ROS Tutorials](http://wiki.ros.org/ROS/Tutorials) in order to better understand how it works.
+Project 11 uses the Melodic version of ROS. It is recomended to go through the [ROS Tutorials](http://wiki.ros.org/ROS/Tutorials) in order to better understand how it works.
 
 ### Git
 
