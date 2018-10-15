@@ -231,7 +231,8 @@ Now that we have the prerequisits, lets go back to AMP's build directory where w
     cmake-gui ../
 
 
-Once configure and generate complete succesfuly, exit cmake and build AMP.
+Check the box of "AMP_USE_ROS". Press the 'Configure' button and then (if there are no errors) press the 'Generate' button. 
+Once configure and generate complete succesfuly, exit cmake and build AMP (still in the /build directory).
 
     make
 
