@@ -1147,6 +1147,148 @@ namespace gz4d
                     ret[LatLon::Longitude] = Degrees(atan2(p[1],p[0]));
                     return ret;
                 }
+                
+                /// Calculates the postion P2 from azimuth and distance from P1 on the specified ellipsoid.
+                /// @param p1 starting point
+                /// @param azimuth clockwise angle in degrees relative to north.
+                /// @param distance distance in meters.
+                template <typename ET> static Point<double,ReferenceFrame<Geodetic<LatLon>,ET> > direct(Point<double,ReferenceFrame<Geodetic<LatLon>,ET> > const &p1, double azimuth, double distance)
+                {
+                    double phi1 = Radians(p1[0]);
+                    double alpha1 = Radians(azimuth);
+                    
+                    double epsilon = 1e-12;
+                    
+                    //U is 'reduced latitude'
+                    double tanU1 = (1.0-S::f())*tan(phi1);
+                    double cosU1 = 1/sqrt(1+tanU1*tanU1);
+                    double sinU1 = tanU1*cosU1;
+
+                    double cosAlpha1 = cos(alpha1);
+                    double sinAlpha1 = sin(alpha1);
+
+                    double sigma1 = atan2(tanU1, cosAlpha1); // angular distance on sphere from equator to P1 along geodesic
+                    double sinAlpha = cosU1*sinAlpha1;
+                    double cos2Alpha = 1.0-sinAlpha*sinAlpha;
+                    
+                    double a = S::a();
+                    double b = S::b();
+                    double f = S::f();
+
+                    double u2 = cos2Alpha*(a*a-b*b)/(b*b);
+
+                    double k1 = (sqrt(1.0+u2)-1.0)/(sqrt(1.0+u2)+1.0);
+                    double A = (1.0+k1*k1/4.0)/(1.0-k1);
+                    double B = k1*(1.0-3.0*k1*k1/8.0);
+
+                    double sigma = distance/(b*A);
+                    double last_sigma;
+                    double cos2Sigmam;
+                    while (true)
+                    {
+                        cos2Sigmam = cos(2.0*sigma1+sigma);
+                        double sinSigma = sin(sigma);
+                        double cosSigma = cos(sigma);
+        
+                        double deltaSigma = B*sinSigma*(cos2Sigmam+.25*B*(cosSigma*(-1.0+2.0*cos2Sigmam*cos2Sigmam)-(B/6.0)*cos2Sigmam*(-3.0+4.0*sinSigma*sinSigma)*(-3.0+4.0*cos2Sigmam*cos2Sigmam)));
+                        last_sigma = sigma;
+                        sigma = (distance/(b*A))+deltaSigma;
+                        if (fabs(last_sigma-sigma) <= epsilon)
+                            break;
+                    }
+
+                    cos2Sigmam = cos(2.0*sigma1+sigma);
+            
+                    double phi2 = atan2(sinU1*cos(sigma)+cosU1*sin(sigma)*cosAlpha1,(1-f)*sqrt(sinAlpha*sinAlpha+pow(sinU1*sin(sigma)-cosU1*cos(sigma)*cosAlpha1,2)));
+                    double l = atan2(sin(sigma)*sinAlpha1,cosU1*cos(sigma)-sinU1*sin(sigma)*cosAlpha1);
+                    double C = (f/16.0)*cos2Alpha*(4.0+f*(4.0-3.0*cos2Alpha));
+                    double L = l-(1.0-C)*f*sinAlpha*(sigma+C*sin(sigma)*(cos2Sigmam+C*cos(sigma)*(-1+2.0*cos2Sigmam*cos2Sigmam)));
+
+                    double lat2 = Degrees(phi2);
+                    double lon2 = Degrees(Radians(p1[1]) + L);
+                    
+                    Point<double,ReferenceFrame<Geodetic<LatLon>,ET> > ret;
+                    ret[0] = lat2;
+                    ret[1] = lon2;
+                    ret[2] = p1[2];
+                    return ret;
+                }
+                
+                /// Calculates the azimuth and distance from P1 to P2 on the WGS84 ellipsoid.
+                /// @param p1: Position P1 in degrees
+                /// @param p2: Position P2 in degrees
+                /// @return: azimuth in degrees, distance in meters
+                template <typename ET> static std::pair<double,double> inverse(Point<double,ReferenceFrame<Geodetic<LatLon>,ET> > const &p1,Point<double,ReferenceFrame<Geodetic<LatLon>,ET> > const &p2)
+                {
+                    if(p1 == p2)
+                        return std::pair<double,double>(0.0,0.0);
+                    
+                    double a = S::a();
+                    double b = S::b();
+                    double f = S::f();
+                    
+                    double epsilon = 1e-12;   
+                    
+                    double phi1 = Radians(p1[0]);
+                    double phi2 = Radians(p2[0]);
+                    
+                    double L = Radians(p2[1]-p1[1]);
+
+                    double U1 = atan((1.0-f)*tan(phi1));
+                    double U2 = atan((1.0-f)*tan(phi2));
+                    double cosU1 = cos(U1);
+                    double cosU2 = cos(U2);
+                    double sinU1 = sin(U1);
+                    double sinU2 = sin(U2);
+    
+                    double l = L;
+                    double last_l = Nan<double>();
+                    double cosl;
+                    double sinl;
+                    double sinSigma;
+                    double cosSigma;
+                    double sigma;
+                    double cos2Alpha;
+                    double cos2Sigmam;
+
+                    while (true)
+                    {
+                        cosl = cos(l);
+                        sinl = sin(l);
+    
+                        sinSigma = sqrt((pow((cosU2*sinl),2))+pow((cosU1*sinU2-sinU1*cosU2*cosl),2));
+                        cosSigma = sinU1*sinU2+cosU1*cosU2*cosl;
+                        sigma = atan2(sinSigma,cosSigma);
+                        double sinAlpha = (cosU1*cosU2*sinl)/sinSigma;
+
+                        cos2Alpha = 1-sinAlpha*sinAlpha;
+                        if (cos2Alpha == 0)
+                            cos2Sigmam = 0;
+                        else
+                            cos2Sigmam = cosSigma-((2.0*sinU1*sinU2)/cos2Alpha);
+
+                        if (!IsNan(last_l) && fabs(last_l - l) <= epsilon)
+                            break;
+                        last_l = l;
+            
+                        double C = (f/16.0)*cos2Alpha*(4.0+f*(4.0-3.0*cos2Alpha));
+                        l = L+(1.0-C)*f*sinAlpha*(sigma+C*sinSigma*(cos2Sigmam+C*cosSigma*(-1.0+2.0*pow(cos2Sigmam,2))));
+                    }
+
+                    double u2 = cos2Alpha*(a*a-b*b)/(b*b);
+                    double k1 = (sqrt(1.0+u2)-1.0)/(sqrt(1.0+u2)+1.0);
+                    double A = (1.0+k1*k1/4.0)/(1.0-k1);
+                    double B = k1*(1.0-3.0*k1*k1/8.0);
+                    double deltaSigma = B*sinSigma*(cos2Sigmam+.25*B*(cosSigma*(-1.0+2.0*cos2Sigmam*cos2Sigmam)-(B/6.0)*cos2Sigmam*(-3.0+4.0*sinSigma*sinSigma)*(-3.0+4.0*cos2Sigmam*cos2Sigmam)));
+                    double s = b*A*(sigma-deltaSigma);
+                    double alpha1 = atan2(cosU2*sinl,cosU1*sinU2-sinU1*cosU2*cosl);
+
+                    double azimuth = Degrees(alpha1);
+                    if (azimuth < 0.0)
+                        azimuth += 360.0;
+
+                    return std::pair<double,double>(azimuth,s);
+                }
         };
 
         namespace WGS84
@@ -1155,6 +1297,7 @@ namespace gz4d
             {
                 static double a() {return 6378137.0;}
                 static double b() {return 6356752.3142;}
+                static double f() {return 1.0/298.257223563;}
                 static double w() {return 7292115e-11;}
                 static double e2() { return 1.0-( 6356752.3142* 6356752.3142)/(6378137.0*6378137.0);}
             };

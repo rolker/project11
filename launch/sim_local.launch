@@ -7,4 +7,10 @@
     <node pkg="asv_sim" type="asv_sim_node.py" name="asv_sim_node"/>
     <node pkg="udp_bridge" type="operator_node" name="udp_operator"/>
     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+    
+    <arg name="bathy_grid_path" default="$(find mbes_sim)/data/US5NH02M.tiff"/>
+    <node pkg="mbes_sim" type="mbes_sim_node.py" name="mbes_sim" args="$(arg bathy_grid_path)"/>
+    <!--<node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/>-->
+    
+    <node pkg="remote_control" type="remote_control.py" name="remote_control"/>
 </launch>
