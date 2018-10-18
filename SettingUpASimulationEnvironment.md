@@ -3,7 +3,7 @@
 
 ## Introduction
 
-CCOM/JHC's CWorker 4 ASV is capable of operating under the control of a backseat driver, which is computer not supplied by the manufaturer capable of taking control of the vehicle by supplying throttle and rudder (heading) commands. The vehicle's manufacturer supplied computer accepts such commands via a [ROS](http://www.ros.org/) interface. Project 11 also uses [MOOS-IvP](http://oceanai.mit.edu/moos-ivp/) to help steer the ASV.
+CCOM/JHC's CWorker 4 ASV is capable of operating under the control of a backseat driver, which is a computer not supplied by the manufaturer capable of taking control of the vehicle by supplying throttle and rudder (heading) commands. The vehicle's manufacturer supplied computer accepts such commands via a [ROS](http://www.ros.org/) interface. Project 11 also uses [MOOS-IvP](http://oceanai.mit.edu/moos-ivp/) to help steer the ASV.
 
 ROS is offically supported on Ubuntu Linux so the Project 11 system runs on Ubuntu. The actual system consists of two separate computers, each running Ubuntu, comunicating over an unreliable wireless connection. For simulation puposes, the system has been designed to also work on a single computer.
 
@@ -75,7 +75,7 @@ Once Ubuntu is installed, you can make sure it's up to date by doing a apt-get u
 
 ## Installing ROS
 
-Follow the instructions on the [Ubuntu install of ROS Melodic](http://wiki.ros.org/melodic/installation/Ubuntu) page, picking the Desktop-Full installation.
+Follow the instructions on the [Ubuntu install of ROS Melodic](http://wiki.ros.org/melodic/Installation/Ubuntu) page, picking the Desktop-Full installation.
 
 If you are new to ROS, now is a good time to follow the ROS tutorials.
 
@@ -165,15 +165,19 @@ Clone ROS packages from github:
     git clone https://github.com/CCOMJHC/udp_bridge.git
     git clone https://github.com/CCOMJHC/appcast_view.git
     git clone https://github.com/CCOMJHC/marine_msgs.git
-    git clone https://github.com/CCOMJHC/mission-plan.git
+    git clone https://github.com/CCOMJHC/mission_plan.git
+    git clone https://github.com/CCOMJHC/mbes_sim.git
+    
 
 Install additional ROS packages available for apt-get
 
     sudo apt install ros-melodic-geographic-msgs
     sudo apt install ros-melodic-geodesy
 
-Finally, obtain the asv_msgs and asv_srvs packages from the Project11 shared drive. They cannot (yet) be made public on github or similar repository.
+The python gdal package is used by mbes_sim, so make sure it's installed.
 
+    sudo apt install python-gdal    
+    
 ## Fetching Project11 ROS Packages (contributor version)
 The standard way in "git" to contribute code and other changes back into a repository is to "fork" the repository first. This creates a copy of the repository in your own github account that you can modify as you wish. But you cannot modify the code in the forked version of the repository directly, because it is on the github server. Rather you make a "clone" of if on your local machine where you can make changes and "push" them back to your forked copy on github. Finally, if you want to contribute your changes back to the original offical CCOMJHC repository you navigate to that repo on github and create a "pull request". This is a request for the maintainer of the CCOMJHC repository to "pull" your changes back into the original repository. If he/she agrees with your suggested changes, your request will be granted and your code will become part of the official archive.
 
@@ -185,7 +189,10 @@ Build in the catkin workspace.
     cd ~/project11/catkin_ws
     catkin_make
 
-
+Re-sourcing .bashrc will make sure new packages created by the build can be found.
+    
+    source ~/.bashrc
+    
 Once catkin_make completes without error in ~/project11/catkin_ws/, we can try starting the simulation.
 
     roslaunch project11 sim_local.launch
@@ -231,7 +238,7 @@ Now that we have the prerequisits, lets go back to AMP's build directory where w
     cmake-gui ../
 
 
-Check the box of "AMP_USE_ROS". Press the 'Configure' button and then (if there are no errors) press the 'Generate' button. 
+Make sure "AMP_USE_ROS" bos is checked. Press the 'Configure' button and then (if there are no errors) press the 'Generate' button. 
 Once configure and generate complete succesfuly, exit cmake and build AMP (still in the /build directory).
 
     make
