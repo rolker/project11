@@ -3,6 +3,10 @@
     <node pkg="udp_bridge" type="operator_node" name="udp_bridge_operator" args="$(arg host)">
         <remap from="/udp/diagnostics" to="/diagnostics"/>
     </node>
+    <node pkg="range_and_bearing" type="range_and_bearing_node" name="range_and_bearing">
+        <remap from="/input1" to="/base/position"/>
+        <remap from="/input2" to="/udp/posmv/position"/>
+    </node>
 </launch>
 
 

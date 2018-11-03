@@ -4,7 +4,7 @@
     <arg name="host" default="mystiquec"/>
     <node pkg="udp_bridge" type="operator_node" name="udp_bridge_operator" args="$(arg host)"/>
     <node pkg="flir" type="flir_decode_node.py" name="flir_decode_node"/>
-    <node pkg="posmv" type="posmv_nmea_node.py" name="posmv_nmea_node"/>
+<!--    <node pkg="posmv" type="posmv_nmea_node.py" name="posmv_nmea_node"/>-->
     <node pkg="cobham_radio_status" type="cobham_radio_status_node.py" name="cobham_radio_status"/>
     <node pkg="range_and_bearing" type="range_and_bearing_node" name="range_and_bearing">
         <remap from="/input1" to="/base/position"/>
