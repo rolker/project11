@@ -1,0 +1,4 @@
+project11/role: operator
+seapath_nmea/input_port: 4994
+seapath_nmea/input_type: udp
+
