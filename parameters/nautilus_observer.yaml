@@ -1,0 +1,6 @@
+project11/role: observer
+seapath_nmea/input_port: 31239
+seapath_nmea/input_type: udp
+seapath_nmea/output: 4994
+seapath_nmea/output_address: penguinc
+
