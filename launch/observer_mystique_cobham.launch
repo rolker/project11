@@ -8,4 +8,5 @@
         <remap from="/input2" to="/udp/posmv/position"/>
     </node>
     <node pkg="asv_position_sender" type="asv_position_sender.py" name="asv_position_sender_node"/>
+    <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
 </launch>
