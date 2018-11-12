@@ -2,9 +2,11 @@
     <rosparam command="load" file="$(find project11)/parameters/nautilus_observer.yaml" />
     <arg name="host" default="mystiquec"/>
     <node pkg="udp_bridge" type="operator_node" name="udp_bridge_operator" args="$(arg host)"/>
-<!--    <node pkg="seapath" type="seapath_nmea_node.py" name="seapath_nmea_node"/>-->
+    <node pkg="seapath" type="seapath_nmea_node.py" name="seapath_nmea_node"/>
     <node pkg="range_and_bearing" type="range_and_bearing_node" name="range_and_bearing">
         <remap from="/input1" to="/base/position"/>
         <remap from="/input2" to="/udp/posmv/position"/>
     </node>
+    <node pkg="asv_position_sender" type="asv_position_sender.py" name="asv_position_sender_node"/>
+    <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
 </launch>
