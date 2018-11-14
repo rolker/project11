@@ -13,4 +13,8 @@
     <!--<node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/>-->
     
     <node pkg="remote_control" type="remote_control.py" name="remote_control"/>
+    
+    <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
+    <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
+
 </launch>
