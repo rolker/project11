@@ -1,0 +1,12 @@
+IP range 192.168.5.x
+
+180-185 are free for backseat and operator stations
+
+field@penguin:~/drix-simu/docker-compose$ docker-compose -f docker-compose-drix-simu.yaml up
+
+
+To change starting position in sim:
+
+/home/field/drix-simu/drix/latest/install/share/p_drix_control/test/test_data/scenarios
+
+

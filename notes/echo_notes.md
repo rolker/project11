@@ -38,3 +38,4 @@ Notes:
 - Echo-boat commands are sent to the PixHawk FCU on /mavros/setpoint_velocity/cmd_vel.
 - Monitor ROS topics with `rostopic echo <topic name>`.
 
+velodyne ip address 192.168.88.20
