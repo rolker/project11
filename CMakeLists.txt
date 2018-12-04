@@ -3,6 +3,8 @@ project(project11)
 
 add_compile_options(-std=c++11)
 
+catkin_python_setup()
+
 catkin_package(
   INCLUDE_DIRS include
   CATKIN_DEPENDS rosbag
