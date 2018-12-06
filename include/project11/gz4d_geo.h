@@ -1381,12 +1381,25 @@ namespace gz4d
                     return Point<double, ReferenceFrame<ECEF<>, ET> >(Vector<double,3>(t,0));
                 }
 
+                Point<double, ReferenceFrame<Geodetic<LatLon>, ET> > toLatLong(gz4d::Point<double> const &p) const
+                {
+                    auto ecef = toECEF(p);
+                    Point<double, ReferenceFrame<Geodetic<LatLon>, ET> > ret(ecef);
+                    return ret;
+                }
+
                 gz4d::Point<double> toLocal(Point<double, ReferenceFrame<ECEF<>, ET> > const &p) const
                 {
                     Vector<double,4> t(p,0);
                     t[3] = 1.0;
                     t = transform*t;
                     return Vector<double,3>(t,0);
+                }
+                
+                gz4d::Point<double> toLocal(Point<double, ReferenceFrame<Geodetic<LatLon>, ET> > const &p) const
+                {
+                    Point<double,ReferenceFrame<ECEF<>, ET> > p_ecef(p);
+                    return toLocal(p_ecef);
                 }
 
                 std::vector<gz4d::Point<double> > toLocal(std::vector<Point<double, ReferenceFrame<ECEF<>, ET> > > const &pv) const
@@ -1405,6 +1418,10 @@ namespace gz4d
                 }
         };
     }
+    
+    typedef geo::Point<double,gz4d::geo::WGS84::LatLon> GeoPointLatLong;
+    typedef geo::Point<double, gz4d::geo::WGS84::ECEF> GeoPointECEF;
+    typedef geo::LocalENU<> LocalENU;
     
     template <typename T, std::size_t N> T norm2(Vector<T, N> const &v)
     {
