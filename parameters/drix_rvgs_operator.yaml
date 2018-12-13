@@ -1,0 +1,4 @@
+project11/role: operator
+posmv_nmea/input_port: 27001
+posmv_nmea/input_type: udp
+
