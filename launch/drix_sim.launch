@@ -3,8 +3,9 @@
     <node pkg="udp_bridge" type="operator_node" name="udp_operator"/>
     <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
     <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
-<!--     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/> -->
     <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager"/>
+    <node pkg="dubins_curves" type="dubins_curves_node" name="dubins_curves"/>
+    <node pkg="remote_control" type="remote_control.py" name="remote_control"/>
     
     <node pkg="drix_helm" type="drix_helm_node" name="drix_helm"/>
 </launch>
