@@ -1,4 +1,5 @@
 <launch>
+    <rosparam command="load" file="$(find project11)/parameters/drix_rvgs_operator.yaml" />
     <arg name="host" default="drix-backseat"/>
     <node pkg="udp_bridge" type="operator_node" name="udp_bridge_operator" args="$(arg host)"/>
     <node pkg="range_and_bearing" type="range_and_bearing_node" name="range_and_bearing">
@@ -6,6 +7,8 @@
         <remap from="/input2" to="/udp/posmv/position"/>
     </node>
     <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
+    <node pkg="posmv" type="posmv_nmea_node.py" name="posmv_nmea_node"/>
+
 </launch>
 
 
