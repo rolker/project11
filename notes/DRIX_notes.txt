@@ -1,12 +1,22 @@
 IP range 192.168.5.x
 
-180-185 are free for backseat and operator stations
+180-185 are free for backseat and operator stations and backseat
+	- 192.168.5.180 drix-backseat (Intel NUC, Ubuntu 18.04)
+	- 192.168.5.181 penguin (operator station, Ubuntu 18.04)
+	- 192.168.5.182 snowpetrel (Roland's development machine, Ubuntu 18.04)
+	- 192.168.5.183
+	- 192.168.5.184
+	- 192.168.5.185
+
 
 field@penguin:~/drix-simu/docker-compose$ docker-compose -f docker-compose-drix-simu.yaml up
 
 
 To change starting position in sim:
 
-/home/field/drix-simu/drix/latest/install/share/p_drix_control/test/test_data/scenarios
+/home/field/drix-simu/drix/latest/install/share/p_drix_control/test/test_data/scenarios/oas_scenario.json
 
+To switch between simulation and replay mode:
+
+Switch launch file in ~/drix-simu/docker-compose/entry-point-simu.sh
 
