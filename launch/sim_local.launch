@@ -1,7 +1,6 @@
 <launch>
     <param name="/use_sim_time" type="bool" value="true"/>
     <rosparam command="load" file="$(find project11)/parameters/mystique.yaml" />
-    <node pkg="moos_ivp_bridge" type="moos_ivp_bridge_node" name="moos_ivp_bridge"/>
     <node pkg="asv_helm" type="asv_helm_node" name="asv_helm"/>
     <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle"/>
     <node pkg="asv_sim" type="asv_sim_node.py" name="asv_sim_node"/>
@@ -16,5 +15,15 @@
     
     <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
     <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
-
+    <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager"/>
+    <node pkg="dubins_curves" type="dubins_curves_node" name="dubins_curves"/>
+    <node name="controller" pkg="pid" type="controller" ns="project11/crab_angle">
+        <param name="node_name" value="crab_angle_pid" />
+        <param name="Kp" value="10.0" />
+        <param name="Ki" value="2.0" />
+        <param name="Kd" value="0.0" />
+        <param name="upper_limit" value="90" />
+        <param name="lower_limit" value="-90" />
+        <param name="windup_limit" value="10" />
+    </node>
 </launch>
