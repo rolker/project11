@@ -26,4 +26,6 @@
         <param name="lower_limit" value="-90" />
         <param name="windup_limit" value="10" />
     </node>
+    <node pkg="path_follower" type="path_follower_node" name="path_follower"/>
+    <node pkg="rqt_reconfigure" type="rqt_reconfigure" name="rqt_reconfigure"/>
 </launch>
