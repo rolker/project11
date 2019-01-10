@@ -3,7 +3,7 @@
 
 ## Introduction
 
-CCOM/JHC's CWorker 4 ASV is capable of operating under the control of a backseat driver, which is a computer not supplied by the manufaturer capable of taking control of the vehicle by supplying throttle and rudder (heading) commands. The vehicle's manufacturer supplied computer accepts such commands via a [ROS](http://www.ros.org/) interface. Project 11 also uses [MOOS-IvP](http://oceanai.mit.edu/moos-ivp/) to help steer the ASV.
+CCOM/JHC's ASVs are capable of operating with a backseat driver, which is a computer not supplied by the manufaturer capable of taking control of the vehicle by supplying throttle or speed and rudder or heading commands. The vehicle's manufacturer supplied computer accepts such commands via a [ROS](http://www.ros.org/) interface. Project 11 can also optionaly use [MOOS-IvP](http://oceanai.mit.edu/moos-ivp/) to help steer the ASV.
 
 ROS is offically supported on Ubuntu Linux so the Project 11 system runs on Ubuntu. The actual system consists of two separate computers, each running Ubuntu, comunicating over an unreliable wireless connection. For simulation puposes, the system has been designed to also work on a single computer.
 
@@ -79,7 +79,7 @@ Follow the instructions on the [Ubuntu install of ROS Melodic](http://wiki.ros.o
 
 If you are new to ROS, now is a good time to follow the ROS tutorials.
 
-## Installing MOOS-IvP
+## Installing MOOS-IvP (OPTIONAL)
 
 Download the MOOS-IvP tree from the [download page](http://oceanai.mit.edu/moos-ivp/pmwiki/pmwiki.php?n=Site.Download). Get the latest stable release using subversion. It is recomended to create a src directory for this pupose.
 
@@ -131,9 +131,12 @@ If an error occurs complaining that ~/.ros does not exist. Create it instead of 
 
 Create a few simlinks so that ROS nodes can log to the log directory.
 
-    ln -s ~/project11/log/moos ~/project11/ros/moos
     ln -s ~/project11/log/nodes ~/project11/ros/nodes
+    
+If also installing MOOS. (OPTIONAL)
 
+    ln -s ~/project11/log/moos ~/project11/ros/moos
+    
 Initialize the ROS Catkin workspace.
 
     cd ~/project11/catkin_ws
@@ -157,22 +160,32 @@ Fetch a few more directories from github.
 Clone ROS packages from github:
 
     cd ~/project11/catkin_ws/src
-    git clone https://github.com/CCOMJHC/moos_ivp_bridge.git
     git clone https://github.com/CCOMJHC/asv_sim.git
     git clone https://github.com/CCOMJHC/asv_helm.git
     git clone https://github.com/CCOMJHC/project11.git
     git clone https://github.com/CCOMJHC/project11_transformations.git
     git clone https://github.com/CCOMJHC/udp_bridge.git
-    git clone https://github.com/CCOMJHC/appcast_view.git
     git clone https://github.com/CCOMJHC/marine_msgs.git
     git clone https://github.com/CCOMJHC/mission_plan.git
     git clone https://github.com/CCOMJHC/mbes_sim.git
-    
+    git clone https://github.com/CCOMJHC/remote_control.git
+    git clone https://github.com/CCOMJHC/command_bridge.git
+    git clone https://github.com/CCOMJHC/mission_manager.git
+    git clone https://github.com/CCOMJHC/dubins_curves.git
+    git clone https://github.com/CCOMJHC/path_follower.git
+    git clone https://github.com/CCOMJHC/kongsberg_em_control.git
+
+For use with MOOS, clone additional packages: (OPTIONAL)
+
+    cd ~/project11/catkin_ws/src
+    git clone https://github.com/CCOMJHC/moos_ivp_bridge.git
+    git clone https://github.com/CCOMJHC/appcast_view.git
 
 Install additional ROS packages available for apt-get
 
     sudo apt install ros-melodic-geographic-msgs
     sudo apt install ros-melodic-geodesy
+    sudo apt install ros-melodic-pid
 
 The python gdal package is used by mbes_sim, so make sure it's installed.
 
@@ -204,7 +217,7 @@ You may encouter an error about a python script not being able to import a modul
 Once sim_local.launch is succesfully launch, we can verify that things are running:
 
     rostopic list
-    rosrun  appcast_view appcast_view.py
+    rostopic echo /udp/position
 
 ## rviz
 
@@ -218,6 +231,7 @@ A configuration file showing the map frame of reference as well as the simulated
 
 The AutonomouMissionPlanner (AMP) is a QT5 based C++ application for mission planning and monitoring. It optionally be built with ROS capabilities, but it doesn't get built in the catkin workspace. Following are instructions for cloning and building in the src directory.
 
+    mkdir -p ~/src
     cd ~/src
     git clone https://github.com/CCOMJHC/AutonomousMissionPlanner.git
     cd AutonomousMissionPlanner
