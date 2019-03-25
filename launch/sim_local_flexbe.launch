@@ -30,7 +30,14 @@
     <node pkg="rqt_reconfigure" type="rqt_reconfigure" name="rqt_reconfigure"/>
     <node pkg="joy" type="joy_node" name="joy_node"><remap from="/joy" to="/udp/joy"/></node>
 
-    <node name="project11_sm" pkg="project11_sm" type="project11_sm.py"/>
+    <!-- operator side -->
+    <node name="behavior_mirror" pkg="flexbe_mirror" type="behavior_mirror_sm" output="screen" />
+    <node name="flexbe_app" pkg="flexbe_app" type="run_app" output="screen"  />
+
+    
+    <!-- vehicle side -->
+    <node name="project11_behavior_engine" pkg="flexbe_onboard" type="start_behavior" output="screen" respawn="true"/>
+    <node name="project11_behavior_launcher" pkg="flexbe_widget" type="be_launcher" output="screen" args="-b 'Project 11 Top Level Behavior'" />
     
 
 </launch>
