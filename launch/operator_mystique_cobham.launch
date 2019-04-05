@@ -12,6 +12,8 @@
     </node>
     <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+    <node pkg="joy" type="joy_node" name="joy_node" args="~autorepeat_rate 10"/>
+    <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm"/>
 </launch>
 
 
