@@ -11,9 +11,11 @@
     <node pkg="mbes_sim" type="mbes_sim_node.py" name="mbes_sim" args="$(arg bathy_grid_path)"/>
     <!--<node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/>-->
     
+<!--     <node pkg="remote_control" type="remote_control.py" name="remote_control"/> -->
+    
     <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
     <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
-    <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager" output="screen"/>
+    <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager"/>
     <node pkg="dubins_curves" type="dubins_curves_node" name="dubins_curves"/>
     <node name="controller" pkg="pid" type="controller" ns="project11/crab_angle">
         <param name="node_name" value="crab_angle_pid" />
@@ -26,8 +28,16 @@
     </node>
     <node pkg="path_follower" type="path_follower_node" name="path_follower"/>
     <node pkg="rqt_reconfigure" type="rqt_reconfigure" name="rqt_reconfigure"/>
-    <node pkg="joy" type="joy_node" name="joy_node" args="~autorepeat_rate 10"/>
-    <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm"/>
-    <node pkg="hover" type="hover_node" name="hover_action"/>
+    <node pkg="joy" type="joy_node" name="joy_node"><remap from="/joy" to="/udp/joy"/></node>
+
+    <!-- operator side -->
+    <node name="behavior_mirror" pkg="flexbe_mirror" type="behavior_mirror_sm" output="screen" />
+    <node name="flexbe_app" pkg="flexbe_app" type="run_app" output="screen"  />
+
+    
+    <!-- vehicle side -->
+    <node name="project11_behavior_engine" pkg="flexbe_onboard" type="start_behavior" output="screen" respawn="true"/>
+    <node name="project11_behavior_launcher" pkg="flexbe_widget" type="be_launcher" output="screen" args="-b 'Project 11 Top Level Behavior'" />
+    
 
 </launch>

@@ -1,0 +1,8 @@
+<launch>
+    <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle" args="192.168.255.255" />
+    <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
+    <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager"/>
+    <node pkg="drix_helm" type="drix_helm_node" name="drix_helm"/>
+    <node pkg="dubins_curves" type="dubins_curves_node" name="dubins_curves"/>
+    <node pkg="remote_control" type="remote_control.py" name="remote_control" args="address=192.168.5.180"/>
+</launch>
