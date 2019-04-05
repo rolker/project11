@@ -1,12 +1,8 @@
 <launch>
     <rosparam command="load" file="$(find project11)/parameters/mystique.yaml" />
-    <node pkg="moos_ivp_bridge" type="moos_ivp_bridge_node" name="moos_ivp_bridge"/>
-    <node pkg="cw4_helm" type="cw4_helm_node" name="cw4_helm">
-      <remap from="/cmd_vel" to="/remote/0/cmd_vel"/>
-    </node>
-    <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+    <node pkg="cw4_helm" type="cw4_helm_node" name="cw4_helm"/>
     <node pkg="udp_bridge" type="vehicle_node" name="udp_bridge_vehicle" args="192.168.100.255"/>
-    <node pkg="remote_control" type="remote_control.py" name="remote_control" args="address=192.168.100.112"/>
+    <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
     <!--node pkg="westmountainradio" type="west_mountain_radio_node" name="west_mountain_radio"/-->
     <node pkg="flir" type="flir_node.py" name="flir_engine"/>
     <include file="$(find project11)/launch/camera_color.launch" />
@@ -19,4 +15,17 @@
     <!--node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/-->
     <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
     <node pkg="kongsberg_em" type="kongsberg_em_node.py" name="kongsberg_em"/>
+    <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager"/>
+    <node pkg="dubins_curves" type="dubins_curves_node" name="dubins_curves"/>
+    <node name="controller" pkg="pid" type="controller" ns="project11/crab_angle">
+        <param name="node_name" value="crab_angle_pid" />
+        <param name="Kp" value="10.0" />
+        <param name="Ki" value="2.0" />
+        <param name="Kd" value="0.0" />
+        <param name="upper_limit" value="90" />
+        <param name="lower_limit" value="-90" />
+        <param name="windup_limit" value="10" />
+    </node>
+    <node pkg="path_follower" type="path_follower_node" name="path_follower"/>
+    <node pkg="hover" type="hover_node" name="hover_action"/>
 </launch>
