@@ -174,6 +174,10 @@ Clone ROS packages from github:
     git clone https://github.com/CCOMJHC/dubins_curves.git
     git clone https://github.com/CCOMJHC/path_follower.git
     git clone https://github.com/CCOMJHC/kongsberg_em_control.git
+    git clone https://github.com/CCOMJHC/geographic_visualization_msgs.git
+    git clone https://github.com/CCOMJHC/joy_to_helm.git
+    git clone https://github.com/CCOMJHC/hover.git
+    
 
 For use with MOOS, clone additional packages: (OPTIONAL)
 
@@ -186,6 +190,7 @@ Install additional ROS packages available for apt-get
     sudo apt install ros-melodic-geographic-msgs
     sudo apt install ros-melodic-geodesy
     sudo apt install ros-melodic-pid
+    sudo apt install ros-melodic-joy
 
 The python gdal package is used by mbes_sim, so make sure it's installed.
 
