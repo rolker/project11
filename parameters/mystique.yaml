@@ -1,3 +1,4 @@
 project11/role: vehicle
 sonar/model: 2040
 sonar/host: stormi
+mission_manager/default_speed: 2.5   # m/s
