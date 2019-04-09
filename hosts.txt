@@ -31,6 +31,7 @@
 192.168.100.51 cobham_shore
 192.168.100.100 CW4c
 192.168.100.20 vsc
+192.168.100.199 penguinc
 
 # Wifi
 192.168.101.110 operatorw
@@ -43,6 +44,7 @@
 192.168.101.101 bellypackhelmw bellypack
 192.168.101.100 CW4w
 192.168.101.20 vsw
+192.168.101.199 penguinw
 
 # Internal
 192.168.10.110 operatori
@@ -55,3 +57,4 @@
 # Other
 192.168.50.20  vs
 192.168.50.100 CW4
+192.168.50.199 penguin
