@@ -1,7 +1,8 @@
 <launch>
     <rosparam command="load" file="$(find project11)/parameters/mystique.yaml" />
     <node pkg="cw4_helm" type="cw4_helm_node" name="cw4_helm"/>
-    <node pkg="udp_bridge" type="vehicle_node" name="udp_bridge_vehicle" args="192.168.100.199"/>
+    <arg name="host" default="192.168.100.199"/>
+    <node pkg="udp_bridge" type="vehicle_node" name="udp_bridge_vehicle" args="$(arg host)"/>
     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
     <!--node pkg="westmountainradio" type="west_mountain_radio_node" name="west_mountain_radio"/-->
     <!--<node pkg="flir" type="flir_node.py" name="flir_engine"/>-->
