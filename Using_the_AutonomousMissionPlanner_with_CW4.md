@@ -63,4 +63,10 @@ The reconfigure gui can be launched from the operator station to connect to myst
 
     project11/scripts/Project11_ROS_Reconfigure.bash
     
+### Debugging
+
+On mystique, you can watch the commands sent to the boat by looking at the heading_hold topic.
+
+    rostopic echo /control/drive/heading_hold
+    
     
