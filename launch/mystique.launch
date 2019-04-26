@@ -29,4 +29,10 @@
     </node>
     <node pkg="path_follower" type="path_follower_node" name="path_follower"/>
     <node pkg="hover" type="hover_node" name="hover_action"/>
+    <node pkg="darknet_logger" type="darknet_logger_node.py" name="darknet_logger"/>
+
+    <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
+    <node pkg="rosbag" type="record" name="VLP16" args="-o nodes/VLP16 --split --duration=1h /velodyne_points /velodyne_packets" />
+
+
 </launch>
