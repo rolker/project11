@@ -32,7 +32,7 @@
     <node pkg="darknet_logger" type="darknet_logger_node.py" name="darknet_logger"/>
 
     <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
-    <node pkg="rosbag" type="record" name="VLP16" args="-o nodes/VLP16 --split --duration=1h /velodyne_points /velodyne_packets" />
+    <node pkg="rosbag" type="record" name="VLP16" args="-o nodes/VLP16 --split --duration=1h --lz4 /velodyne_points" />
 
 
 </launch>
