@@ -176,6 +176,10 @@ The wired network configuration consisting of VLAN configs for the wired network
 
     sudo cp ~/project11/config/mystique/mystique_wired_network.yaml /etc/netplan/
     sudo netplan apply
+
+### Host file
+
+TODO: add to /etc/hosts
     
 ## Time synchronization
 
