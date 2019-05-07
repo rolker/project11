@@ -14,7 +14,10 @@
     </node>
     <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm"/>
     <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
+    <node pkg="mbr" type="mbr_logging.py" name="mbr_logging" />
     <node pkg="ais" type="ais_node.py" name="ais_node" />
+    <node pkg="axis_tracker" type="axis_tracker_node.py" name="axis_tracker" />
+    <node pkg="rosbag" type="record" name="mbr" args="-o nodes/mbr /udp/mbr/9372/2510/margin_avg /mbr/2510/9372/margin_avg /mbr/2510/Total_RX_bandwidth_from_mac_kb_per_s /mbr/2510/Total_TX_bandwidth_to_mac_kb_per_s" />
 </launch>
 
 
