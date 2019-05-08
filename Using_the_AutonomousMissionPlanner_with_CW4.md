@@ -20,6 +20,46 @@ This single session can be used to open new xterms as necessary.
 
 ### Launch ROS on Mystique
 
+#### Updating to tmux
+
+Detaching...
+
+    ctrl+b d    detach
+    
+Split panes:
+
+    ctrl+b "    horizontal
+    ctrl+b %    vertical
+
+Move to panes:
+
+    ctrl+b [arrow key]
+    
+List sessions:
+    tmux ls
+
+Attach to named session:
+    tmux a -t [name of session]
+
+Kill current pane:
+    ctrl+b x
+
+#### new tmux and rosmon instructions
+
+To allow the output to be viewed, yet remain robust to disconnects, tmux is used to launch ROS.
+
+    tmux new -s ros
+    roscore
+    ctrl+b "
+    mon launch project11 mystique.launch
+    
+To detach and reattach
+
+    ctrl+b d
+    tmux a -t ros
+
+#### old screen and roslaunch instructions
+
 To allow the output to be viewed, yet remain robust to disconnects, screen is used to launch ROS.
 
     screen
