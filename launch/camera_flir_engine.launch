@@ -4,7 +4,7 @@
         <!-- node name and ros graph name -->
         <arg name="camera_name" value="camera_flir_engine" />
         <!-- means video device 0, /dev/video0 -->
-        <arg name="video_stream_provider" value="rtsp://192.168.15.6/mjpg" />
+        <arg name="video_stream_provider" value="rtsp://192.168.100.6/mjpg" />
         <!-- throttling the querying of frames to -->
         <arg name="fps" value="30" />
         <!-- setting frame_id -->
