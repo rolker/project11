@@ -1,6 +1,8 @@
 #ifndef MUTEX_PROTECTED_BAG_WRITER_H
 #define MUTEX_PROTECTED_BAG_WRITER_H
 
+#error Depracated!
+
 #include "rosbag/bag.h"
 #include <mutex>
 
