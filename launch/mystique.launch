@@ -31,9 +31,9 @@
     <node pkg="darknet_logger" type="darknet_logger_node.py" name="darknet_logger"/>
 
     <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
-    <node pkg="rosbag" type="record" name="VLP16" args="-o nodes/VLP16 --split --duration=1h --lz4 /velodyne_points" />
-
-    <node pkg="rosbag" type="record" name="AIS" args="-o nodes/AIS /contact" />       
-
     <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
+
+    <node pkg="rosbag" type="record" name="VLP16_logger" args="-o $(find project11)/logs/VLP16 --split --duration=1h --lz4 /velodyne_points" />
+    <node pkg="rosbag" type="record" name="AIS_logger" args="-o $(find project11)/logs/AIS /contact" />       
+    <node pkg="rosbag" type="record" name="base_logger" args="-o $(find project11)/logs/base /control/drive/heading_hold  /heading /heartbeat /helm /helm_mode /mission_plan /position /posmv/orientation /posmv/position /posmv/time_reference /project11/mission_manager/status /radar /sog /vehicle_status /project11" />
 </launch>
