@@ -1,0 +1,12 @@
+project11/role: operator
+ais/input_port: 2947
+ais/input_type: udp
+base/dimension_to_bow: 2
+base/dimension_to_stern: 8
+base/dimension_to_stbd: 2
+base/dimension_to_port: .2
+base/heading: 227.0
+base/camera/url: http://192.168.50.55/
+base/camera/username: root
+base/camera/password: unmanned
+base/camera/height: 4
