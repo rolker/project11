@@ -35,7 +35,7 @@
     <node pkg="rosbag" type="record" name="VLP16_logger" args="-o $(find project11)/logs/VLP16 --split --duration=1h --lz4 /velodyne_points" />
 
     <node pkg="rosbag" type="record" name="AIS_logger" args="-o $(find project11)/logs/AIS /contact" />
-    <node pkg="rosbag" type="record" name="radar_logger" args="-o $(find project11)/logs/radar /radar /heading /position /posmv/orientation /posmv/position /posmv/time_reference" />
+    <node pkg="rosbag" type="record" name="radar_logger" args="-o $(find project11)/logs/radar -j  /radar /heading /position /posmv/orientation /posmv/position /posmv/time_reference" />
     <node pkg="rosbag" type="record" name="base_logger" args="-o $(find project11)/logs/base
         /cmd_vel
         /contact
