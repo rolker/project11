@@ -38,7 +38,7 @@
     <node pkg="rosbag" type="record" name="darknet_logger" args="-o $(find project11)/logs/darknet /darknet_ros/bounding_boxes"/>
 
     <node pkg="rosbag" type="record" name="AIS_logger" args="-o $(find project11)/logs/AIS /contact" />
-    <node pkg="rosbag" type="record" name="radar_logger" args="-o $(find project11)/logs/radar /radar" />
+    <node pkg="rosbag" type="record" name="radar_logger" args="-o $(find project11)/logs/radar /radar /heading /position /posmv/orientation /posmv/position /posmv/time_reference" />
     <node pkg="rosbag" type="record" name="base_logger" args="-o $(find project11)/logs/base
         /cmd_vel
         /contact
