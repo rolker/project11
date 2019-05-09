@@ -1,2 +1,3 @@
 *.pyc
 logs
+parameters/marine_traffic_api_key_roland.yaml
