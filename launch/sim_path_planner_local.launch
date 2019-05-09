@@ -1,0 +1,33 @@
+<launch>
+    <param name="/use_sim_time" type="bool" value="true"/>
+    <rosparam command="load" file="$(find project11)/parameters/mystique.yaml" />
+    <node pkg="asv_helm" type="asv_helm_node" name="asv_helm"/>
+    <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle"/>
+    <node pkg="asv_sim" type="asv_sim_node.py" name="asv_sim_node"/>
+    <node pkg="udp_bridge" type="operator_node" name="udp_operator"/>
+    <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+
+    <arg name="bathy_grid_path" default="$(find mbes_sim)/data/US5NH02M.tiff"/>
+    <node pkg="mbes_sim" type="mbes_sim_node.py" name="mbes_sim" args="$(arg bathy_grid_path)"/>
+    <!--<node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/>-->
+
+    <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
+    <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
+    <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager" output="screen"/>
+    <node pkg="dubins_curves" type="dubins_curves_node" name="dubins_curves"/>
+    <node name="controller" pkg="pid" type="controller" ns="project11/crab_angle">
+        <param name="node_name" value="crab_angle_pid" />
+        <param name="Kp" value="10.0" />
+        <param name="Ki" value="2.0" />
+        <param name="Kd" value="0.0" />
+        <param name="upper_limit" value="90" />
+        <param name="lower_limit" value="-90" />
+        <param name="windup_limit" value="10" />
+    </node>
+    <node pkg="path_planner" type="path_planner_node" name="path_planner"/>
+    <node pkg="rqt_reconfigure" type="rqt_reconfigure" name="rqt_reconfigure"/>
+    <node pkg="joy" type="joy_node" name="joy_node" args="~autorepeat_rate 10"/>
+    <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm"/>
+    <node pkg="hover" type="hover_node" name="hover_action"/>
+
+</launch>
