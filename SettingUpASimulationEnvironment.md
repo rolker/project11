@@ -178,7 +178,11 @@ Clone ROS packages from github:
     git clone https://github.com/CCOMJHC/joy_to_helm.git
     git clone https://github.com/CCOMJHC/hover.git
     
+Clone darknet package, but only build the messages:
 
+    git clone https://github.com/leggedrobotics/darknet_ros.git
+    touch darknet_ros/darknet_ros/CATKIN_IGNORE
+    
 For use with MOOS, clone additional packages: (OPTIONAL)
 
     cd ~/project11/catkin_ws/src
