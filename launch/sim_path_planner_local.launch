@@ -25,6 +25,7 @@
         <param name="windup_limit" value="10" />
     </node>
     <node pkg="path_planner" type="path_planner_node" name="path_planner"/>
+    <node pkg="mpc" type="mpc_node" name="mpc"/>
     <node pkg="rqt_reconfigure" type="rqt_reconfigure" name="rqt_reconfigure"/>
     <node pkg="joy" type="joy_node" name="joy_node" args="~autorepeat_rate 10"/>
     <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm"/>
