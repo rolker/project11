@@ -1,10 +1,13 @@
 <launch>
     <rosparam command="load" file="$(find project11)/parameters/mystique.yaml" />
     <node pkg="cw4_helm" type="cw4_helm_node" name="cw4_helm"/>
+    
+    <node pkg="control_by_web_x4xx_interface" type="cbw_x4xx_node.py" name="control_by_web_x4xx_interface"/>
+    
     <arg name="host" default="192.168.100.199"/>
     <node pkg="udp_bridge" type="vehicle_node" name="udp_bridge_vehicle" args="$(arg host)"/>
     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
-    <!--<node pkg="flir" type="flir_node.py" name="flir_engine"/>-->
+    <node pkg="flir" type="flir_node.py" name="flir_engine"/>
     <include file="$(find project11)/launch/camera_color.launch" />
     <include file="$(find project11)/launch/camera_flir.launch" />
     <include file="$(find project11)/launch/camera_flir_engine.launch" />
@@ -19,9 +22,9 @@
     <node pkg="dubins_curves" type="dubins_curves_node" name="dubins_curves"/>
     <node name="controller" pkg="pid" type="controller" ns="project11/crab_angle">
         <param name="node_name" value="crab_angle_pid" />
-        <param name="Kp" value="7.5" />
+        <param name="Kp" value="6.0" />
         <param name="Ki" value="0.0" />
-        <param name="Kd" value="0.03" />
+        <param name="Kd" value="0.3" />
         <param name="upper_limit" value="90" />
         <param name="lower_limit" value="-90" />
         <param name="windup_limit" value="10" />
