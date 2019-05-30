@@ -40,7 +40,6 @@
         /position_map
         /position_utm
         /range
-        /rosmon_1557409110443660171/state
         /rosout
         /rosout_agg
         /send_command
@@ -67,7 +66,6 @@
         /udp/posmv/orientation
         /udp/posmv/position
         /udp/project11/display
-        /udp/radar
         /udp/response
         /udp/sog
         /udp/wpt_updates

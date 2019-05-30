@@ -1,4 +1,8 @@
 project11/role: operator
-seapath_nmea/input_port: 4994
+seapath_nmea/input_port: 31239
 seapath_nmea/input_type: udp
+base/dimension_to_bow: 3
+base/dimension_to_stern: 10
+base/dimension_to_stbd: 4
+base/dimension_to_port: 2
 
