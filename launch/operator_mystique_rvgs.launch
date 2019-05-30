@@ -21,6 +21,7 @@
         /base/camera/look_at
         /base/camera/look_at_mode
         /base/position
+        /base/orientation
         /base/time_reference
         /bearing
         /diagnostics
