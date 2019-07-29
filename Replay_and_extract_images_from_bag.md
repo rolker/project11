@@ -2,11 +2,9 @@
 
 ## Prerequisits
 
-- A bag file with recorded images
-- Image view and transport packages
+A bag file with recorded images and the image view and transport packages:
 
     sudo apt install ros-melodic-image-view
-
     sudo apt install ros-melodic-image-transport-plugins
     
 ## Viewing images
