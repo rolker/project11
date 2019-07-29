@@ -6,6 +6,7 @@
 - Image view and transport packages
 
     sudo apt install ros-melodic-image-view
+
     sudo apt install ros-melodic-image-transport-plugins
     
 ## Viewing images
