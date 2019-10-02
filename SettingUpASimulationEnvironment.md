@@ -3,7 +3,7 @@
 
 ## Introduction
 
-CCOM/JHC's ASVs are capable of operating with a backseat driver, which is a computer not supplied by the manufaturer capable of taking control of the vehicle by supplying throttle or speed and rudder or heading commands. The vehicle's manufacturer supplied computer accepts such commands via a [ROS](http://www.ros.org/) interface. Project 11 can also optionaly use [MOOS-IvP](http://oceanai.mit.edu/moos-ivp/) to help steer the ASV.
+CCOM/JHC's ASVs are capable of operating with a backseat driver, which is a computer not supplied by the manufaturer capable of taking control of the vehicle by supplying throttle or speed and rudder or heading commands. The vehicle's manufacturer supplied computer accepts such commands via a [ROS](http://www.ros.org/) interface.
 
 ROS is offically supported on Ubuntu Linux so the Project 11 system runs on Ubuntu. The actual system consists of two separate computers, each running Ubuntu, comunicating over an unreliable wireless connection. For simulation puposes, the system has been designed to also work on a single computer.
 
@@ -79,36 +79,6 @@ Follow the instructions on the [Ubuntu install of ROS Melodic](http://wiki.ros.o
 
 If you are new to ROS, now is a good time to follow the ROS tutorials.
 
-## Installing MOOS-IvP (OPTIONAL)
-
-Download the MOOS-IvP tree from the [download page](http://oceanai.mit.edu/moos-ivp/pmwiki/pmwiki.php?n=Site.Download). Get the latest stable release using subversion. It is recomended to create a src directory for this pupose.
-
-    mkdir src
-    cd src
-
-    svn co https://oceanai.mit.edu/svn/moos-ivp-aro/releases/moos-ivp-17.7 moos-ivp
-
-Once downloaded, cd into the directory and look at the README file for installation instructions.
-
-    cd moos-ivp
-    less README-GNULINUX.txt
-
-Follow those instrutions to build and install MOOS and IvP.
-
-If you encounter an error with libtiff4-dev, replace it with libtiff5-dev. Similarly, replace libpng12-dev with libpng-dev.
-
-The README file recommends adding the bin directory to the system's PATH variable. You can use the nano editor for this.
-
-    nano ~/.bashrc
-    
-Add the following line at the end.
-
-    export PATH=$PATH:~/src/moos-ivp/bin
-
-Don't forget to source .bashrc for it to take effect in the current session. (Logging out and in again would have the same effect.)
-
-    source ~/.bashrc
-
 ## Configuring git.
 
 The version control client git should already be installed so it only needs to be configured. The git book's [First Time Git Setup page](https://git-scm.com/book/en/v2/Getting-Started-First-Time-Git-Setup) contains instructions on how to configure your name and email address so that commits get attributed to you.
@@ -118,7 +88,6 @@ The version control client git should already be installed so it only needs to b
 Part of the direcotry structure is created by hand while others are cloned from git repositories.
 
     mkdir -p ~/project11/catkin_ws/src
-    mkdir -p ~/project11/log/moos
     mkdir -p ~/project11/log/nodes
     mkdir -p ~/project11/executed_missions
 
@@ -132,10 +101,6 @@ If an error occurs complaining that ~/.ros does not exist. Create it instead of 
 Create a few simlinks so that ROS nodes can log to the log directory.
 
     ln -s ~/project11/log/nodes ~/project11/ros/nodes
-    
-If also installing MOOS. (OPTIONAL)
-
-    ln -s ~/project11/log/moos ~/project11/ros/moos
     
 Initialize the ROS Catkin workspace.
 
@@ -166,9 +131,7 @@ Clone ROS packages from github:
     git clone https://github.com/CCOMJHC/project11_transformations.git
     git clone https://github.com/CCOMJHC/udp_bridge.git
     git clone https://github.com/CCOMJHC/marine_msgs.git
-    git clone https://github.com/CCOMJHC/mission_plan.git
     git clone https://github.com/CCOMJHC/mbes_sim.git
-    git clone https://github.com/CCOMJHC/remote_control.git
     git clone https://github.com/CCOMJHC/command_bridge.git
     git clone https://github.com/CCOMJHC/mission_manager.git
     git clone https://github.com/CCOMJHC/dubins_curves.git
@@ -177,18 +140,17 @@ Clone ROS packages from github:
     git clone https://github.com/CCOMJHC/geographic_visualization_msgs.git
     git clone https://github.com/CCOMJHC/joy_to_helm.git
     git clone https://github.com/CCOMJHC/hover.git
+    git clone https://github.com/CCOMJHC/path_planner.git
+    git clone https://github.com/CCOMJHC/mpc.git
+    git clone https://github.com/CCOMJHC/course_made_good.git
+    
+
     
 Clone darknet package, but only build the messages:
 
     git clone https://github.com/leggedrobotics/darknet_ros.git
     touch darknet_ros/darknet_ros/CATKIN_IGNORE
     
-For use with MOOS, clone additional packages: (OPTIONAL)
-
-    cd ~/project11/catkin_ws/src
-    git clone https://github.com/CCOMJHC/moos_ivp_bridge.git
-    git clone https://github.com/CCOMJHC/appcast_view.git
-
 Install additional ROS packages available for apt-get
 
     sudo apt install ros-melodic-geographic-msgs
@@ -236,9 +198,9 @@ With the simulation running, rviz may be launched in a new terminal.
     
 A configuration file showing the map frame of reference as well as the simulated boat, named base_link, can be found at ~/project11/catkin_ws/src/project11/rviz/transforms.rviz. 
 
-## Installing the AutonomousMissionPlanner
+## Installing the CCOM AutonomousMissionPlanner (CAMP)
 
-The AutonomouMissionPlanner (AMP) is a QT5 based C++ application for mission planning and monitoring. It optionally be built with ROS capabilities, but it doesn't get built in the catkin workspace. Following are instructions for cloning and building in the src directory.
+The CCOM AutonomouMissionPlanner (CAMP) is a QT5 based C++ application for mission planning and monitoring. It optionally be built with ROS capabilities, but it doesn't get built in the catkin workspace. Following are instructions for cloning and building in the src directory.
 
     mkdir -p ~/src
     cd ~/src
@@ -255,14 +217,14 @@ Some QT5 development libraries may be missing. Install then with apt.
     sudo apt install qtpositioning5-dev libqt5svg5-dev
     
     
-Now that we have the prerequisits, lets go back to AMP's build directory where we can finish configuring and compiling it.
+Now that we have the prerequisits, lets go back to CAMP's build directory where we can finish configuring and compiling it.
 
     cd ~/src/AutonomousMissionPlanner/build
     cmake-gui ../
 
 
 Make sure "AMP_USE_ROS" bos is checked. Press the 'Configure' button and then (if there are no errors) press the 'Generate' button. 
-Once configure and generate complete succesfuly, exit cmake and build AMP (still in the /build directory).
+Once configure and generate complete succesfuly, exit cmake and build CAMP (still in the /build directory).
 
     make
 
@@ -270,3 +232,8 @@ From the build direcotry, run the mission planner.
 
     ./AutonomouMissionPlanner
 
+## Downloading NOAA raster navigation chart for CAMP
+
+CAMP uses georeferenced raster images as background layers. The simulations defaults to Portsmouth Harbor in New Hampshire, so a raster nautical chart works fine as a background layer. In [NOAA Nautical Chart Catalog](https://www.charts.noaa.gov/ChartCatalog/Northeast.html), search for chart 13283. Download and unzip it.
+
+In CAMP, File->Open Background or the BG button, and open 13283_2.KAP.
