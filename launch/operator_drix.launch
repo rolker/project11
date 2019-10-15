@@ -1,12 +1,10 @@
 <launch>
     <rosparam command="load" file="$(find project11)/parameters/drix_rvgs_operator.yaml" />
-    <arg name="host" default="drix-backseat"/>
-    <node pkg="udp_bridge" type="operator_node" name="udp_bridge_operator" args="$(arg host)"/>
-    <node pkg="range_and_bearing" type="range_and_bearing_node" name="range_and_bearing">
-        <remap from="/input1" to="/base/position"/>
-        <remap from="/input2" to="/udp/posmv/position"/>
-    </node>
-    <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
+    <include file="$(find project11)/launch/operator_core.launch">
+        <arg name="host" default="drix-backseat"/>
+        <arg name="operator_transformations" value="1"/>
+        <arg name="operator_joystick" value="1"/>
+    </include>
     <node pkg="posmv" type="posmv_nmea_node.py" name="posmv_nmea_node"/>
 
 </launch>

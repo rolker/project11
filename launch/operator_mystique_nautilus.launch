@@ -17,61 +17,7 @@
     <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
     <node pkg="mbr" type="mbr_logging.py" name="mbr_logging" />
 
-    <node pkg="rosbag" type="record" name="operator_logging" args="-o $(find project11)/logs/operator
-        /base/camera/look_at
-        /base/camera/look_at_mode
-        /base/position
-        /base/time_reference
-        /base/orientation
-        /bearing
-        /diagnostics
-        /joy
-        /mbr/2510/9372/dist_age
-        /mbr/2510/9372/distance
-        /mbr/2510/9372/id
-        /mbr/2510/9372/margin_avg
-        /mbr/2510/9372/margin_min
-        /mbr/2510/9372/pitch
-        /mbr/2510/9372/rx_age
-        /mbr/2510/9372/yaw
-        /mbr/2510/Total_RX_bandwidth_from_mac_kb_per_s
-        /mbr/2510/Total_TX_bandwidth_to_mac_kb_per_s
-        /odom
-        /origin
-        /position_map
-        /position_utm
-        /range
-        /rosout
-        /rosout_agg
-        /send_command
-        /tf
-        /tf_static
-        /udp/appcast
-        /udp/command
-        /udp/contact
-        /udp/coverage
-        /udp/darknet_ros/bounding_boxes
-        /udp/diagnostics
-        /udp/flir_engine
-        /udp/heading
-        /udp/heartbeat
-        /udp/helm
-        /udp/helm_mode
-        /udp/loiter_updates
-        /udp/mbes_ping
-        /udp/mbr/9372/2510/margin_avg
-        /udp/mbr/9372/2510/margin_min
-        /udp/mission_plan
-        /udp/origin
-        /udp/position
-        /udp/posmv/orientation
-        /udp/posmv/position
-        /udp/project11/display
-        /udp/response
-        /udp/sog
-        /udp/wpt_updates
-    " />
-    
+    <include file="$(find project11)/launch/operator_loggers.launch"/>  
 </launch>
 
 

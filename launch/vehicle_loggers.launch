@@ -1,0 +1,68 @@
+<launch>
+    <node pkg="rosbag" type="record" name="VLP16_logger" args="-o $(find project11)/logs/VLP16 --split --duration=1h --lz4 /velodyne_points" />
+
+    <node pkg="rosbag" type="record" name="AIS_logger" args="-o $(find project11)/logs/AIS --split --duration=1h /contact" />
+    <node pkg="rosbag" type="record" name="radar_logger" args="-o $(find project11)/logs/radar --split --duration=1h -j /radar /heading /position /posmv/orientation /posmv/position /posmv/time_reference" />
+    <node pkg="rosbag" type="record" name="base_logger" args="-o $(find project11)/logs/base --split --duration=1h
+        /cmd_vel
+        /contact
+        /control/drive/direct
+        /control/drive/heading_hold
+        /control/drive/inhibit
+        /control/drive/seek_position
+        /control/drive/virtual
+        /depth
+        /heading
+        /heartbeat
+        /helm
+        /helm_mode
+        /hover_action/cancel
+        /hover_action/feedback
+        /hover_action/goal
+        /hover_action/parameter_descriptions
+        /hover_action/parameter_updates
+        /hover_action/result
+        /hover_action/status
+        /link_status
+        /mbr/9372/2510/margin_avg
+        /mbr/9372/2510/margin_min
+        /mission_plan
+        /origin
+        /path_follower_action/cancel
+        /path_follower_action/feedback
+        /path_follower_action/goal
+        /path_follower_action/result
+        /path_follower_action/status
+        /position
+        /posmv/orientation
+        /posmv/position
+        /posmv/time_reference
+        /project11/command
+        /project11/crab_angle/control_effort
+        /project11/crab_angle/controller/parameter_descriptions
+        /project11/crab_angle/controller/parameter_updates
+        /project11/crab_angle/pid_debug
+        /project11/crab_angle/pid_enable
+        /project11/crab_angle/setpoint
+        /project11/crab_angle/state
+        /project11/desired_heading
+        /project11/desired_speed
+        /project11/display
+        /project11/mission_manager/command
+        /project11/mission_manager/current_line
+        /project11/mission_manager/current_speed
+        /project11/mission_manager/status
+        /project11/mission_manager/survey_area
+        /project11/response
+        /scm/vehicle/depth
+        /sensor/ais/contact
+        /sensor/vehicle/drive
+        /sensor/vehicle/engine
+        /sensor/vehicle/heading
+        /sensor/vehicle/pose
+        /sensor/vehicle/position
+        /sensor/vehicle/timeref
+        /sog
+        /vehicle_status
+        " />
+</launch>

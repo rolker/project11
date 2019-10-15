@@ -1,0 +1,22 @@
+<launch>
+    <arg name="host"/>
+    <node pkg="udp_bridge" type="operator_node" name="udp_bridge_operator" args="$(arg host)"/>
+    <node pkg="range_and_bearing" type="range_and_bearing_node" name="range_and_bearing">
+        <remap from="/input1" to="/base/position"/>
+        <remap from="/input2" to="/udp/posmv/position"/>
+    </node>
+    <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
+    
+    <node if="$(arg operator_transformations)" pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+    
+    <node if="$(arg operator_joystick)" pkg="joy" type="joy_node" name="joy_node">
+        <param name="autorepeat_rate" value="10.0"/>
+    </node>
+    
+    <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm"/>
+    
+    <node pkg="rqt_reconfigure" type="rqt_reconfigure" name="rqt_reconfigure"/>
+
+</launch>
+
+

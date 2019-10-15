@@ -1,12 +1,13 @@
 <launch>
     <rosparam command="load" file="$(find project11)/parameters/mystique.yaml" />
+    
+    <include file="$(find project11)/launch/vehicle_core.launch">
+        <arg name="host" default="192.168.100.199"/>
+    </include>
+
+    
     <node pkg="cw4_helm" type="cw4_helm_node" name="cw4_helm"/>
-    
     <node pkg="control_by_web_x4xx_interface" type="cbw_x4xx_node.py" name="control_by_web_x4xx_interface"/>
-    
-    <arg name="host" default="192.168.100.199"/>
-    <node pkg="udp_bridge" type="vehicle_node" name="udp_bridge_vehicle" args="$(arg host)"/>
-    <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
     <node pkg="flir" type="flir_node.py" name="flir_engine"/>
     <include file="$(find project11)/launch/camera_color.launch" />
     <include file="$(find project11)/launch/camera_flir.launch" />
@@ -15,90 +16,10 @@
     <node pkg="posmv" type="posmv_node.py" name="posmv"/>
     <!--node pkg="radar_obstacle_detection" type="radar_obstacle_detection_node.py" name="radar_obstacle_detection"/-->
     <node pkg="kongsberg_em_control" type="kongsberg_em_control_node.py" name="kongsberg_em_control"/>
-    <!--node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/-->
-    <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
     <node pkg="kongsberg_em" type="kongsberg_em_node.py" name="kongsberg_em"/>
-    <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager"/>
-    <node pkg="dubins_curves" type="dubins_curves_node" name="dubins_curves"/>
-    <node name="controller" pkg="pid" type="controller" ns="project11/crab_angle">
-        <param name="node_name" value="crab_angle_pid" />
-        <param name="Kp" value="6.0" />
-        <param name="Ki" value="0.0" />
-        <param name="Kd" value="0.3" />
-        <param name="upper_limit" value="90" />
-        <param name="lower_limit" value="-90" />
-        <param name="windup_limit" value="10" />
-    </node>
-    <node pkg="path_follower" type="path_follower_node" name="path_follower"/>
-    <node pkg="hover" type="hover_node" name="hover_action"/>
 
     <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
     <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
 
-    <node pkg="rosbag" type="record" name="VLP16_logger" args="-o $(find project11)/logs/VLP16 --split --duration=1h --lz4 /velodyne_points" />
-
-    <node pkg="rosbag" type="record" name="AIS_logger" args="-o $(find project11)/logs/AIS /contact" />
-    <node pkg="rosbag" type="record" name="radar_logger" args="-o $(find project11)/logs/radar -j  /radar /heading /position /posmv/orientation /posmv/position /posmv/time_reference" />
-    <node pkg="rosbag" type="record" name="base_logger" args="-o $(find project11)/logs/base
-        /cmd_vel
-        /contact
-        /control/drive/direct
-        /control/drive/heading_hold
-        /control/drive/inhibit
-        /control/drive/seek_position
-        /control/drive/virtual
-        /depth
-        /heading
-        /heartbeat
-        /helm
-        /helm_mode
-        /hover_action/cancel
-        /hover_action/feedback
-        /hover_action/goal
-        /hover_action/parameter_descriptions
-        /hover_action/parameter_updates
-        /hover_action/result
-        /hover_action/status
-        /link_status
-        /mbr/9372/2510/margin_avg
-        /mbr/9372/2510/margin_min
-        /mission_plan
-        /origin
-        /path_follower_action/cancel
-        /path_follower_action/feedback
-        /path_follower_action/goal
-        /path_follower_action/result
-        /path_follower_action/status
-        /position
-        /posmv/orientation
-        /posmv/position
-        /posmv/time_reference
-        /project11/command
-        /project11/crab_angle/control_effort
-        /project11/crab_angle/controller/parameter_descriptions
-        /project11/crab_angle/controller/parameter_updates
-        /project11/crab_angle/pid_debug
-        /project11/crab_angle/pid_enable
-        /project11/crab_angle/setpoint
-        /project11/crab_angle/state
-        /project11/desired_heading
-        /project11/desired_speed
-        /project11/display
-        /project11/mission_manager/command
-        /project11/mission_manager/current_line
-        /project11/mission_manager/current_speed
-        /project11/mission_manager/status
-        /project11/mission_manager/survey_area
-        /project11/response
-        /scm/vehicle/depth
-        /sensor/ais/contact
-        /sensor/vehicle/drive
-        /sensor/vehicle/engine
-        /sensor/vehicle/heading
-        /sensor/vehicle/pose
-        /sensor/vehicle/position
-        /sensor/vehicle/timeref
-        /sog
-        /vehicle_status
-        " />
+    <include file="$(find project11)/launch/vehicle_loggers.launch">
 </launch>

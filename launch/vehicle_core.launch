@@ -1,0 +1,29 @@
+<launch>
+    <arg name="host"/>
+    <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle" args="$(arg host)"/>
+    <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
+
+    <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+
+    <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager" output="screen"/>
+    <!--<node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/>-->
+
+    <node pkg="course_made_good" type="course_made_good_node" name="course_made_good"/>
+    <node pkg="dubins_curves" type="dubins_curves_node" name="dubins_curves"/>
+
+    <node name="controller" pkg="pid" type="controller" ns="project11/crab_angle">
+        <param name="node_name" value="crab_angle_pid" />
+        <param name="Kp" value="10.0" />
+        <param name="Ki" value="2.0" />
+        <param name="Kd" value="0.0" />
+        <param name="upper_limit" value="90" />
+        <param name="lower_limit" value="-90" />
+        <param name="windup_limit" value="10" />
+    </node>
+    <node pkg="path_follower" type="path_follower_node" name="path_follower"/>
+    
+    <node pkg="hover" type="hover_node" name="hover_action"/>
+    
+    <node pkg="path_planner" type="path_planner_node" name="path_planner"/>
+    <node pkg="mpc" type="mpc_node" name="mpc"/>
+</launch>
