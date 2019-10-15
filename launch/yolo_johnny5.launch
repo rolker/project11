@@ -1,0 +1,5 @@
+<launch>
+    <include file="$(find darknet_ros)/launch/yolo_v3.launch">
+        <arg name="image" value="/camera_johnny5/image_raw"/>
+    </include>
+</launch>
