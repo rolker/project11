@@ -3,3 +3,7 @@ logs
 catkin_ws/src/project11/parameters/marine_traffic_api_key_roland.yaml
 .kdev4/
 *.kdev4
+catkin_ws/.catkin_workspace
+catkin_ws/build/
+catkin_ws/devel/
+catkin_ws/src/CMakeLists.txt
