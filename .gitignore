@@ -1,3 +1,5 @@
 *.pyc
 logs
-parameters/marine_traffic_api_key_roland.yaml
+catkin_ws/src/project11/parameters/marine_traffic_api_key_roland.yaml
+.kdev4/
+*.kdev4
