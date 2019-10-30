@@ -1,0 +1,54 @@
+[submodule "catkin_ws/src/asv_sim"]
+	path = catkin_ws/src/asv_sim
+	url = https://github.com/CCOMJHC/asv_sim.git
+[submodule "catkin_ws/src/asv_helm"]
+	path = catkin_ws/src/asv_helm
+	url = https://github.com/CCOMJHC/asv_helm.git
+[submodule "catkin_ws/src/project11_transformations"]
+	path = catkin_ws/src/project11_transformations
+	url = https://github.com/CCOMJHC/project11_transformations.git
+[submodule "catkin_ws/src/udp_bridge"]
+	path = catkin_ws/src/udp_bridge
+	url = https://github.com/CCOMJHC/udp_bridge.git
+[submodule "catkin_ws/src/marine_msgs"]
+	path = catkin_ws/src/marine_msgs
+	url = https://github.com/CCOMJHC/marine_msgs.git
+[submodule "catkin_ws/src/mbes_sim"]
+	path = catkin_ws/src/mbes_sim
+	url = https://github.com/CCOMJHC/mbes_sim.git
+[submodule "catkin_ws/src/command_bridge"]
+	path = catkin_ws/src/command_bridge
+	url = https://github.com/CCOMJHC/command_bridge.git
+[submodule "catkin_ws/src/mission_manager"]
+	path = catkin_ws/src/mission_manager
+	url = https://github.com/CCOMJHC/mission_manager.git
+[submodule "catkin_ws/src/dubins_curves"]
+	path = catkin_ws/src/dubins_curves
+	url = https://github.com/CCOMJHC/dubins_curves.git
+[submodule "catkin_ws/src/path_follower"]
+	path = catkin_ws/src/path_follower
+	url = https://github.com/CCOMJHC/path_follower.git
+[submodule "catkin_ws/src/kongsberg_em_control"]
+	path = catkin_ws/src/kongsberg_em_control
+	url = https://github.com/CCOMJHC/kongsberg_em_control.git
+[submodule "catkin_ws/src/geographic_visualization_msgs"]
+	path = catkin_ws/src/geographic_visualization_msgs
+	url = https://github.com/CCOMJHC/geographic_visualization_msgs.git
+[submodule "catkin_ws/src/joy_to_helm"]
+	path = catkin_ws/src/joy_to_helm
+	url = https://github.com/CCOMJHC/joy_to_helm.git
+[submodule "catkin_ws/src/hover"]
+	path = catkin_ws/src/hover
+	url = https://github.com/CCOMJHC/hover.git
+[submodule "catkin_ws/src/path_planner"]
+	path = catkin_ws/src/path_planner
+	url = https://github.com/CCOMJHC/path_planner.git
+[submodule "catkin_ws/src/mpc"]
+	path = catkin_ws/src/mpc
+	url = https://github.com/CCOMJHC/mpc.git
+[submodule "catkin_ws/src/course_made_good"]
+	path = catkin_ws/src/course_made_good
+	url = https://github.com/CCOMJHC/course_made_good.git
+[submodule "catkin_ws/src/darknet_ros"]
+	path = catkin_ws/src/darknet_ros
+	url = https://github.com/leggedrobotics/darknet_ros.git
