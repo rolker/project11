@@ -9,7 +9,7 @@ on machine (inside ccom) where where johnny5 video will be published to ros: ssh
         <!-- node name and ros graph name -->
         <arg name="camera_name" value="camera_johnny5" />
         <!-- means video device 0, /dev/video0 -->
-        <arg name="video_stream_provider" value="http://localhost:1080/mjpg/video.mjpg" />
+        <arg name="video_stream_provider" value="http://localhost:1080/axis-cgi/mjpg/video.cgi?resolution=1280x720&amp;fps=15" />
         <!-- throttling the querying of frames to -->
         <arg name="fps" value="30" />
         <!-- setting frame_id -->
