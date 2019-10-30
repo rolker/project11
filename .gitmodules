@@ -52,3 +52,48 @@
 [submodule "catkin_ws/src/darknet_ros"]
 	path = catkin_ws/src/darknet_ros
 	url = https://github.com/leggedrobotics/darknet_ros.git
+[submodule "catkin_ws/src/ais"]
+	path = catkin_ws/src/ais
+	url = https://github.com/CCOMJHC/ais.git
+[submodule "catkin_ws/src/axis_tracker"]
+	path = catkin_ws/src/axis_tracker
+	url = https://github.com/CCOMJHC/axis_tracker.git
+[submodule "catkin_ws/src/br24_radar"]
+	path = catkin_ws/src/br24_radar
+	url = https://github.com/CCOMJHC/br24_radar.git
+[submodule "catkin_ws/src/echo_helm"]
+	path = catkin_ws/src/echo_helm
+	url = https://github.com/CCOMJHC/echo_helm.git
+[submodule "catkin_ws/src/flir"]
+	path = catkin_ws/src/flir
+	url = https://github.com/CCOMJHC/flir.git
+[submodule "catkin_ws/src/kongsberg_em"]
+	path = catkin_ws/src/kongsberg_em
+	url = https://github.com/CCOMJHC/kongsberg_em.git
+[submodule "catkin_ws/src/manda_coverage"]
+	path = catkin_ws/src/manda_coverage
+	url = https://github.com/CCOMJHC/manda_coverage.git
+[submodule "catkin_ws/src/mbr"]
+	path = catkin_ws/src/mbr
+	url = https://github.com/CCOMJHC/mbr.git
+[submodule "catkin_ws/src/posmv"]
+	path = catkin_ws/src/posmv
+	url = https://github.com/CCOMJHC/posmv.git
+[submodule "catkin_ws/src/radar_obstacle_detection"]
+	path = catkin_ws/src/radar_obstacle_detection
+	url = https://github.com/CCOMJHC/radar_obstacle_detection.git
+[submodule "catkin_ws/src/range_and_bearing"]
+	path = catkin_ws/src/range_and_bearing
+	url = https://github.com/CCOMJHC/range_and_bearing.git
+[submodule "catkin_ws/src/seapath"]
+	path = catkin_ws/src/seapath
+	url = https://github.com/CCOMJHC/seapath.git
+[submodule "catkin_ws/src/survey_manager"]
+	path = catkin_ws/src/survey_manager
+	url = https://github.com/CCOMJHC/survey_manager.git
+[submodule "catkin_ws/src/traffic_sim"]
+	path = catkin_ws/src/traffic_sim
+	url = https://github.com/CCOMJHC/traffic_sim.git
+[submodule "catkin_ws/src/zboat_helm"]
+	path = catkin_ws/src/zboat_helm
+	url = https://github.com/CCOMJHC/zboat_helm.git
