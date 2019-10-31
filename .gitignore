@@ -7,3 +7,9 @@ catkin_ws/.catkin_workspace
 catkin_ws/build/
 catkin_ws/devel/
 catkin_ws/src/CMakeLists.txt
+catkin_ws/src/local
+ros/log/
+ros/rosdep/
+ros/rospack*
+ros/roscore*
+documentation/local/
