@@ -97,3 +97,6 @@
 [submodule "catkin_ws/src/zboat_helm"]
 	path = catkin_ws/src/zboat_helm
 	url = https://github.com/CCOMJHC/zboat_helm.git
+[submodule "catkin_ws/src/camp"]
+	path = catkin_ws/src/camp
+	url = https://github.com/CCOMJHC/AutonomousMissionPlanner.git

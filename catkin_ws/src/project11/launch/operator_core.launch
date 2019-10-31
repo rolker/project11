@@ -16,6 +16,7 @@
     <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm"/>
     
     <node pkg="rqt_reconfigure" type="rqt_reconfigure" name="rqt_reconfigure"/>
+    <node pkg="camp" type="AutonomousMissionPlanner" name="camp"/>
 
 </launch>
 
