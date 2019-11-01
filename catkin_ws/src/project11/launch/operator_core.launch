@@ -6,9 +6,11 @@
         <remap from="/input2" to="/udp/posmv/position"/>
     </node>
     <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
-    
+   
+    <arg name="operator_transformations"/>
     <node if="$(arg operator_transformations)" pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
     
+    <arg name="operator_joystick"/>
     <node if="$(arg operator_joystick)" pkg="joy" type="joy_node" name="joy_node">
         <param name="autorepeat_rate" value="10.0"/>
     </node>
