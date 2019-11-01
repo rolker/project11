@@ -92,7 +92,7 @@ Fetching the Project11 workspace.
 
 Install additional packages available from the package manager.
 
-    sudo apt install ros-melodic-geographic-msgs ros-melodic-geodesy ros-melodic-pid ros-melodic-joy ros-melodic-mavros python-gdal qtpositioning5-dev libqt5svg5-dev libgeos++-dev 
+    sudo apt install ros-melodic-geographic-msgs ros-melodic-geodesy ros-melodic-pid ros-melodic-joy ros-melodic-mavros ros-melodic-rosmon python-gdal qtpositioning5-dev libqt5svg5-dev libgeos++-dev 
 
 ## Build the packages
 Build in the catkin workspace.
