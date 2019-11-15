@@ -34,5 +34,7 @@
     </node>
 
     <node pkg="traffic_sim" type="traffic_sim_node.py" name="traffic_sim"/>
+    
+    <node pkg="manda_coverage" type="manda_coverage_node" name="manda_coverage"/>
 
 </launch>
