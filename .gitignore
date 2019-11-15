@@ -13,3 +13,4 @@ ros/rosdep/
 ros/rospack*
 ros/roscore*
 documentation/local/
+log/*.bag
