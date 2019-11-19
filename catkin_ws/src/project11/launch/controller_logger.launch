@@ -4,6 +4,6 @@
               /mpc/parameter_descriptions
               /mpc/parameter_updates
               /reference_trajectory
-              /rosout
+              /heartbeat
     " />
 </launch>
