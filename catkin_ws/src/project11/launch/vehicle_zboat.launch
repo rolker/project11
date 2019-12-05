@@ -1,0 +1,15 @@
+<launch>
+    <rosparam command="load" file="$(find project11)/parameters/zboat.yaml" />
+    
+    <include file="$(find project11)/launch/vehicle_core.launch">
+        <arg name="host" default="192.168.1.199"/>
+    </include>
+
+    
+    <node pkg="zboat_helm" type="zboat_helm_node" name="zboat_helm"/>
+    <include file="$(find project11)/launch/zboat_camera.launch" />
+
+    <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
+
+    <include file="$(find project11)/launch/vehicle_loggers.launch">
+</launch>
