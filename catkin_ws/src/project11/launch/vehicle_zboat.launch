@@ -11,5 +11,5 @@
 
     <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
 
-    <include file="$(find project11)/launch/vehicle_loggers.launch">
+    <include file="$(find project11)/launch/vehicle_loggers.launch"/>
 </launch>
