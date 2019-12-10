@@ -6,7 +6,7 @@
     </include>
 
     
-    <node pkg="zboat_helm" type="zboat_helm_node" name="zboat_helm"/>
+    <node pkg="zboat_helm" type="zboat_helm_node.py" name="zboat_helm"/>
     <include file="$(find project11)/launch/zboat_camera.launch" />
 
     <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
