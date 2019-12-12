@@ -4,3 +4,4 @@ mission_manager/turn_radius: 2.0
 mission_manager/hover_minimum_distance: 1.0
 mission_manager/hover_maximum_distance: 2.0
 mission_manager/hover_maximum_speed: 1.0
+zboat/speed_limiter: 0.05
