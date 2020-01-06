@@ -14,3 +14,8 @@ ros/rospack*
 ros/roscore*
 documentation/local/
 log/*.bag
+log/*.active
+log/autostart.txt
+log/log_start_roscore.txt
+log/roslaunch.txt
+
