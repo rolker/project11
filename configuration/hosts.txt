@@ -46,6 +46,7 @@
 192.168.101.20 vsw
 192.168.101.199 penguinw
 192.168.101.113	jetson2w
+192.168.101.214 abrownw
 
 # Internal
 192.168.10.111 stormi
@@ -58,9 +59,12 @@
 192.168.50.20  vs
 192.168.50.100 CW4
 192.168.50.199 penguin
+192.168.50.214 abrown
 
 # Project 11 operators
 192.168.100.142 snowpetrelc
 192.168.100.199 penguinc
 192.168.100.110 monkc
+192.168.100.214 abrownc
+
 
