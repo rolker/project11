@@ -21,5 +21,5 @@
     <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
     <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
 
-    <include file="$(find project11)/launch/vehicle_loggers.launch">
+    <include file="$(find project11)/launch/vehicle_loggers.launch"/>
 </launch>

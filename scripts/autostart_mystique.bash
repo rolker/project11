@@ -25,5 +25,6 @@ set -e
 set -v
 
 {
-screen -d -m bash /home/field/project11/scripts/start_roslaunch_mystique.sh
+screen -d -m bash /home/field/project11/scripts/start_roscore.sh
+screen -d -m bash /home/field/project11/scripts/start_rosmon_mystique.sh
 } &>> ${LOG_FILE}
