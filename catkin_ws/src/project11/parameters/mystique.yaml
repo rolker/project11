@@ -6,3 +6,12 @@ mission_manager/turn_radius: 25.0
 mission_manager/hover_minimum_distance: 5.0
 mission_manager/hover_maximum_distance: 50.0
 mission_manager/hover_maximum_speed: 3.0
+
+project11/transformations/static:
+ - { frame_id: "base_link", child_frame_id: "mbes", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0} } }
+ - { frame_id: "base_link", child_frame_id: "pano_1", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: -0.7071068, w: 0.7071068} } }
+ - { frame_id: "base_link", child_frame_id: "pano_2", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: -0.1564345, w: 0.9876883} } }
+ - { frame_id: "base_link", child_frame_id: "pano_3", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.4539905, w: 0.8910065} } }
+ - { frame_id: "base_link", child_frame_id: "pano_4", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.8910065, w: 0.4539905} } }
+ - { frame_id: "base_link", child_frame_id: "pano_5", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.9876883, w: -0.1564345} } }
+ 
