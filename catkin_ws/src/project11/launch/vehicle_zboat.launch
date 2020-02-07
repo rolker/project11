@@ -1,15 +1,17 @@
 <launch>
     <rosparam command="load" file="$(find project11)/parameters/zboat.yaml" />
-    
+
+    <arg name="zboat_serial_port" default="/dev/ttyUSB0"/>
+
     <include file="$(find project11)/launch/vehicle_core.launch">
-        <arg name="host" default="192.168.1.199"/>
+        <arg name="host" default="192.168.1.200"/>
     </include>
 
     
-    <node pkg="zboat_helm" type="zboat_helm_node.py" name="zboat_helm"/>
+    <node pkg="zboat_helm" type="zboat_helm_node.py" name="zboat_helm" args="$(arg zboat_serial_port)"/>
     <include file="$(find project11)/launch/zboat_camera.launch" />
 
     <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
 
-    <include file="$(find project11)/launch/vehicle_loggers.launch"/>
+    <!-- include file="$(find project11)/launch/vehicle_loggers.launch"/ -->
 </launch>
