@@ -1,10 +1,10 @@
 <launch>
+    <arg name="operator_host" default="192.168.1.199"/>
     <rosparam command="load" file="$(find project11)/parameters/zboat.yaml" />
     
     <include file="$(find project11)/launch/vehicle_core.launch">
-        <arg name="host" default="192.168.1.199"/>
+        <arg name="host" value="$(arg operator_host)"/>
     </include>
-
     
     <node pkg="zboat_helm" type="zboat_helm_node.py" name="zboat_helm"/>
     <include file="$(find project11)/launch/zboat_camera.launch" />
