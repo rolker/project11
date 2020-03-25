@@ -81,6 +81,10 @@ If you are new to ROS, now is a good time to follow the ROS tutorials.
 
 ## Configuring git.
 
+Make sure git is installed.
+
+    sudo apt install git
+
 The version control client git should already be installed so it only needs to be configured. The git book's [First Time Git Setup page](https://git-scm.com/book/en/v2/Getting-Started-First-Time-Git-Setup) contains instructions on how to configure your name and email address so that commits get attributed to you.
 
     git config --global user.name "Field User"
