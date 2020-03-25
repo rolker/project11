@@ -83,6 +83,9 @@ If you are new to ROS, now is a good time to follow the ROS tutorials.
 
 The version control client git should already be installed so it only needs to be configured. The git book's [First Time Git Setup page](https://git-scm.com/book/en/v2/Getting-Started-First-Time-Git-Setup) contains instructions on how to configure your name and email address so that commits get attributed to you.
 
+    git config --global user.name "Field User"
+    git config --global user.email field@ccom.unh.edu
+
 ## Creating the Project 11 directory structure.
 
 Fetching the Project11 workspace.
@@ -92,7 +95,7 @@ Fetching the Project11 workspace.
 
 Install additional packages available from the package manager.
 
-    sudo apt install ros-melodic-geographic-msgs ros-melodic-geodesy ros-melodic-pid ros-melodic-joy ros-melodic-mavros ros-melodic-rosmon python-gdal qtpositioning5-dev libqt5svg5-dev libgeos++-dev 
+    sudo ~/project11/scripts/install_prereq_packages.bash
 
 ## Build the packages
 Build in the catkin workspace.
