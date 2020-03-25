@@ -1,0 +1,47 @@
+kongsberg:
+  kmall_connection:
+    type: "UDP"
+#    udp_address: "192.168.100.130"
+    udp_address: "224.1.20.40"
+    udp_tx: 6021
+    udp_rx: 6020
+    buffer_size: 65536
+  kctrl_connection:
+    type: "UDP"
+    udp_rx: 4002
+    udp_address: "192.168.15.111"
+    udp_tx: 14002
+    buffer_size: 65000
+  # Params
+  # Services
+  ping_service: ping_cmd
+  power_service: power_cmd
+  settings_service: settings_cmd
+  bist_service: bist_cmd
+  xml_service: load_xml_cmd
+#  values_service: values_cmd
+  # Publishers
+  mbraw_topic: mbraw
+  offset_topic: pu_time_offset
+  pointcloud_topic: pointcloud
+  kssis_topic: kssis_records
+  kmstatus_topic: kmstatus
+  kmall_records_topic: kmall_records
+#  wc_topic: wc
+  # Data inputs
+  sounder_name: EM2040P
+  run_startup: false
+  ship_name: asv_ben
+  bist_dir: /home/field/data/mbes/bist/
+  kmall_dir: /home/field/data/mbes/kmall/
+  xml_dir: /home/field/data/mbes/xml/
+  max_kmall_buffer_kB: 30
+  max_kmall_file_GB: 2
+  # Timeouts
+  kmall_timeout: 3.0
+  kctrl_timeout: 3.0
+  pu_powered_timeout: 10.0
+  pu_connected_timeout: 10.0
+  pinging_timeout: 3.0
+
+# <node name="kongsberg" pkg="ds_kongsberg" type="ds_kongsberg_node" launch-prefix="xterm -e gdb --args"/>
