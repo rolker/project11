@@ -101,6 +101,11 @@ Install additional packages available from the package manager.
 
     sudo ~/project11/scripts/install_prereq_packages.bash
 
+## Skip darknet (Yolo) if not needed
+If you don't need Yolo, you can save time during the build by asking catkin to ignore it.
+
+    touch ~/project11/catkin_ws/src/darknet_ros/darknet_ros/CATKIN_IGNORE
+    
 ## Build the packages
 Build in the catkin workspace.
 
