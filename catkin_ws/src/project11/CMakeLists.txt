@@ -3,12 +3,17 @@ project(project11)
 
 add_compile_options(-std=c++11)
 
-catkin_python_setup()
+find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  rospy
+)
+
 
 catkin_package(
   INCLUDE_DIRS include
-  CATKIN_DEPENDS rosbag
 )
+
+catkin_python_setup()
 
 install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}

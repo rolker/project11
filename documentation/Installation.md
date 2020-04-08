@@ -56,7 +56,7 @@ If an Ubuntu 18.04 machine is not readily available, a virtual machine may be se
 
 These instructions were developed using VirtualBox on Ubuntu. Similar steps should work with VMWare as well.
 
-  * Obtain an Ubuntu iso install image from the [Bionic release page](http://releases.ubuntu.com/bionic/). We are looking for the [64-bit PC (AMD64) desktop image.](http://releases.ubuntu.com/xenial/ubuntu-18.04.1-desktop-amd64.iso)
+  * Obtain an Ubuntu iso install image from the [Bionic release page](http://releases.ubuntu.com/bionic/). We are looking for the [64-bit PC (AMD64) desktop image.](http://releases.ubuntu.com/bionic/ubuntu-18.04.4-desktop-amd64.iso)
   * Create a virtual machine for a 64-bit Ubuntu install with the following specs:
     * 4GB or more of memory. (TODO: do we need more? At 1GB, ran out of memory compiling QT5)
     * 50GB or more of hard drive space.
@@ -117,6 +117,8 @@ Normally, the Project 11 Catkin workspace is the only one used, so we can make i
     echo "source ~/project11/catkin_ws/devel/setup.bash" >> ~/.bashrc
     source ~/.bashrc
 
+### Optional approach if using multiple workspaces
+    
 ## Run the simulation
 
 Once catkin_make completes without error in ~/project11/catkin_ws/, we can try starting the simulation.

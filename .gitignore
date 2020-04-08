@@ -18,3 +18,4 @@ log/*.active
 log/autostart.txt
 log/log_start_roscore.txt
 log/roslaunch.txt
+catkin_ws/.catkin_tools
