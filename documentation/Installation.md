@@ -99,23 +99,37 @@ Fetching the Project11 workspace.
 
 Install additional packages available from the package manager.
 
-    sudo ~/project11/scripts/install_prereq_packages.bash
+    sudo project11/scripts/install_prereq_packages.bash
 
 ## Skip darknet (Yolo) if not needed
 If you don't need Yolo, you can save time during the build by asking catkin to ignore it.
 
-    touch ~/project11/catkin_ws/src/darknet_ros/darknet_ros/CATKIN_IGNORE
+    touch project11/catkin_ws/src/darknet_ros/darknet_ros/CATKIN_IGNORE
     
 ## Build the packages
 Build in the catkin workspace.
 
-    cd ~/project11/catkin_ws
+    cd project11/catkin_ws
     catkin_make
 
 Normally, the Project 11 Catkin workspace is the only one used, so we can make it the default workspace when logging in by sourcing the setup script from .bashrc.
 
     echo "source ~/project11/catkin_ws/devel/setup.bash" >> ~/.bashrc
     source ~/.bashrc
+
+A more general approach if working with several catkin workspaces is to use the following alias to source the setup script (this alias is to be added to ~/.bashrc)
+
+
+    function wsource() {
+      WS_SETUP_SCRIPT=`catkin locate -qd`/setup.bash
+      if [ -e $WS_SETUP_SCRIPT ];
+      then
+        echo -e "\e[32mAuto sourcing ros workspace at $WS_SETUP_SCRIPT\e[0m"
+        source $WS_SETUP_SCRIPT
+      fi
+    }
+
+Usage: call wsource once inside your catkin workspace.
 
 ## Run the simulation
 

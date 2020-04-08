@@ -3,6 +3,8 @@ project(project11)
 
 add_compile_options(-std=c++11)
 
+find_package(catkin REQUIRED)
+
 catkin_python_setup()
 
 catkin_package(
