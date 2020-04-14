@@ -1,105 +1,105 @@
 [submodule "catkin_ws/src/asv_sim"]
 	path = catkin_ws/src/asv_sim
-	url = https://github.com/CCOMJHC/asv_sim.git
+	url = ../asv_sim.git
 [submodule "catkin_ws/src/asv_helm"]
 	path = catkin_ws/src/asv_helm
-	url = https://github.com/CCOMJHC/asv_helm.git
+	url = ../asv_helm.git
 [submodule "catkin_ws/src/project11_transformations"]
 	path = catkin_ws/src/project11_transformations
-	url = https://github.com/CCOMJHC/project11_transformations.git
+	url = ../project11_transformations.git
 [submodule "catkin_ws/src/udp_bridge"]
 	path = catkin_ws/src/udp_bridge
-	url = https://github.com/CCOMJHC/udp_bridge.git
+	url = ../udp_bridge.git
 [submodule "catkin_ws/src/marine_msgs"]
 	path = catkin_ws/src/marine_msgs
-	url = https://github.com/CCOMJHC/marine_msgs.git
+	url = ../marine_msgs.git
 [submodule "catkin_ws/src/mbes_sim"]
 	path = catkin_ws/src/mbes_sim
-	url = https://github.com/CCOMJHC/mbes_sim.git
+	url = ../mbes_sim.git
 [submodule "catkin_ws/src/command_bridge"]
 	path = catkin_ws/src/command_bridge
-	url = https://github.com/CCOMJHC/command_bridge.git
+	url = ../command_bridge.git
 [submodule "catkin_ws/src/mission_manager"]
 	path = catkin_ws/src/mission_manager
-	url = https://github.com/CCOMJHC/mission_manager.git
+	url = ../mission_manager.git
 [submodule "catkin_ws/src/dubins_curves"]
 	path = catkin_ws/src/dubins_curves
-	url = https://github.com/CCOMJHC/dubins_curves.git
+	url = ../dubins_curves.git
 [submodule "catkin_ws/src/path_follower"]
 	path = catkin_ws/src/path_follower
-	url = https://github.com/CCOMJHC/path_follower.git
+	url = ../path_follower.git
 [submodule "catkin_ws/src/kongsberg_em_control"]
 	path = catkin_ws/src/kongsberg_em_control
-	url = https://github.com/CCOMJHC/kongsberg_em_control.git
+	url = ../kongsberg_em_control.git
 [submodule "catkin_ws/src/geographic_visualization_msgs"]
 	path = catkin_ws/src/geographic_visualization_msgs
-	url = https://github.com/CCOMJHC/geographic_visualization_msgs.git
+	url = ../geographic_visualization_msgs.git
 [submodule "catkin_ws/src/joy_to_helm"]
 	path = catkin_ws/src/joy_to_helm
-	url = https://github.com/CCOMJHC/joy_to_helm.git
+	url = ../joy_to_helm.git
 [submodule "catkin_ws/src/hover"]
 	path = catkin_ws/src/hover
-	url = https://github.com/CCOMJHC/hover.git
+	url = ../hover.git
 [submodule "catkin_ws/src/path_planner"]
 	path = catkin_ws/src/path_planner
-	url = https://github.com/CCOMJHC/path_planner.git
+	url = ../path_planner.git
 [submodule "catkin_ws/src/mpc"]
 	path = catkin_ws/src/mpc
-	url = https://github.com/CCOMJHC/mpc.git
+	url = ../mpc.git
 [submodule "catkin_ws/src/course_made_good"]
 	path = catkin_ws/src/course_made_good
-	url = https://github.com/CCOMJHC/course_made_good.git
+	url = ../course_made_good.git
 [submodule "catkin_ws/src/darknet_ros"]
 	path = catkin_ws/src/darknet_ros
 	url = https://github.com/leggedrobotics/darknet_ros.git
 [submodule "catkin_ws/src/ais"]
 	path = catkin_ws/src/ais
-	url = https://github.com/CCOMJHC/ais.git
+	url = ../ais.git
 [submodule "catkin_ws/src/axis_tracker"]
 	path = catkin_ws/src/axis_tracker
-	url = https://github.com/CCOMJHC/axis_tracker.git
+	url = ../axis_tracker.git
 [submodule "catkin_ws/src/br24_radar"]
 	path = catkin_ws/src/br24_radar
-	url = https://github.com/CCOMJHC/br24_radar.git
+	url = ../br24_radar.git
 [submodule "catkin_ws/src/echo_helm"]
 	path = catkin_ws/src/echo_helm
-	url = https://github.com/CCOMJHC/echo_helm.git
+	url = ../echo_helm.git
 [submodule "catkin_ws/src/flir"]
 	path = catkin_ws/src/flir
-	url = https://github.com/CCOMJHC/flir.git
+	url = ../flir.git
 [submodule "catkin_ws/src/kongsberg_em"]
 	path = catkin_ws/src/kongsberg_em
-	url = https://github.com/CCOMJHC/kongsberg_em.git
+	url = ../kongsberg_em.git
 [submodule "catkin_ws/src/manda_coverage"]
 	path = catkin_ws/src/manda_coverage
-	url = https://github.com/CCOMJHC/manda_coverage.git
+	url = ../manda_coverage.git
 [submodule "catkin_ws/src/mbr"]
 	path = catkin_ws/src/mbr
-	url = https://github.com/CCOMJHC/mbr.git
+	url = ../mbr.git
 [submodule "catkin_ws/src/posmv"]
 	path = catkin_ws/src/posmv
-	url = https://github.com/CCOMJHC/posmv.git
+	url = ../posmv.git
 [submodule "catkin_ws/src/radar_obstacle_detection"]
 	path = catkin_ws/src/radar_obstacle_detection
-	url = https://github.com/CCOMJHC/radar_obstacle_detection.git
+	url = ../radar_obstacle_detection.git
 [submodule "catkin_ws/src/range_and_bearing"]
 	path = catkin_ws/src/range_and_bearing
-	url = https://github.com/CCOMJHC/range_and_bearing.git
+	url = ../range_and_bearing.git
 [submodule "catkin_ws/src/seapath"]
 	path = catkin_ws/src/seapath
-	url = https://github.com/CCOMJHC/seapath.git
+	url = ../seapath.git
 [submodule "catkin_ws/src/survey_manager"]
 	path = catkin_ws/src/survey_manager
-	url = https://github.com/CCOMJHC/survey_manager.git
+	url = ../survey_manager.git
 [submodule "catkin_ws/src/traffic_sim"]
 	path = catkin_ws/src/traffic_sim
-	url = https://github.com/CCOMJHC/traffic_sim.git
+	url = ../traffic_sim.git
 [submodule "catkin_ws/src/zboat_helm"]
 	path = catkin_ws/src/zboat_helm
-	url = https://github.com/CCOMJHC/zboat_helm.git
+	url = ../zboat_helm.git
 [submodule "catkin_ws/src/camp"]
 	path = catkin_ws/src/camp
-	url = https://github.com/CCOMJHC/AutonomousMissionPlanner.git
+	url = ../AutonomousMissionPlanner.git
 [submodule "catkin_ws/src/marine_traffic_com"]
 	path = catkin_ws/src/marine_traffic_com
-	url = https://github.com/CCOMJHC/marine_traffic_com.git
+	url = ../marine_traffic_com.git
