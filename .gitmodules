@@ -49,9 +49,6 @@
 [submodule "catkin_ws/src/course_made_good"]
 	path = catkin_ws/src/course_made_good
 	url = https://github.com/CCOMJHC/course_made_good.git
-[submodule "catkin_ws/src/darknet_ros"]
-	path = catkin_ws/src/darknet_ros
-	url = https://github.com/leggedrobotics/darknet_ros.git
 [submodule "catkin_ws/src/ais"]
 	path = catkin_ws/src/ais
 	url = https://github.com/CCOMJHC/ais.git
