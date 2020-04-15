@@ -153,7 +153,7 @@ The standard way in "github" to contribute code and other changes back into a re
 But you cannot modify the code in the forked version of the repository directly, because it is on the github server. Rather you add a remote in the previously cloned copy on your local machine pointing to your github fork. You can make changes and "push" them back to your forked copy on github.
 Finally, if you want to contribute your changes back to the original offical CCOMJHC repository you navigate to that repo on github and create a "pull request". This is a request for the maintainer of the CCOMJHC repository to "pull" your changes back into the original repository. If he/she agrees with your suggested changes, your request will be granted and your code will become part of the official archive.
 
-Thus in addition to cloning the repositories as shown above, you may also want to fork them into your own github account and add a remote pointing there.
+Thus in addition to cloning the repositories as shown above, you may also want to fork the ones you wish to modify into your own github account and add remotes pointing to the forked copies.
 
 ## rviz
 
