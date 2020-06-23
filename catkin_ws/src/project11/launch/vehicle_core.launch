@@ -26,6 +26,4 @@
     
     <node pkg="path_planner" type="path_planner_node" name="path_planner"/>
     <node pkg="mpc" type="mpc_node" name="mpc"/>
-    
-    <node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/>
 </launch>
