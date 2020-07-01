@@ -1,6 +1,10 @@
 <launch>
+    <rosparam command="load" file="$(find project11)/parameters/vehicle.yaml" />
     <arg name="host"/>
-    <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle" args="$(arg host)"/>
+    <rosparam param="/vehicle/udp_bridge_vehicle/remotes/operator/host" subst_value="True">$(arg host)</rosparam>
+    <node pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge_vehicle" ns="vehicle"/>
+<!--     <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle" args="$(arg host)"/> -->
+    
     <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
 
     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>

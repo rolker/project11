@@ -1,0 +1,42 @@
+vehicle/udp_bridge_vehicle/remotes:
+    operator:
+        host: localhost
+        port: 4201
+        topics:
+          - source: /position
+            destination: /udp/position
+          - source: /origin
+            destination: /udp/origin
+          - source: /heartbeat
+            destination: /udp/heartbeat
+          - source: /project11/mission_manager/status
+            destination: /udp/project11/mission_manager/status
+          - source: /flir_engine
+            destination: /udp/flir_engine
+          - source: /heading
+            destination: /udp/heading
+          - source: /contact
+            destination: /udp/contact
+          - source: /diagnostics
+            destination: /udp/diagnostics
+          - source: /posmv/oritentation
+            destination: /udp/posmv/orientation
+          - source: /posmv/position
+            destination: /udp/posmv/position
+          - source: /sog
+            destination: /udp/sog
+          - source: /coverage
+            destination: /udp/coverage
+          - source: /mbes_ping
+            destination: /udp/mbes_ping
+          - source: /project11/response
+            destination: /udp/response
+          - source: /radar
+            destination: /udp/radar
+          - source: /project11/display
+            destination: /udp/project11/display
+          - source: /mbr/9372/2510/margin_avg
+            destination: /udp/mbr/9372/2510/margin_avg
+          - source: /mbr/9372/2510/margin_min
+            destination: /udp/mbr/9372/2510/margin_min
+            

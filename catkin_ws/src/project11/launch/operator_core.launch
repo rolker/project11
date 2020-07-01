@@ -1,6 +1,9 @@
 <launch>
+    <rosparam command="load" file="$(find project11)/parameters/operator.yaml" />
     <arg name="host"/>
-    <node pkg="udp_bridge" type="operator_node" name="udp_bridge_operator" args="$(arg host)"/>
+    <rosparam param="/operator/udp_bridge_operator/remotes/vehicle/host" subst_value="True">$(arg host)</rosparam>
+    <node pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge_operator" ns="operator" args="_port:=4201"/>
+<!--     <node pkg="udp_bridge" type="operator_node" name="udp_bridge_operator" args="$(arg host)"/> -->
     <node pkg="range_and_bearing" type="range_and_bearing_node" name="range_and_bearing">
         <remap from="/input1" to="/base/position"/>
         <remap from="/input2" to="/udp/posmv/position"/>
