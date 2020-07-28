@@ -4,6 +4,7 @@
 <!--    <param name="dynamics_max_power" type="double" value="20000.0"/>
     <param name="dynamics_max_speed" type="double" value="10.0"/>-->
     
+    <rosparam command="load" file="$(find project11)/parameters/ben.yaml" />
     <rosparam command="load" file="$(find project11)/parameters/sim_unh_pier.yaml" />
     
     <include file="$(find project11)/launch/vehicle_core.launch">

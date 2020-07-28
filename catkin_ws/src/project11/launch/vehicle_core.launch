@@ -6,6 +6,8 @@
 <!--     <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle" args="$(arg host)"/> -->
     
     <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
+    <arg name="transform_params"/>
+    <node pkg="transform_manager" type="transform_manager_node" name="transform_manager" args="$(arg transform_params)"/>
 
     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
 

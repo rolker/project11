@@ -100,3 +100,6 @@
 [submodule "catkin_ws/src/marine_traffic_com"]
 	path = catkin_ws/src/marine_traffic_com
 	url = ../marine_traffic_com.git
+[submodule "catkin_ws/src/transform_manager"]
+	path = catkin_ws/src/transform_manager
+	url = ../transform_manager
