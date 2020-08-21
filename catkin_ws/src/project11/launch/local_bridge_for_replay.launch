@@ -4,4 +4,5 @@
     <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle"/>
     <node pkg="udp_bridge" type="operator_node" name="udp_operator"/>
     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+    <node pkg="transform_manager" type="transform_manager_node" name="transform_manager" args="/project11/transformations/static"/>
 </launch>
