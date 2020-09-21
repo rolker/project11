@@ -1,9 +1,15 @@
 <launch>
     <param name="/use_sim_time" type="bool" value="true"/>
+    <rosparam command="load" file="$(find project11)/parameters/ben.yaml" />
     <rosparam command="load" file="$(find project11)/parameters/sim_unh_pier.yaml" />
+
+    <arg name="override_mpc" default="false"/>
+    <node if="$(arg override_mpc)" pkg="path_follower" type="mpc_adapter_node" name="mpc_adapter"/>
     
     <include file="$(find project11)/launch/vehicle_core.launch">
         <arg name="host" value="localhost"/>
+        <arg name="override_mpc" value="$(arg override_mpc)"/>
+        <arg name="transform_params" default="/project11/transformations/static"/>
     </include>
     <include file="$(find project11)/launch/operator_core.launch">
         <arg name="host" value="localhost"/>
@@ -36,5 +42,6 @@
     <node pkg="traffic_sim" type="traffic_sim_node.py" name="traffic_sim"/>
     
     <node pkg="manda_coverage" type="manda_coverage_node" name="manda_coverage"/>
+
 
 </launch>

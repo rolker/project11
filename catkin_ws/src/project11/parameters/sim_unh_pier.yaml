@@ -1,9 +1,3 @@
-project11/role: vehicle
-mission_manager/default_speed: 2.5   # m/s
-mission_manager/turn_radius: 25.0
-mission_manager/hover_minimum_distance: 5.0
-mission_manager/hover_maximum_distance: 50.0
-mission_manager/hover_maximum_speed: 3.0
 base/dimension_to_bow: 3
 base/dimension_to_stern: 10
 base/dimension_to_stbd: 4

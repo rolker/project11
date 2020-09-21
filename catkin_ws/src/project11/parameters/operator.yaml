@@ -1,0 +1,13 @@
+operator/udp_bridge_operator/remotes:
+    vehicle:
+        host: localhost
+        port: 4200
+        topics:
+          - source: /udp/project11/piloting_mode
+            destination: /project11/piloting_mode
+          - source: /udp/mission_plan
+            destination: /mission_plan
+          - source: /udp/command
+            destination: /project11/command
+          - source: /udp/helm
+            destination: /helm

@@ -1,7 +1,13 @@
 <launch>
+    <rosparam command="load" file="$(find project11)/parameters/vehicle.yaml" />
     <arg name="host"/>
-    <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle" args="$(arg host)"/>
+    <rosparam param="/vehicle/udp_bridge_vehicle/remotes/operator/host" subst_value="True">$(arg host)</rosparam>
+    <node pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge_vehicle" ns="vehicle"/>
+<!--     <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle" args="$(arg host)"/> -->
+    
     <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
+    <arg name="transform_params"/>
+    <node pkg="transform_manager" type="transform_manager_node" name="transform_manager" args="$(arg transform_params)"/>
 
     <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
 
@@ -25,7 +31,6 @@
     <node pkg="hover" type="hover_node" name="hover_action"/>
     
     <node pkg="path_planner" type="path_planner_node" name="path_planner"/>
-    <node pkg="mpc" type="mpc_node" name="mpc"/>
-    
-    <node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/>
+    <arg name="override_mpc" default="false"/>
+    <node unless="$(arg override_mpc)" pkg="mpc" type="mpc_node" name="mpc"/>
 </launch>

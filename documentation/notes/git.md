@@ -26,6 +26,10 @@ If a project gets cloned without the `--recursive` flag, it can be updated to ge
 
     cd ~/project11
     git submodule add https://github.com/CCOMJHC/cool_package catkin_ws/src/cool_package
+    
+To add a relative submodule, which allows users to chose between https or ssh when cloning...
+
+    git submodule add ../cool_package catkin_ws/src/cool_package
 
 ### Useful links
 
