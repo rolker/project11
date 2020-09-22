@@ -10,13 +10,16 @@ mission_manager/hover_maximum_speed: 3.0
 project11/transformations/static:
  - { header: {frame_id: "base_link"}, child_frame_id: "mbes", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0} } }
  - { header: {frame_id: "base_link"}, child_frame_id: "pano_base", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0} } }
- - { header: {frame_id: "pano_base"}, child_frame_id: "pano_1", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0} } }
+ - { header: {frame_id: "pano_base"}, child_frame_id: "pano_1", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0} } }
  - { header: {frame_id: "pano_1"}, child_frame_id: "pano_1_optical", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: -0.5, y: 0.5, z: -0.5, w: 0.5} } }
- - { header: {frame_id: "pano_base"}, child_frame_id: "pano_2", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.5877853, w: -0.809017} } }
+ - { header: {frame_id: "pano_base"}, child_frame_id: "pano_2", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: -0.5, w: 0.866025} } }
  - { header: {frame_id: "pano_2"}, child_frame_id: "pano_2_optical", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: -0.5, y: 0.5, z: -0.5, w: 0.5} } }
- - { header: {frame_id: "pano_base"}, child_frame_id: "pano_3", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.9510565, w: -0.309017} } }
+ - { header: {frame_id: "pano_base"}, child_frame_id: "pano_3", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: -0.866025, w: 0.5} } }
  - { header: {frame_id: "pano_3"}, child_frame_id: "pano_3_optical", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: -0.5, y: 0.5, z: -0.5, w: 0.5} } }
- - { header: {frame_id: "pano_base"}, child_frame_id: "pano_4", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.9510565, w: 0.309017} } }
+ - { header: {frame_id: "pano_base"}, child_frame_id: "pano_4", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 1.0, w: 0.0} } }
  - { header: {frame_id: "pano_4"}, child_frame_id: "pano_4_optical", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: -0.5, y: 0.5, z: -0.5, w: 0.5} } }
- - { header: {frame_id: "pano_base"}, child_frame_id: "pano_5", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.5877853, w: 0.809017} } }
- - { header: {frame_id: "pano_5"}, child_frame_id: "pano_5_optical", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: -0.5, y: 0.5, z: -0.5, w: 0.5} } } 
+ - { header: {frame_id: "pano_base"}, child_frame_id: "pano_5", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.866025, w: 0.5} } }
+ - { header: {frame_id: "pano_5"}, child_frame_id: "pano_5_optical", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: -0.5, y: 0.5, z: -0.5, w: 0.5} } }
+ - { header: {frame_id: "pano_base"}, child_frame_id: "pano_6", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.5, w: 0.866025} } }
+ - { header: {frame_id: "pano_6"}, child_frame_id: "pano_6_optical", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: -0.5, y: 0.5, z: -0.5, w: 0.5} } }
+ 
