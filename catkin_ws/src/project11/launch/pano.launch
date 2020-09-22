@@ -8,9 +8,9 @@
         <!-- means video device 0, /dev/video0 -->
         <arg name="video_stream_provider" value="rtsp://unmanned:unmanned@$(arg camera_ip):554/cam1/mpeg4" />
         <!-- set camera fps to -->
-        <arg name="set_camera_fps" default="5" />
+        <arg name="set_camera_fps" default="2" />
         <!-- throttling the querying of frames to -->
-        <arg name="fps" value="5" />
+        <arg name="fps" value="2" />
         <!-- setting frame_id -->
         <arg name="frame_id" value="pano_$(arg camera_number)" />
         <!-- camera info loading, take care as it needs the "file:///" at the start , e.g.:

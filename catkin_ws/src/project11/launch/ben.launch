@@ -3,7 +3,7 @@
     
     <include file="$(find project11)/launch/vehicle_core.launch">
         <arg name="host" default="192.168.100.199"/>
-        <arg name="tranform_params" default="/project11/transformations/static"/>
+        <arg name="transform_params" default="/project11/transformations/static"/>
     </include>
 
     
@@ -21,6 +21,8 @@
 
     <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
     <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
+
+    <include file="$(find project11)/launch/all_panos.launch"/>
 
     <include file="$(find project11)/launch/vehicle_loggers.launch"/>
 </launch>
