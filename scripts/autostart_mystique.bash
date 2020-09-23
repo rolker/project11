@@ -1,5 +1,6 @@
 # !/bin/bash
 
+# called from cron @reboot using field's user crontab
 # inspired by: https://answers.ros.org/question/140426/issues-launching-ros-on-startup/
 
 LOG_FILE=/home/field/project11/log/autostart.txt
