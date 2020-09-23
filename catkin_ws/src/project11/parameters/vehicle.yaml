@@ -19,7 +19,7 @@ vehicle/udp_bridge_vehicle/remotes:
             destination: /udp/contact
           - source: /diagnostics
             destination: /udp/diagnostics
-          - source: /posmv/oritentation
+          - source: /posmv/orientation
             destination: /udp/posmv/orientation
           - source: /posmv/position
             destination: /udp/posmv/position
