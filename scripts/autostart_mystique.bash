@@ -22,9 +22,20 @@ echo "Wait 10 seconds before launching ROS..."
 sleep 10
 
 set -e
+
+{
+source /opt/ros/melodic/setup.bash
+source /home/field/project11/catkin_ws/devel/setup.bash
+
+export ROS_WORKSPACE=/home/field/project11/catkin_ws
+export ROS_IP=192.168.100.112
+
+} &>> ${LOG_FILE}
+
 set -v
 
 {
-screen -d -m bash /home/field/project11/scripts/start_roscore.sh
-screen -d -m bash /home/field/project11/scripts/start_rosmon_mystique.sh
+/home/field/project11/scripts/start_tmux.sh
+#screen -d -m bash /home/field/project11/scripts/start_roscore.sh
+#screen -d -m bash /home/field/project11/scripts/start_rosmon_mystique.sh
 } &>> ${LOG_FILE}
