@@ -23,4 +23,5 @@
         <!-- visualize on an image_view window the stream generated -->
         <arg name="visualize" value="false" />
    </include>
+   <node pkg="nodelet" type="nodelet" name="thumbnail" ns="pano_$(arg camera_number)" args="standalone image_proc/resize image:=image_raw _scale_width:=0.2 _scale_height:=0.2"/>
 </launch>
