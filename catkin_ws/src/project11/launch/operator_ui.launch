@@ -1,0 +1,6 @@
+<launch>
+    <node pkg="rqt_reconfigure" type="rqt_reconfigure" name="rqt_reconfigure"/>
+    <node pkg="camp" type="AutonomousMissionPlanner" name="camp"  args="$(find camp)/workspace/"/>
+</launch>
+
+
