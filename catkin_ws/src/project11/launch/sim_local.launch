@@ -17,6 +17,9 @@
         <arg name="operator_joystick" value="1"/>
     </include>
     
+    <include file="$(find project11)/launch/operator_ui.launch"/>
+
+    
     <node pkg="asv_helm" type="asv_helm_node" name="asv_helm"/>
     <node pkg="asv_sim" type="asv_sim_node.py" name="asv_sim_node"/>
     
