@@ -1,11 +1,11 @@
 project11/role: vehicle
 sonar/model: 2040
 sonar/host: stormi
-mission_manager/default_speed: 2.5   # m/s
-mission_manager/turn_radius: 25.0
+mission_manager/default_speed: 2.75   # m/s
+mission_manager/turn_radius: 10.0
 mission_manager/hover_minimum_distance: 5.0
 mission_manager/hover_maximum_distance: 50.0
-mission_manager/hover_maximum_speed: 3.0
+mission_manager/hover_maximum_speed: 1.0 # m/s
 
 project11/transformations/static:
  - { header: {frame_id: "base_link"}, child_frame_id: "mbes", transform: {translation: {x: 0.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0} } }
