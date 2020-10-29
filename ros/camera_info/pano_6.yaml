@@ -1,0 +1,20 @@
+image_width: 2560
+image_height: 1440
+camera_name: pano_6
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [1870.614816348127, 0, 1283.579237203475, 0, 1870.006890162215, 703.5544779702099, 0, 0, 1]
+distortion_model: plumb_bob
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data: [-0.3859977758422982, 0.1133761357250501, -0.002906633538583964, -9.892890060768589e-05, 0]
+rectification_matrix:
+  rows: 3
+  cols: 3
+  data: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+projection_matrix:
+  rows: 3
+  cols: 4
+  data: [1431.14013671875, 0, 1285.432889901858, 0, 0, 1753.668090820312, 698.0702314903283, 0, 0, 0, 1, 0]
