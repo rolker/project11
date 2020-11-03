@@ -84,4 +84,5 @@
 # zero tier
 10.242.46.146   penguinz
 10.242.236.198  snowpetrelz
+10.242.9.10     monkz
 
