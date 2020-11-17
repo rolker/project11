@@ -13,7 +13,7 @@ echo "Logs:" >> ${LOG_FILE}
 set -e
 
 {
-source /opt/ros/melodic/setup.bash
+source /opt/ros/noetic/setup.bash
 source /home/field/project11/catkin_ws/devel/setup.bash
 
 export ROS_WORKSPACE=/home/field/project11/catkin_ws

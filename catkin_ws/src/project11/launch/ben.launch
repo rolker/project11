@@ -16,8 +16,8 @@
     <node pkg="br24_radar" type="br24_radar_node.py" name="br24_radar_node"/>
     <node pkg="posmv" type="posmv_node.py" name="posmv"/>
     <!--node pkg="radar_obstacle_detection" type="radar_obstacle_detection_node.py" name="radar_obstacle_detection"/-->
-    <node pkg="kongsberg_em_control" type="kongsberg_em_control_node.py" name="kongsberg_em_control"/>
-    <node pkg="kongsberg_em" type="kongsberg_em_node.py" name="kongsberg_em"/>
+    <!--node pkg="kongsberg_em_control" type="kongsberg_em_control_node.py" name="kongsberg_em_control"/-->
+    <!--node pkg="kongsberg_em" type="kongsberg_em_node.py" name="kongsberg_em"/-->
 
     <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
     <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
