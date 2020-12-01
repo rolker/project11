@@ -11,3 +11,5 @@ operator/udp_bridge_operator/remotes:
             destination: /project11/command
           - source: /udp/helm
             destination: /helm
+          - source: /udp/differential_drive
+            destination: /differential_drive

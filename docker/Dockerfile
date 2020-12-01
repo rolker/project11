@@ -75,6 +75,7 @@ RUN /bin/sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) 
     ros-${DIST}-key-teleop \
     ros-${DIST}-mavros \
     ros-${DIST}-octomap-server \
+    ros-${DIST}-octovis \
     ros-${DIST}-pid \
     ros-${DIST}-pointcloud-to-laserscan \
     ros-${DIST}-robot-localization \
