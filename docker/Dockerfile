@@ -65,13 +65,18 @@ RUN /bin/sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) 
     ros-${DIST}-gazebo-ros \
     ros-${DIST}-gazebo-plugins \
     ros-${DIST}-geodesy \
+    ros-${DIST}-grid-map \
+    ros-${DIST}-gmapping \
     ros-${DIST}-hector-gazebo-plugins \
+    ros-${DIST}-image-view \
     ros-${DIST}-joint-state-publisher \
     ros-${DIST}-joy \
     ros-${DIST}-joy-teleop \
     ros-${DIST}-key-teleop \
     ros-${DIST}-mavros \
+    ros-${DIST}-octomap-server \
     ros-${DIST}-pid \
+    ros-${DIST}-pointcloud-to-laserscan \
     ros-${DIST}-robot-localization \
     ros-${DIST}-robot-state-publisher \
     ros-${DIST}-rosmon \
