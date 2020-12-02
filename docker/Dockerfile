@@ -74,6 +74,7 @@ RUN /bin/sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) 
     ros-${DIST}-joy-teleop \
     ros-${DIST}-key-teleop \
     ros-${DIST}-mavros \
+    ros-${DIST}-move-base \
     ros-${DIST}-octomap-server \
     ros-${DIST}-octovis \
     ros-${DIST}-pid \
