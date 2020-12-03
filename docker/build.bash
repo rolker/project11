@@ -44,7 +44,7 @@ set -- "${POSITIONAL[@]}"
 
 if [ $# -lt 1 ]
 then
-    echo "Usage: $0 [-n --nvidia] <root of vrx repo>"
+    echo "Usage: $0 [-n --nvidia] <root of project11 repo>"
     exit 1
 fi
 
