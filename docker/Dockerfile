@@ -16,9 +16,12 @@ RUN apt update \
         curl \
         cmake \
         lsb-release \
+        g++-6 \
+        gcc-6 \
         gdb \
         git \
         mercurial \
+        nvidia-cuda-toolkit \
         python-future \
         python-gdal \
         python3-dbg \
@@ -35,6 +38,10 @@ RUN apt update \
         xterm \
  && apt clean
 
+RUN sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-6 10
+
+RUN sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 10
+ 
 RUN export DEBIAN_FRONTEND=noninteractive \
  && apt update \
  && apt install -y \
@@ -85,6 +92,7 @@ RUN /bin/sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) 
     ros-${DIST}-rosmon \
     ros-${DIST}-rviz \
     ros-${DIST}-smach-ros \
+    ros-${DIST}-stereo-image-proc \
     ros-${DIST}-teleop-tools \
     ros-${DIST}-teleop-twist-keyboard \
     ros-${DIST}-tf2-ros \
