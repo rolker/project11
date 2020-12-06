@@ -97,6 +97,7 @@ RUN /bin/sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) 
     ros-${DIST}-teleop-twist-keyboard \
     ros-${DIST}-tf2-ros \
     ros-${DIST}-tf2-geometry-msgs \
+    ros-${DIST}-tf-conversions \
     ros-${DIST}-velodyne-simulator \
     ros-${DIST}-rqt \
     ros-${DIST}-rqt-common-plugins \
