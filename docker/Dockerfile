@@ -24,6 +24,7 @@ RUN apt update \
         nvidia-cuda-toolkit \
         python-future \
         python-gdal \
+        python-pip \
         python3-dbg \
         python3-pip \
         python3-venv \
@@ -73,6 +74,7 @@ RUN /bin/sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) 
     ros-${DIST}-gazebo-plugins \
     ros-${DIST}-geodesy \
     ros-${DIST}-grid-map \
+    ros-${DIST}-global-planner \
     ros-${DIST}-gmapping \
     ros-${DIST}-hector-gazebo-plugins \
     ros-${DIST}-image-view \
@@ -105,6 +107,8 @@ RUN /bin/sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) 
  && apt clean
 
 RUN rosdep update
+
+RUN pip install filterpy
 
 # Set USER and GROUP
 ARG USER=developer
