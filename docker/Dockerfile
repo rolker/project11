@@ -25,12 +25,14 @@ RUN apt update \
         python-future \
         python-gdal \
         python-pip \
+        python-ipdb \
         python3-dbg \
         python3-pip \
         python3-venv \
         ruby \
         software-properties-common \
         sudo \
+        tilix \
         vim \
         wget \
         libeigen3-dev \
