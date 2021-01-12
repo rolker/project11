@@ -78,7 +78,7 @@ VRX_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../" >/dev/null 2>&1 && pwd )"
 
 DOCKER_OPTS=
 # Example: Bind mount a local repository on the host machine:
-DOCKER_OPTS="--mount type=bind,source=/home/roland/vorc/project11,target=/home/developer/project11 --mount type=bind,source=/home/roland/vorc/vrx-docker,target=/home/developer/vrx-docker"
+#DOCKER_OPTS="--mount type=bind,source=/home/roland/vorc/project11,target=/home/developer/project11 --mount type=bind,source=/home/roland/vorc/vrx-docker,target=/home/developer/vrx-docker  --mount type=bind,source=/home/roland/data/vorc_results/TeamCCOM,target=/home/developer/vrx-docker/generated/logs/TeamCCOM_Results"
 
 
 # Share your vim settings.
