@@ -1,50 +1,56 @@
 <launch>
-    <param name="/use_sim_time" type="bool" value="true"/>
-    <rosparam command="load" file="$(find project11)/parameters/ben.yaml" />
-    <rosparam command="load" file="$(find project11)/parameters/sim_unh_pier.yaml" />
+  <arg name="namespace" default="ben"/>
+  
+  <param name="/use_sim_time" type="bool" value="true"/>
+  <rosparam command="load" file="$(find project11)/parameters/ben.yaml" ns="$(arg namespace)"/>
+  <rosparam command="load" file="$(find project11)/parameters/sim_unh_pier.yaml" ns="$(arg namespace)"/>
 
-    <arg name="override_mpc" default="false"/>
-    <node if="$(arg override_mpc)" pkg="path_follower" type="mpc_adapter_node" name="mpc_adapter"/>
+  <arg name="override_mpc" default="false"/>
+  <node if="$(arg override_mpc)" pkg="path_follower" type="mpc_adapter_node" name="mpc_adapter" ns="$(arg namespace)"/>
     
-    <include file="$(find project11)/launch/vehicle_core.launch">
-        <arg name="host" value="localhost"/>
-        <arg name="override_mpc" value="$(arg override_mpc)"/>
-        <arg name="transform_params" default="/project11/transformations/static"/>
-    </include>
-    <include file="$(find project11)/launch/operator_core.launch">
-        <arg name="host" value="localhost"/>
-        <arg name="operator_transformations" value="0"/>
-        <arg name="operator_joystick" value="1"/>
-    </include>
+  <include file="$(find project11)/launch/vehicle_core.launch">
+    <arg name="host" value="localhost"/>
+    <arg name="override_mpc" value="$(arg override_mpc)"/>
+    <arg name="transform_params" default="/project11/transformations/static"/>
+    <arg name="namespace" default="$(arg namespace)"/>
+  </include>
+  <include file="$(find project11)/launch/operator_core.launch">
+    <arg name="host" value="localhost"/>
+    <arg name="operator_transformations" value="0"/>
+    <arg name="operator_joystick" value="1"/>
+    <arg name="namespace" default="/operator/$(arg namespace)"/>
+  </include>
     
-    <include file="$(find project11)/launch/operator_ui.launch"/>
+  <include file="$(find project11)/launch/operator_ui.launch">
+    <arg name="namespace" default="/operator/$(arg namespace)"/>
+  </include>
 
     
-    <node pkg="asv_helm" type="asv_helm_node" name="asv_helm"/>
-    <node pkg="asv_sim" type="asv_sim_node.py" name="asv_sim_node"/>
+  <node pkg="asv_helm" type="asv_helm_node" name="asv_helm" ns="$(arg namespace)"/>
+  <node pkg="asv_sim" type="asv_sim_node.py" name="asv_sim_node" ns="$(arg namespace)"/>
     
-    <arg name="bathy_grid_path" default="$(find mbes_sim)/data/US5NH02M.tiff"/>
-    <node pkg="mbes_sim" type="mbes_sim_node.py" name="mbes_sim" args="$(arg bathy_grid_path)"/>
+  <arg name="bathy_grid_path" default="$(find mbes_sim)/data/US5NH02M.tiff"/>
+  <node pkg="mbes_sim" type="mbes_sim_node.py" name="mbes_sim" args="$(arg bathy_grid_path)" ns="$(arg namespace)"/>
     
-    <node pkg="joy" type="joy_node" name="joy_node_dynamic_obstacle_1">
-        <remap from="joy" to="joy_1"/>
-        <param name="dev" type="string" value="/dev/input/js1" />
-        <param name="autorepeat_rate" value="10" />
-    </node>
-    <node pkg="joy" type="joy_node" name="joy_node_dynamic_obstacle_2">
-        <remap from="joy" to="joy_2"/>
-        <param name="dev" type="string" value="/dev/input/js2" />
-        <param name="autorepeat_rate" value="10" />
-    </node>
-    <node pkg="joy" type="joy_node" name="joy_node_dynamic_obstacle_3">
-        <remap from="joy" to="joy_3"/>
-        <param name="dev" type="string" value="/dev/input/js3" />
-        <param name="autorepeat_rate" value="10" />
-    </node>
+  <node pkg="joy" type="joy_node" name="joy_node_dynamic_obstacle_1">
+      <remap from="joy" to="joy_1"/>
+      <param name="dev" type="string" value="/dev/input/js1" />
+      <param name="autorepeat_rate" value="10" />
+  </node>
+  <node pkg="joy" type="joy_node" name="joy_node_dynamic_obstacle_2">
+      <remap from="joy" to="joy_2"/>
+      <param name="dev" type="string" value="/dev/input/js2" />
+      <param name="autorepeat_rate" value="10" />
+  </node>
+  <node pkg="joy" type="joy_node" name="joy_node_dynamic_obstacle_3">
+      <remap from="joy" to="joy_3"/>
+      <param name="dev" type="string" value="/dev/input/js3" />
+      <param name="autorepeat_rate" value="10" />
+  </node>
 
-    <node pkg="traffic_sim" type="traffic_sim_node.py" name="traffic_sim"/>
+  <node pkg="traffic_sim" type="traffic_sim_node.py" name="traffic_sim"/>
     
-    <node pkg="manda_coverage" type="manda_coverage_node" name="manda_coverage"/>
+  <node pkg="manda_coverage" type="manda_coverage_node" name="manda_coverage" ns="$(arg namespace)"/>
 
 
 </launch>
