@@ -1,0 +1,16 @@
+<launch>
+  <include file="$(find ben_description)/launch/sandisland.launch"/>
+  <node pkg="ben_gazebo_helm" type="ben_gazebo_helm_node" name="ben_gazebo_helm"/>
+  <node pkg="joy" type="joy_node" name="joy_node">
+    <param name="autorepeat_rate" value="10.0"/>
+  </node>
+    
+  <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm"/>
+  
+  <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender"/>
+  <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
+
+</launch>
+
+
+
