@@ -5,7 +5,7 @@ import datetime
 import socket
 
 
-# to start from crontab on reboot, add the following using crontab -r
+# to start from crontab on reboot, add the following using crontab -e
 #
 # @reboot python3 /home/ubuntu/project11/scripts/aishub_sender.py >>/home/ubuntu/aishub_sender_log.txt 2>&1
 
