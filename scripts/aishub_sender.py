@@ -29,6 +29,7 @@ today = None
 
 udp_destinations = (('144.76.105.244',2100), #aishub
                     ('5.9.207.224',11566),   #marinetraffic
+                    ('109.200.19.151',4001), #shipfinder.co
                     ('10.242.236.198',2125), #snowpetrelz
                     ('10.242.46.146',2125) ) #penguinz
 udp_sockets = []
