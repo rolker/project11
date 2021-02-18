@@ -27,7 +27,7 @@ today = None
 
 # stream to udp destinations
 
-udp_destinations = (('144.76.105.244',2125), #aishub
+udp_destinations = (('144.76.105.244',2100), #aishub
                     ('5.9.207.224',11566),   #marinetraffic
                     ('10.242.236.198',2125), #snowpetrelz
                     ('10.242.46.146',2125) ) #penguinz
