@@ -27,7 +27,10 @@ today = None
 
 # stream to udp destinations
 
-udp_destinations = ( ('144.76.105.244',2125), ('10.242.236.198',2125), ('10.242.46.146',2125) )
+udp_destinations = (('144.76.105.244',2125), #aishub
+                    ('5.9.207.224',11566),   #marinetraffic
+                    ('10.242.236.198',2125), #snowpetrelz
+                    ('10.242.46.146',2125) ) #penguinz
 udp_sockets = []
 for d in udp_destinations:
   s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
