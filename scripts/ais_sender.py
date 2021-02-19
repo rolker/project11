@@ -32,7 +32,8 @@ udp_destinations = (('144.76.105.244',2100), #aishub
                     ('109.200.19.151',4001), #shipfinder.co
                     ('148.251.96.197',34987),#fleetmon
                     ('10.242.236.198',2125), #snowpetrelz
-                    ('10.242.46.146',2125) ) #penguinz
+                    ('10.242.46.146',2125),  #penguinz
+                    ('10.242.79.31',2125))   #pandora (KG's)
 udp_sockets = []
 for d in udp_destinations:
   s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
