@@ -94,11 +94,11 @@ The version control client git should already be installed so it only needs to b
 
 Fetching the Project11 workspace. 
 
-    git clone --recursive https://github.com/CCOMJHC/project11.git
+    git clone --branch melodic --recursive https://github.com/CCOMJHC/project11.git
 
 Alternatively, you may want to use SSH if you have an SSH key setup on github.
 
-    git clone --recursive git@github.com:CCOMJHC/project11.git
+    git clone --branch melodic --recursive git@github.com:CCOMJHC/project11.git
 
 Install additional packages available from the package manager.
 
