@@ -10,7 +10,12 @@
   <arg name="transform_params"/>
   <node pkg="transform_manager" type="transform_manager_node" name="transform_manager" args="$(arg transform_params)" ns="$(arg namespace)"/>
 
-  <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations" ns="$(arg namespace)"/>
+  <param name="$(arg namespace)/base_frame" value="$(arg namespace)/base_link"/>
+  <param name="$(arg namespace)/map_frame" value="$(arg namespace)/map"/>
+  <param name="$(arg namespace)/odom_frame" value="$(arg namespace)/odom"/>
+
+  <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations" ns="$(arg namespace)">
+  </node>
 
   <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager" output="screen" ns="$(arg namespace)"/>
     <!--<node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/>-->

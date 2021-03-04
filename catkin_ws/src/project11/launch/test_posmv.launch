@@ -1,0 +1,8 @@
+<launch>
+  <rosparam>
+/project11_transformations/sensors:
+ - {name: posmv, topics: { position: '/posmv/position', orientation: '/posmv/orientation', velocity: '/posmv/velocity'}}
+  </rosparam>
+  <node pkg="posmv" type="posmv_node.py" name="posmv"/>
+  <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+</launch>

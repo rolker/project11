@@ -22,4 +22,19 @@ project11/transformations/static:
  - { header: {frame_id: "pano_5"}, child_frame_id: "pano_5_optical", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: -0.5, y: 0.5, z: -0.5, w: 0.5} } }
  - { header: {frame_id: "pano_base"}, child_frame_id: "pano_6", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: 0.0, y: 0.0, z: 0.5, w: 0.866025} } }
  - { header: {frame_id: "pano_6"}, child_frame_id: "pano_6_optical", transform: {translation: {x: 10.0, y: 0.0, z: 0.0}, rotation: {x: -0.5, y: 0.5, z: -0.5, w: 0.5} } }
+
+project11_transformations/sensors:
+ - name: posmv
+   topics: { position: 'sensors/posmv/position', orientation: 'sensors/posmv/orientation', velocity: 'sensors/posmv/velocity'}
+ - name: gps
+   topics: { position: 'sensors/gps/position', orientation: 'sensors/heading', velocity:
+ 'sensors/gps/velocity'}
+      
  
+project11_transformations/position_topics:
+ - 'sensors/posmv/position'
+ - 'sensors/gps/position'
+ 
+project11_transformations/orientation_topics:
+ - 'sensors/posmv/orientation'
+ - 'sensors/heading'

@@ -1,8 +1,10 @@
 <launch>
   <arg name="namespace"/>
+  <arg name="chart" default="/workspace/13283/13283_2.KAP"/>
+  <arg name="rqt" default="false"/>
 
-  <node pkg="rqt_gui" type="rqt_gui" name="rqt"/>
-  <node pkg="camp" type="AutonomousMissionPlanner" name="camp"  args="$(find camp)/workspace/ $(find camp)/workspace/13283/13283_2.KAP" ns="$(arg namespace)"/>
+  <node if="$(arg rqt)" pkg="rqt_gui" type="rqt_gui" name="rqt"/>
+  <node pkg="camp" type="AutonomousMissionPlanner" name="camp"  args="$(find camp)/workspace/ $(find camp)$(arg chart)" ns="$(arg namespace)"/>
 </launch>
 
 

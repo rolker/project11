@@ -3,8 +3,8 @@ udp_bridge/remotes:
         host: localhost
         port: 4201
         topics:
-          - source: position
-            destination: position
+          - source: sensors/gps/position
+            destination: sensors/gps/position
           - source: project11/origin
             destination: project11/origin
           - source: project11/heartbeat
@@ -13,16 +13,16 @@ udp_bridge/remotes:
             destination: project11/mission_manager/status
           - source: flir_engine
             destination: flir_engine
-          - source: heading
-            destination: heading
+          - source: sensors/heading
+            destination: sensors/heading
           - source: contact
             destination: contact
           - source: diagnostics
             destination: diagnostics
-          - source: posmv/orientation
-            destination: posmv/orientation
-          - source: posmv/position
-            destination: posmv/position
+          - source: sensors/posmv/orientation
+            destination: sensors/posmv/orientation
+          - source: sensors/posmv/position
+            destination: sensors/posmv/position
           - source: sog
             destination: sog
           - source: coverage
@@ -30,7 +30,7 @@ udp_bridge/remotes:
           - source: mbes_ping
             destination: mbes_ping
           - source: project11/response
-            destination: response
+            destination: project11/response
           - source: radar
             destination: radar
           - source: project11/display
