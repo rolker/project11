@@ -30,11 +30,3 @@ project11_transformations/sensors:
    topics: { position: 'sensors/gps/position', orientation: 'sensors/heading', velocity:
  'sensors/gps/velocity'}
       
- 
-project11_transformations/position_topics:
- - 'sensors/posmv/position'
- - 'sensors/gps/position'
- 
-project11_transformations/orientation_topics:
- - 'sensors/posmv/orientation'
- - 'sensors/heading'
