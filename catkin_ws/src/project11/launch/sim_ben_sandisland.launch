@@ -17,15 +17,16 @@
     <arg name="transform_params" default="/project11/transformations/static"/>
     <arg name="namespace" default="$(arg namespace)"/>
   </include>
+  
   <include file="$(find project11)/launch/operator_core.launch">
     <arg name="host" value="localhost"/>
     <arg name="operator_transformations" value="0"/>
     <arg name="operator_joystick" value="1"/>
-    <arg name="namespace" default="/operator/$(arg namespace)"/>
+    <arg name="namespace" default="/operator"/>
   </include>
   
   <include if="$(arg operator_ui)" file="$(find project11)/launch/operator_ui.launch">
-    <arg name="namespace" default="/operator/$(arg namespace)"/>
+    <arg name="namespace" default="/operator"/>
     <arg name="chart" default="/workspace/19367/19367_1.KAP"/>
   </include>
   

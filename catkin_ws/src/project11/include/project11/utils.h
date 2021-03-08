@@ -57,4 +57,7 @@ namespace project11
   }
 }
 
+std::ostream& operator<< (std::ostream &out, const project11::LatLongDegrees &p);
+std::ostream& operator<< (std::ostream &out, const project11::ECEF &p);
+
 #endif

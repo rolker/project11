@@ -1078,7 +1078,7 @@ namespace gz4d
               Point(){}
               Point(T x, T y, T z=0):gz4d::Point<T>(x,y,z){}
               explicit Point(gz4d::Point<T> const &op):gz4d::Point<T>(op){}
-              using gz4d::Point<T>::operator=;
+              //using gz4d::Point<T>::operator=;
 
               //template<typename OT, typename ORF> explicit Point(Point<OT,ORF> const&op)
               template<typename OT, typename ORF> Point(Point<OT,ORF> const&op)
@@ -1091,16 +1091,16 @@ namespace gz4d
               T altitude() const {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::Height);};
               
               T x() const {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::X);}
-              T y() const {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::X);}
-              T z() const {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::X);}
+              T y() const {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::Y);}
+              T z() const {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::Z);}
               
               T &latitude() {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::Latitude);}
               T &longitude() {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::Longitude);};
               T &altitude() {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::Height);};
               
               T &x() {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::X);}
-              T &y() {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::X);}
-              T &z() {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::X);}
+              T &y() {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::Y);}
+              T &z() {return gz4d::Point<T>::operator[](RF::coordinate_type::coordinate_format::Z);}
 
       };
       
@@ -1219,6 +1219,12 @@ namespace gz4d
               return ToEarthCenteredEarthFixed(Point<T,ReferenceFrame<ct::Geodetic<CF, pu::Radian>, Ellipsoid<S> > >(p));
           }
 
+          template <typename CF> static void ToGeodetic(Point<double,ReferenceFrame<ct::ECEF<>, Ellipsoid<S> > > const &p, Point<double,ReferenceFrame<ct::Geodetic<CF, pu::Degree>, Ellipsoid<S> > > &ret)
+          {
+            Point<double,ReferenceFrame<ct::Geodetic<CF, pu::Radian>, Ellipsoid<S> > > ret_rad;
+            ToGeodetic(p, ret_rad);
+            ret = ret_rad;
+          }
 
           template <typename CF> static void ToGeodetic(Point<double,ReferenceFrame<ct::ECEF<>, Ellipsoid<S> > > const &p, Point<double,ReferenceFrame<ct::Geodetic<CF, pu::Radian>, Ellipsoid<S> > > &ret)
           {
@@ -1604,12 +1610,6 @@ namespace gz4d
                     Point<T2> a = normalize(axis) * sin(angle/2.0);
                     *this = boost::math::quaternion<T>(cos(angle/2.0),a[0],a[1],a[2]);
                 }
-            }
-
-            /// Since the angle gets divided, make sure it's clamped
-            template<typename T2, typename PU> void Set(Angle<T2,PU,rt::Unclamped> angle, Point<T2> const &axis)
-            {
-              Set(Angle<T2, PU, rt::PositivePeriod>(angle), axis);
             }
 
             Point<T> operator()(Point<T> const &vector) const

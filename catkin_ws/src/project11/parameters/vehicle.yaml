@@ -4,39 +4,21 @@ udp_bridge/remotes:
         port: 4201
         topics:
           - source: sensors/gps/position
-            destination: sensors/gps/position
-          - source: project11/origin
-            destination: project11/origin
           - source: project11/heartbeat
-            destination: project11/heartbeat
           - source: project11/mission_manager/status
-            destination: project11/mission_manager/status
-          - source: flir_engine
-            destination: flir_engine
+          - source: sensors/flir_engine
           - source: sensors/heading
-            destination: sensors/heading
           - source: contact
-            destination: contact
           - source: diagnostics
-            destination: diagnostics
           - source: sensors/posmv/orientation
-            destination: sensors/posmv/orientation
           - source: sensors/posmv/position
-            destination: sensors/posmv/position
-          - source: sog
-            destination: sog
+          - source: sensors/posmv/velocity
           - source: coverage
-            destination: coverage
           - source: mbes_ping
-            destination: mbes_ping
           - source: project11/response
-            destination: project11/response
-          - source: radar
-            destination: radar
+          - source: sensors/radar
           - source: project11/display
-            destination: project11/display
           - source: mbr/9372/2510/margin_avg
-            destination: mbr/9372/2510/margin_avg
           - source: mbr/9372/2510/margin_min
-            destination: mbr/9372/2510/margin_min
             
+helm_manager/piloting_modes: ['manual', 'autonomous']

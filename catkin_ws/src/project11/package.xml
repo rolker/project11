@@ -8,5 +8,7 @@
   
   <buildtool_depend>catkin</buildtool_depend>
   <depend>rospy</depend>
+  <depend>roscpp</depend>
+  <depend>tf2</depend>
   
 </package>

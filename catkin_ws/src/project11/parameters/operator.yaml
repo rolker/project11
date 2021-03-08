@@ -4,10 +4,6 @@ udp_bridge/remotes:
         port: 4200
         topics:
           - source: project11/piloting_mode
-            destination: project11/piloting_mode
           - source: project11/mission_plan
-            destination: project11/mission_plan
           - source: project11/command
-            destination: project11/command
-          - source: project11/helm
-            destination: project11/helm
+          - source: manual/helm
