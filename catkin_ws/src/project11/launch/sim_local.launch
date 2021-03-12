@@ -15,6 +15,7 @@
     <arg name="transform_params" default="/project11/transformations/static"/>
     <arg name="namespace" default="$(arg namespace)"/>
   </include>
+  
   <include file="$(find project11)/launch/operator_core.launch">
     <arg name="host" value="localhost"/>
     <arg name="operator_transformations" value="0"/>

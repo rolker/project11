@@ -6,7 +6,7 @@ mission_manager/hover_minimum_distance: 5.0
 mission_manager/hover_maximum_distance: 50.0
 mission_manager/hover_maximum_speed: 1.0 # m/s
 
-project11_transformations/sensors:
+mru_transform/sensors:
  - name: posmv
    topics: { position: 'sensors/posmv/position', orientation: 'sensors/posmv/orientation', velocity: 'sensors/posmv/velocity'}
  - name: gps

@@ -4,7 +4,7 @@ mission_manager/hover_minimum_distance: 5.0
 mission_manager/hover_maximum_distance: 10.0
 mission_manager/hover_maximum_speed: 1.0 # m/s
 
-project11_transformations/sensors:
+mru_transform/sensors:
  - name: mru
    topics: { position: 'sensors/mru/position', orientation: 'sensors/mru/orientation', velocity: 'sensors/mru/velocity'}
       

@@ -6,6 +6,7 @@ add_compile_options(-std=c++11)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   tf2
+  tf2_ros
 )
 
 catkin_python_setup()
@@ -13,7 +14,7 @@ catkin_python_setup()
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES project11_utils
-  CATKIN_DEPENDS roscpp tf2
+  CATKIN_DEPENDS roscpp tf2 tf2_ros
 )
 
 include_directories(

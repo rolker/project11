@@ -38,7 +38,7 @@ roscd echo_helm/scripts
     <arg name="namespace" default="$(arg operator_namespace)"/>
   </include>
 
-  <node pkg="project11_transformations" type="sensor_sync_node" name="sensor_sync" ns="$(arg namespace)">
+  <node pkg="mru_transform" type="sensor_sync_node" name="sensor_sync" ns="$(arg namespace)">
     <param name="outTopicPrefix" value="sensors/mru/"/>
     <remap from="in/position" to="mavros/global_position/global"/>
     <remap from="in/orientation" to="mavros/imu/data"/>

@@ -6,7 +6,7 @@
     <node pkg="udp_bridge" type="vehicle_node" name="udp_vehicle" args="localhost"/>
     <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
 
-    <node pkg="project11_transformations" type="project11_transformations_node" name="project11_transformations"/>
+    <node pkg="mru_transform" type="mru_transform_node" name="mru_transform"/>
 
     <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager" output="screen"/>
 
