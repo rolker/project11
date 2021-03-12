@@ -7,15 +7,14 @@ on:
     branches: [ noetic ]
 
 jobs:
-  build_docker:
-    runs-on: ubuntu-latest
-
-    container:
-      image: osrf/ros:noetic-desktop-full-focal
+  build:
+    runs-on: ubuntu-20.04
 
     steps:
+    - name: Install ROS
+      uses: ros-tooling/setup-ros@0.0.25
+      with:
+        required-ros-distributions: noetic
     - uses: actions/checkout@v2
       with:
         submodules: 'recursive'
-    
-    
