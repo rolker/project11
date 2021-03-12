@@ -5,14 +5,14 @@ udp_bridge/remotes:
         topics:
           - source: sensors/gps/position
           - source: project11/heartbeat
-          - source: project11/mission_manager/status
+          - source: project11/status/mission_manager
           - source: sensors/flir_engine
           - source: sensors/heading
           - source: contact
           - source: diagnostics
-          - source: sensors/posmv/orientation
-          - source: sensors/posmv/position
-          - source: sensors/posmv/velocity
+          - source: nav/orientation
+          - source: nav/position
+          - source: nav/velocity
           - source: coverage
           - source: mbes_ping
           - source: project11/response
@@ -21,4 +21,6 @@ udp_bridge/remotes:
           - source: mbr/9372/2510/margin_avg
           - source: mbr/9372/2510/margin_min
             
-helm_manager/piloting_modes: ['manual', 'autonomous']
+helm_manager/piloting_modes/active: ['manual', 'autonomous']
+helm_manager/piloting_modes/standby: ['standby']
+helm_manager/piloting_mode_prefix: 'piloting_mode/'

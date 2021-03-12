@@ -1,0 +1,13 @@
+mission_manager/default_speed: 1.5   # m/s
+mission_manager/turn_radius: 5.0
+mission_manager/hover_minimum_distance: 5.0
+mission_manager/hover_maximum_distance: 10.0
+mission_manager/hover_maximum_speed: 1.0 # m/s
+
+project11_transformations/sensors:
+ - name: mru
+   topics: { position: 'sensors/mru/position', orientation: 'sensors/mru/orientation', velocity: 'sensors/mru/velocity'}
+      
+helm_manager/output_type: 'twist'
+helm_manager/twist/max_speed: 2.75
+helm_manager/twist/max_yaw_speed: 0.5

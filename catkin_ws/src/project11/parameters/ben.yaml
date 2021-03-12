@@ -10,8 +10,7 @@ project11_transformations/sensors:
  - name: posmv
    topics: { position: 'sensors/posmv/position', orientation: 'sensors/posmv/orientation', velocity: 'sensors/posmv/velocity'}
  - name: gps
-   topics: { position: 'sensors/gps/position', orientation: 'sensors/heading', velocity:
- 'sensors/gps/velocity'}
+   topics: { position: 'sensors/gps/position', orientation: 'sensors/heading', velocity: 'sensors/gps/velocity'}
       
 helm_manager/output_type: 'helm'
 helm_manager/helm/max_speed: 2.75

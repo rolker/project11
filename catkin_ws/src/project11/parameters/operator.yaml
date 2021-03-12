@@ -6,4 +6,4 @@ udp_bridge/remotes:
           - source: project11/piloting_mode
           - source: project11/mission_plan
           - source: project11/command
-          - source: manual/helm
+          - source: piloting_mode/manual/helm

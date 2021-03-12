@@ -5,6 +5,7 @@
   <arg name="rviz" default="false" />
   <arg name="override_mpc" default="false"/>
   <arg name="operator_ui" default="true"/>
+  <arg name="verbose" default="false"/>
 
   <param name="/use_sim_time" type="bool" value="true"/>
   <rosparam command="load" file="$(find project11)/parameters/ben.yaml" ns="$(arg namespace)"/>
@@ -34,9 +35,16 @@
     <arg name="gui" value="$(arg gui)"/>
     <arg name="rviz" value="$(arg rviz)"/>
     <arg name="namespace" value="$(arg namespace)"/>
+    <arg name="verbose"      value="$(arg verbose)"/>
   </include>
   
-  <node pkg="ben_gazebo_helm" type="ben_gazebo_helm_node" name="ben_gazebo_helm" ns="$(arg namespace)"/>
+  <node pkg="asv_helm" type="asv_helm_node" name="asv_helm" ns="$(arg namespace)">
+    <param name="simType" value="gazebo"/>
+    <remap from="helm" to="control/helm"/>
+    <remap from="throttle" to="control/throttle"/>
+    <remap from="rudder" to="control/rudder"/>
+  </node>
+
 </launch>
 
 

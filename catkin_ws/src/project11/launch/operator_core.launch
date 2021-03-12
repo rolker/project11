@@ -20,7 +20,9 @@
     <param name="autorepeat_rate" value="10.0"/>
   </node>
     
-  <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm" ns="$(arg namespace)"/>
+  <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm" ns="$(arg namespace)">
+    <remap from="helm" to="piloting_mode/manual/helm"/>
+  </node>
 </launch>
 
 

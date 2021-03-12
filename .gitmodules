@@ -4,9 +4,9 @@
 [submodule "catkin_ws/src/asv_helm"]
 	path = catkin_ws/src/asv_helm
 	url = ../asv_helm.git
-[submodule "catkin_ws/src/project11_transformations"]
-	path = catkin_ws/src/project11_transformations
-	url = ../project11_transformations.git
+[submodule "catkin_ws/src/mru_transform"]
+	path = catkin_ws/src/mru_transform
+	url = ../mru_transform
 [submodule "catkin_ws/src/udp_bridge"]
 	path = catkin_ws/src/udp_bridge
 	url = ../udp_bridge.git
@@ -103,3 +103,9 @@
 [submodule "catkin_ws/src/transform_manager"]
 	path = catkin_ws/src/transform_manager
 	url = ../transform_manager.git
+[submodule "catkin_ws/src/platforms/ben_description"]
+	path = catkin_ws/src/platforms/ben_description
+	url = ../ben_description
+[submodule "catkin_ws/src/helm_manager"]
+	path = catkin_ws/src/helm_manager
+	url = ../helm_manager

@@ -1,5 +1,6 @@
 <launch>
   <arg name="namespace" default="ben"/>
+  <arg name="operator_namespace" default="operator"/>
   
   <param name="/use_sim_time" type="bool" value="true"/>
   <rosparam command="load" file="$(find project11)/parameters/ben.yaml" ns="$(arg namespace)"/>
@@ -18,16 +19,28 @@
     <arg name="host" value="localhost"/>
     <arg name="operator_transformations" value="0"/>
     <arg name="operator_joystick" value="1"/>
-    <arg name="namespace" default="/operator/$(arg namespace)"/>
+    <arg name="namespace" default="$(arg operator_namespace)"/>
   </include>
     
   <include file="$(find project11)/launch/operator_ui.launch">
-    <arg name="namespace" default="/operator/$(arg namespace)"/>
+    <arg name="namespace" default="$(arg operator_namespace)"/>
   </include>
 
     
-  <node pkg="asv_helm" type="asv_helm_node" name="asv_helm" ns="$(arg namespace)"/>
-  <node pkg="asv_sim" type="asv_sim_node.py" name="asv_sim_node" ns="$(arg namespace)"/>
+  <node pkg="asv_helm" type="asv_helm_node" name="asv_helm" ns="$(arg namespace)">
+    <remap from="helm" to="control/helm"/>
+    <remap from="throttle" to="control/throttle"/>
+    <remap from="rudder" to="control/rudder"/>
+  </node>
+  
+  <node pkg="asv_sim" type="asv_sim_node.py" name="asv_sim_node" ns="$(arg namespace)">
+    <remap from="position" to="sensors/posmv/position"/>
+    <remap from="orientation" to="sensors/posmv/orientation"/>
+    <remap from="velocity" to="sensors/posmv/velocity"/>
+    <param name="mru_frame" value="$(arg namespace)/posmv"/>
+    <remap from="throttle" to="control/throttle"/>
+    <remap from="rudder" to="control/rudder"/>
+  </node>
     
   <arg name="bathy_grid_path" default="$(find mbes_sim)/data/US5NH02M.tiff"/>
   <node pkg="mbes_sim" type="mbes_sim_node.py" name="mbes_sim" args="$(arg bathy_grid_path)" ns="$(arg namespace)"/>

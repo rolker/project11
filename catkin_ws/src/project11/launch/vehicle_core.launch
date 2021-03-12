@@ -23,21 +23,19 @@
   <node pkg="course_made_good" type="course_made_good_node" name="course_made_good" ns="$(arg namespace)"/>
   <node pkg="dubins_curves" type="dubins_curves_node" name="dubins_curves" ns="$(arg namespace)"/>
 
-  <node name="controller" pkg="pid" type="controller" ns="$(arg namespace)/project11/crab_angle">
-      <param name="node_name" value="crab_angle_pid" />
-      <param name="Kp" value="6.0" />
-      <param name="Ki" value="0.5" />
-      <param name="Kd" value="0.6" />
-      <param name="upper_limit" value="90" />
-      <param name="lower_limit" value="-90" />
-      <param name="windup_limit" value="50" />
-  </node>
-  <node pkg="path_follower" type="path_follower_node" name="path_follower" ns="$(arg namespace)"/>
+  <include file="$(find path_follower)/launch/path_follower.launch">
+    <arg name="namespace" value="$(arg namespace)"/>
+    <arg name="base_frame" value="$(arg namespace)/base_link"/>
+    <arg name="map_frame" value="$(arg namespace)/map"/>
+    <arg name="cmd_vel_topic" value="piloting_mode/autonomous/cmd_vel"/>
+    <arg name="enable_topic" value="piloting_mode/autonomous/active"/>
+  </include>
     
   <node pkg="hover" type="hover_node" name="hover_action" ns="$(arg namespace)">
     <param name="base_frame" value="$(arg namespace)/base_link"/>
     <param name="map_frame" value="$(arg namespace)/map"/>
-    <remap from="cmd_vel" to="autonomous/cmd_vel"/>
+    <remap from="cmd_vel" to="piloting_mode/autonomous/cmd_vel"/>
+    <remap from="enable" to="piloting_mode/autonomous/active"/>
   </node>
 
     
@@ -46,8 +44,11 @@
   <node unless="$(arg override_mpc)" pkg="mpc" type="mpc_node" name="mpc" ns="$(arg namespace)"/>
   
   <node pkg="helm_manager" type="helm_manager_node" name="helm_manager" ns="$(arg namespace)">
-    <remap from="out/helm" to="helm"/>
+    <remap from="out/helm" to="control/helm"/>
+    <remap from="out/cmd_vel" to="control/cmd_vel"/>
     <remap from="heartbeat" to="project11/heartbeat"/>
+    <remap from="status/helm" to="project11/status/helm"/>
     <remap from="piloting_mode" to="project11/piloting_mode"/>
+    <param name="piloting_mode_prefix" value="piloting_mode/"/>
   </node>
 </launch>
