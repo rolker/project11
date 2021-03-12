@@ -1,0 +1,24 @@
+name: ROS CI
+
+on:
+  push:
+    branches: [ noetic ]
+  pull_request:
+    branches: [ noetic ]
+
+jobs:
+  build_docker:
+    runs-on: ubuntu-latest
+
+    container:
+      image: ubuntu:focal
+
+    steps:
+    - name: Setup ROS
+      uses: ros-tooling/setup-ros@0.0.25
+      with:
+        required-ros-distributions: noetic
+    - uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    
