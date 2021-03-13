@@ -22,8 +22,8 @@ jobs:
       uses: actions/checkout@v2
       with:
         submodules: 'recursive'
-    - name: Install apt based dependencies
-      run: sudo apt install qtpositioning5-dev
+    - name: Add temporary rosdep source
+      run: echo 'yaml https://github.com/rolker/rosdistro/raw/add_qtpositioning5-dev_rosdep_rule/rosdep/base.yaml' | sudo tee /etc/ros/rosdep/sources.list.d/10-rolker.list
     - name: Update rosdep
       run: rosdep update
     - name: Install ROS dependencies
