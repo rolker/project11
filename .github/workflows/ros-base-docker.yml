@@ -16,7 +16,7 @@ jobs:
     - name: Update apt
       run: apt update
     - name: Install git
-      run: apt -y install git
+      run: DEBIAN_FRONTEND=noninteractive apt -y install git
     - name: Checkout Project11
       uses: actions/checkout@v2
       with:
@@ -27,7 +27,7 @@ jobs:
       run: rosdep update
     - name: Install ROS dependencies
       working-directory: ./catkin_ws/
-      run: rosdep install --from-paths src --ignore-src -r -y
+      run: DEBIAN_FRONTEND=noninteractive rosdep install --from-paths src --ignore-src -r -y
     - name: Catkin_make
       working-directory: ./catkin_ws/
       run: catkin_make
