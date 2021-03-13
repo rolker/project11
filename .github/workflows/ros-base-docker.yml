@@ -1,0 +1,33 @@
+name: docker-noetic-ros-base
+
+on:
+  push:
+    branches: [ noetic ]
+  pull_request:
+    branches: [ noetic ]
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    container:
+      image: ros:noetic-ros-base
+
+    steps:
+    - name: Update apt
+      run: apt update
+    - name: Install git
+      run: DEBIAN_FRONTEND=noninteractive apt -y install git
+    - name: Checkout Project11
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    - name: Add temporary rosdep source
+      run: echo 'yaml https://github.com/rolker/rosdistro/raw/add_qtpositioning5-dev_rosdep_rule/rosdep/base.yaml' | sudo tee /etc/ros/rosdep/sources.list.d/10-rolker.list
+    - name: Update rosdep
+      run: rosdep update
+    - name: Install ROS dependencies
+      working-directory: ./catkin_ws/
+      run: DEBIAN_FRONTEND=noninteractive rosdep install --from-paths src --ignore-src -r -y
+    - name: Catkin_make
+      working-directory: ./catkin_ws/
+      run: bash -c 'source /opt/ros/noetic/setup.bash && catkin_make'

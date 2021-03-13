@@ -1,0 +1,34 @@
+name: noetic
+
+on:
+  push:
+    branches: [ noetic ]
+  pull_request:
+    branches: [ noetic ]
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - if: runner.os == 'Linux'
+      # azure ubuntu repo can be flaky so add an alternate source
+      run: sed -e 's/azure.archive.ubuntu.com/us.archive.ubuntu.com/g' -e t -e d /etc/apt/sources.list | sudo tee /etc/apt/sources.list.d/nonazure.list
+    - name: Install ROS
+      uses: ros-tooling/setup-ros@0.1.1
+      with:
+        required-ros-distributions: noetic
+    - name: Checkout Project11
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    - name: Add temporary rosdep source
+      run: echo 'yaml https://github.com/rolker/rosdistro/raw/add_qtpositioning5-dev_rosdep_rule/rosdep/base.yaml' | sudo tee /etc/ros/rosdep/sources.list.d/10-rolker.list
+    - name: Update rosdep
+      run: rosdep update
+    - name: Install ROS dependencies
+      working-directory: ./catkin_ws/
+      run: rosdep install --from-paths src --ignore-src -r -y
+    - name: Catkin_make
+      working-directory: ./catkin_ws/
+      run: source /opt/ros/noetic/setup.bash && catkin_make
