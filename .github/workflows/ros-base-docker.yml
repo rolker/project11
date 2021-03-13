@@ -30,4 +30,4 @@ jobs:
       run: DEBIAN_FRONTEND=noninteractive rosdep install --from-paths src --ignore-src -r -y
     - name: Catkin_make
       working-directory: ./catkin_ws/
-      run: bash -c 'source /opt/ros/noetic/setup.bash' && catkin_make
+      run: bash -c 'source /opt/ros/noetic/setup.bash && catkin_make'
