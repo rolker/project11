@@ -28,7 +28,7 @@ jobs:
       run: rosdep update
     - name: Install ROS dependencies
       working-directory: ./catkin_ws/
-      run: source /opt/ros/noetic/setup.bash && rosdep install --from-paths src --ignore-src -r -y
+      run: rosdep install --from-paths src --ignore-src -r -y
     - name: Catkin_make
       working-directory: ./catkin_ws/
       run: source /opt/ros/noetic/setup.bash && catkin_make
