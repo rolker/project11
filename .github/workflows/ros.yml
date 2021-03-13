@@ -1,4 +1,4 @@
-name: ROS CI
+name: noetic
 
 on:
   push:

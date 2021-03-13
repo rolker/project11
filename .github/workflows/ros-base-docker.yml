@@ -1,4 +1,4 @@
-name: ROS CI
+name: docker-noetic-ros-base
 
 on:
   push:
@@ -13,6 +13,8 @@ jobs:
       image: ros:noetic-ros-base
 
     steps:
+    - name: Install git
+      run: apt install git
     - name: Checkout Project11
       uses: actions/checkout@v2
       with:
