@@ -24,6 +24,9 @@ jobs:
         submodules: 'recursive'
     - name: Install apt based dependencies
       run: sudo apt install qtpositioning5-dev libqt5svg5-dev
+    - run: pwd
+    - run: ls
+    - run: ls /
     - name: Install ROS dependencies
       working-directory: ./project11/catkin_ws/
       run: source /opt/ros/noetic/setup.bash && rosdep install --from-paths src --ignore-src -r -y
