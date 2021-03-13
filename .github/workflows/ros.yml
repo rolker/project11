@@ -18,14 +18,15 @@ jobs:
       uses: ros-tooling/setup-ros@0.1.1
       with:
         required-ros-distributions: noetic
-    - uses: actions/checkout@v2
+    - name: Checkout Project11
+      uses: actions/checkout@v2
       with:
         submodules: 'recursive'
     - name: Install apt based dependencies
       run: sudo apt install qtpositioning5-dev libqt5svg5-dev
     - name: Install ROS dependencies
       working-directory: ./project11/catkin_ws/
-      run: rosdep install --from-paths src --ignore-src -r -y
+      run: source /opt/ros/noetic/setup.bash && rosdep install --from-paths src --ignore-src -r -y
     - name: Catkin_make
       working-directory: ./project11/catkin_ws/
-      run: catkin_make
+      run: source /opt/ros/noetic/setup.bash && catkin_make
