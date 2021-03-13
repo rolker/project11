@@ -1,3 +1,6 @@
+[![noetic](https://github.com/CCOMJHC/project11/actions/workflows/ros.yml/badge.svg)](https://github.com/CCOMJHC/project11/actions/workflows/ros.yml)
+[![docker-noetic-ros-base](https://github.com/CCOMJHC/project11/actions/workflows/ros-base-docker.yml/badge.svg)](https://github.com/CCOMJHC/project11/actions/workflows/ros-base-docker.yml)
+
 # Project11: A mapping focused open-sourced software framework for Autonomous Surface Vehicles
 
 The Project 11 framework was developed as a backseat driver for Autonomous Surface Vehicles
