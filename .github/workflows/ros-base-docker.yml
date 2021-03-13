@@ -16,7 +16,7 @@ jobs:
     - name: Update apt
       run: apt update
     - name: Install git
-      run: apt install git
+      run: apt -y install git
     - name: Checkout Project11
       uses: actions/checkout@v2
       with:
