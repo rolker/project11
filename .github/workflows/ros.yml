@@ -22,12 +22,10 @@ jobs:
       with:
         submodules: 'recursive'
     - name: Install apt based dependencies
-      run: sudo apt install python3-rosdep qtpositioning5-dev libqt5svg5-dev
-    - name: Update rosdep
-      run: rosdep update
+      run: sudo apt install qtpositioning5-dev libqt5svg5-dev
     - name: Install ROS dependencies
-      working-directory: project11/catkin_ws/
+      working-directory: ./project11/catkin_ws/
       run: rosdep install --from-paths src --ignore-src -r -y
     - name: Catkin_make
-      working-directory: project11/catkin_ws/
+      working-directory: ./project11/catkin_ws/
       run: catkin_make
