@@ -96,7 +96,7 @@
 	url = ../zboat_helm.git
 [submodule "catkin_ws/src/camp"]
 	path = catkin_ws/src/camp
-	url = ../AutonomousMissionPlanner.git
+	url = ../CCOMAutonomousMissionPlanner.git
 [submodule "catkin_ws/src/marine_traffic_com"]
 	path = catkin_ws/src/marine_traffic_com
 	url = ../marine_traffic_com.git

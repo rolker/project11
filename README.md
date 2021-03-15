@@ -9,7 +9,57 @@ over unreliable wireless networks; and to provide an environment to develop adva
 
 ## Installation
 
-See the following for info on setting up a Simulation Environment:
+See the following for detailed instructions on setting up a Simulation Environment:
 
 https://github.com/CCOMJHC/project11/blob/noetic/documentation/Installation.md
+
+### Quick Installation Guide
+
+If you have an available ROS Noetic system, you can quickly install and run Project11 with the following:
+
+    git clone --recursive https://github.com/CCOMJHC/project11.git
+
+    sudo apt-get install python3-rosdep
+    rosdep update
+    rosdep install --from-paths project11/catkin_ws/src --ignore-src -r -y
+
+    sudo apt install qtpositioning5-dev libqt5svg5-dev
+
+    cd project11/catkin_ws
+    catkin_make
+    
+    source devel/setup.bash
+    roslaunch project11 sim_local.launch
+    
+## Major components and concepts
+
+A typical setup has a ROS master running on the robot with some key nodes including the `mission_manager`, the `helm_manager` and the `udp_bridge`. The operator station runs a separate ROS master that also runs a `udp_bridge` node as well as `camp`, the CCOM Autonomous Mission Planner which provide a planning and monitoring interface.
+
+### Operator user interface - CAMP
+
+The [CCOM Autonomous Mission Planner](https://github.com/CCOMJHC/CCOMAutonomousMissionPlanner), also known as CAMP, displays the vehicle's position on background georeferenced charts and maps. It also allows the planning of missions to be sent to the vehicle and to manage the vehicle's piloting mode.
+
+### UDP Bridge - udp_bridge
+
+The [UDP Bridge](https://github.com/CCOMJHC/udp_bridge) sends select ROS topics between ROS masters. It allows control and monitoring over wireless unreliable networks.
+
+### Mission Manager - mission_manager
+
+The [Mission Manager](https://github.com/CCOMJHC/mission_manager) receives missions from CAMP and executes them. It also handles requests such as hover.
+
+### Helm Manager - helm_manager
+
+The [Helm Manager](https://github.com/CCOMJHC/helm_manager) controls which commands get sent to the underlying hardware. It reacts to changes in piloting mode by sending messages to the piloting mode enable topics and only allowing incoming control messages from the current piloting mode to be sent to the hardware interface.
+
+### Piloting modes
+
+Project11 operates in 3 major piloting modes: "manual", "autonomous" and "standby". 
+
+In "manual" mode, the vehicle responds to commands sent from a device such as a joystick or a gamepad. The commands are converted to "helm" messages by the `joy_to_helm` node and are sent from the operator station to the vehicle via the `udp_bridge`.
+
+In "autonomous" mode, the `mission_manager` sends mission items to the navigation stack and responds to override commands such as the hover command that can allow the vehicle to station keep for a while, then resume the mission when the hover is canceled.
+
+The "standby" mode is used to when no control commands are to be sent by Project11.
+
+
 

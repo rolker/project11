@@ -1,4 +1,4 @@
 <launch>
     <node pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge_remote" ns="remote" args="_port:=4200"/>
-    <node pkg="camp" type="AutonomousMissionPlanner" name="camp"  args="$(find camp)/workspace/"/>
+    <node pkg="camp" type="CCOMAutonomousMissionPlanner" name="camp"  args="$(find camp)/workspace/"/>
 </launch>
