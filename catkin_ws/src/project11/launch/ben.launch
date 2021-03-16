@@ -1,27 +1,39 @@
 <launch>
-    <rosparam command="load" file="$(find project11)/parameters/ben.yaml" />
+    <arg name="namespace" default="ben"/>
+    <rosparam command="load" file="$(find project11)/parameters/ben.yaml" ns="$(arg namespace)"/>
     
     <include file="$(find project11)/launch/vehicle_core.launch">
-        <arg name="host" default="192.168.100.199"/>
+        <arg name="host" value="192.168.100.199"/>
+        <arg name="namespace" value="$(arg namespace)"/>
     </include>
 
     
-    <node pkg="cw4_helm" type="cw4_helm_node" name="cw4_helm"/>
-    <node pkg="control_by_web_x4xx_interface" type="cbw_x4xx_node.py" name="control_by_web_x4xx_interface"/>
-    <node pkg="flir" type="flir_node.py" name="flir_engine"/>
-    <include file="$(find project11)/launch/camera_color.launch" />
-    <include file="$(find project11)/launch/camera_flir.launch" />
-    <include file="$(find project11)/launch/camera_flir_engine.launch" />
-    <node pkg="br24_radar" type="br24_radar_node.py" name="br24_radar_node"/>
-    <node pkg="posmv" type="posmv_node.py" name="posmv"/>
+    <node pkg="cw4_helm" type="cw4_helm_node" name="cw4_helm" ns="$(arg namespace)"/>
+    <node pkg="control_by_web_x4xx_interface" type="cbw_x4xx_node.py" name="control_by_web_x4xx_interface" ns="$(arg namespace)"/>
+    <node pkg="flir" type="flir_node.py" name="flir_engine" ns="$(arg namespace)"/>
+    <include file="$(find project11)/launch/camera_color.launch">
+        <arg name="namespace" value="$(arg namespace)"/>
+    </include>
+    <include file="$(find project11)/launch/camera_flir.launch">
+        <arg name="namespace" value="$(arg namespace)"/>
+    </include>
+    <include file="$(find project11)/launch/camera_flir_engine.launch">
+        <arg name="namespace" value="$(arg namespace)"/>
+    </include>
+    <node pkg="br24_radar" type="br24_radar_node.py" name="br24_radar_node" ns="$(arg namespace)"/>
+    <node pkg="posmv" type="posmv_node.py" name="posmv" ns="$(arg namespace)"/>
     <!--node pkg="radar_obstacle_detection" type="radar_obstacle_detection_node.py" name="radar_obstacle_detection"/-->
     <!--node pkg="kongsberg_em_control" type="kongsberg_em_control_node.py" name="kongsberg_em_control"/-->
     <!--node pkg="kongsberg_em" type="kongsberg_em_node.py" name="kongsberg_em"/-->
 
     <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
-    <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
+    <node pkg="mbr" type="mbr_node.py" name="mbr_node" ns="$(arg namespace)"/>
 
-    <include file="$(find project11)/launch/all_panos.launch"/>
+    <include file="$(find project11)/launch/all_panos.launch">
+        <arg name="namespace" value="$(arg namespace)"/>
+    </include>
 
-    <include file="$(find project11)/launch/vehicle_loggers.launch"/>
+    <include file="$(find project11)/launch/vehicle_loggers.launch">
+        <arg name="namespace" value="$(arg namespace)"/>
+    </include>
 </launch>
