@@ -8,10 +8,7 @@ catkin_ws/build/
 catkin_ws/devel/
 catkin_ws/src/CMakeLists.txt
 catkin_ws/src/local
-ros/log/
-ros/rosdep/
-ros/rospack*
-ros/roscore*
+ros/
 documentation/local/
 log/*.bag
 log/*.active
