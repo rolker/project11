@@ -1,9 +1,0 @@
-<launch>
-    <include file="$(find project11)/launch/pano.launch"><arg name="camera_number" value="1"/><arg name="camera_ip" value="192.168.100.207"/></include>
-    <include file="$(find project11)/launch/pano.launch"><arg name="camera_number" value="2"/><arg name="camera_ip" value="192.168.100.208"/></include>
-    <include file="$(find project11)/launch/pano.launch"><arg name="camera_number" value="3"/><arg name="camera_ip" value="192.168.100.209"/></include>
-    <include file="$(find project11)/launch/pano.launch"><arg name="camera_number" value="4"/><arg name="camera_ip" value="192.168.100.210"/></include>
-    <include file="$(find project11)/launch/pano.launch"><arg name="camera_number" value="5"/><arg name="camera_ip" value="192.168.100.211"/></include>
-    <include file="$(find project11)/launch/pano.launch"><arg name="camera_number" value="6"/><arg name="camera_ip" value="192.168.100.213"/></include>
-</launch>
-
