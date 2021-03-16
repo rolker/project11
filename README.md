@@ -63,3 +63,7 @@ The "standby" mode is used to when no control commands are to be sent by Project
 
 
 
+### Navigation Stack
+
+The `mission_manager` receives and executes the higher level missions. Depending on the task, track lines may be sent to the `path_follower` or another node will receive a higher level directive, such as "survey this area", and generate and send out track lines or other navigation segments to lower level planners or controllers.
+Eventually, a "helm" or "cmd_velocity" message gets sent to the autonomous/helm or autonomous/cmd_vel topic reaching the `helm_manager`. 
