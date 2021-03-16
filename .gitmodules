@@ -1,9 +1,3 @@
-[submodule "catkin_ws/src/asv_sim"]
-	path = catkin_ws/src/asv_sim
-	url = ../asv_sim.git
-[submodule "catkin_ws/src/asv_helm"]
-	path = catkin_ws/src/asv_helm
-	url = ../asv_helm.git
 [submodule "catkin_ws/src/mru_transform"]
 	path = catkin_ws/src/mru_transform
 	url = ../mru_transform
@@ -16,24 +10,15 @@
 [submodule "catkin_ws/src/mbes_sim"]
 	path = catkin_ws/src/mbes_sim
 	url = ../mbes_sim.git
-[submodule "catkin_ws/src/command_bridge"]
-	path = catkin_ws/src/command_bridge
-	url = ../command_bridge.git
 [submodule "catkin_ws/src/mission_manager"]
 	path = catkin_ws/src/mission_manager
 	url = ../mission_manager.git
-[submodule "catkin_ws/src/dubins_curves"]
-	path = catkin_ws/src/dubins_curves
-	url = ../dubins_curves.git
 [submodule "catkin_ws/src/path_follower"]
 	path = catkin_ws/src/path_follower
 	url = ../path_follower.git
 [submodule "catkin_ws/src/kongsberg_em_control"]
 	path = catkin_ws/src/kongsberg_em_control
 	url = ../kongsberg_em_control.git
-[submodule "catkin_ws/src/geographic_visualization_msgs"]
-	path = catkin_ws/src/geographic_visualization_msgs
-	url = ../geographic_visualization_msgs.git
 [submodule "catkin_ws/src/joy_to_helm"]
 	path = catkin_ws/src/joy_to_helm
 	url = ../joy_to_helm.git
@@ -46,24 +31,6 @@
 [submodule "catkin_ws/src/mpc"]
 	path = catkin_ws/src/mpc
 	url = ../mpc.git
-[submodule "catkin_ws/src/course_made_good"]
-	path = catkin_ws/src/course_made_good
-	url = ../course_made_good.git
-[submodule "catkin_ws/src/ais"]
-	path = catkin_ws/src/ais
-	url = ../ais.git
-[submodule "catkin_ws/src/axis_tracker"]
-	path = catkin_ws/src/axis_tracker
-	url = ../axis_tracker.git
-[submodule "catkin_ws/src/br24_radar"]
-	path = catkin_ws/src/br24_radar
-	url = ../br24_radar.git
-[submodule "catkin_ws/src/echo_helm"]
-	path = catkin_ws/src/echo_helm
-	url = ../echo_helm.git
-[submodule "catkin_ws/src/flir"]
-	path = catkin_ws/src/flir
-	url = ../flir.git
 [submodule "catkin_ws/src/kongsberg_em"]
 	path = catkin_ws/src/kongsberg_em
 	url = ../kongsberg_em.git
@@ -94,9 +61,6 @@
 [submodule "catkin_ws/src/zboat_helm"]
 	path = catkin_ws/src/zboat_helm
 	url = ../zboat_helm.git
-[submodule "catkin_ws/src/camp"]
-	path = catkin_ws/src/camp
-	url = ../CCOMAutonomousMissionPlanner.git
 [submodule "catkin_ws/src/marine_traffic_com"]
 	path = catkin_ws/src/marine_traffic_com
 	url = ../marine_traffic_com.git
