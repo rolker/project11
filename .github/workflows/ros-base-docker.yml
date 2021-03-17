@@ -15,19 +15,21 @@ jobs:
     steps:
     - name: Update apt
       run: apt update
-    - name: Install git
-      run: DEBIAN_FRONTEND=noninteractive apt -y install git
+    - name: Install git and vcstool
+      run: DEBIAN_FRONTEND=noninteractive apt -y install git python3-vcstool
     - name: Checkout Project11
       uses: actions/checkout@v2
-      with:
-        submodules: 'recursive'
     - name: Add temporary rosdep source
       run: echo 'yaml https://github.com/rolker/rosdistro/raw/add_qtpositioning5-dev_rosdep_rule/rosdep/base.yaml' | sudo tee /etc/ros/rosdep/sources.list.d/10-rolker.list
     - name: Update rosdep
       run: rosdep update
+    - name: Create workspace
+      run: mkdir -p ../catkin_ws/src
+    - name: Install repos
+      run: vcs import --input repos/sim_demo.repos ../catkin_ws/src/
     - name: Install ROS dependencies
-      working-directory: ./catkin_ws/
+      working-directory: ../catkin_ws/
       run: DEBIAN_FRONTEND=noninteractive rosdep install --from-paths src --ignore-src -r -y
     - name: Catkin_make
-      working-directory: ./catkin_ws/
+      working-directory: ../catkin_ws/
       run: bash -c 'source /opt/ros/noetic/setup.bash && catkin_make'
