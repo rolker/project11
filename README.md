@@ -1,5 +1,5 @@
-[![noetic](actions/workflows/ros.yml/badge.svg)](actions/workflows/ros.yml)
-[![docker-noetic-ros-base](actions/workflows/ros-base-docker.yml/badge.svg)](actions/workflows/ros-base-docker.yml)
+[![noetic](../../actions/workflows/ros.yml/badge.svg)](../../actions/workflows/ros.yml)
+[![docker-noetic-ros-base](../../actions/workflows/ros-base-docker.yml/badge.svg)](../../actions/workflows/ros-base-docker.yml)
 
 # Project11: A mapping focused open-sourced software framework for Autonomous Surface Vehicles
 
@@ -37,7 +37,7 @@ A typical setup has a ROS master running on the robot with some key nodes includ
 
 ### Operator user interface - CAMP
 
-The [CCOM Autonomous Mission Planner](../CCOMAutonomousMissionPlanner), also known as CAMP, displays the vehicle's position on background georeferenced charts and maps. It also allows the planning of missions to be sent to the vehicle and to manage the vehicle's piloting mode.
+The [CCOM Autonomous Mission Planner](../../CCOMAutonomousMissionPlanner), also known as CAMP, displays the vehicle's position on background georeferenced charts and maps. It also allows the planning of missions to be sent to the vehicle and to manage the vehicle's piloting mode.
 
 ### UDP Bridge - udp_bridge
 
