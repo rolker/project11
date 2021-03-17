@@ -1,0 +1,17 @@
+repositories:
+  command_bridge:
+    type: git
+    url: git@github.com:rolker/command_bridge
+    version: noetic
+  dubins_curves:
+    type: git
+    url: git@github.com:rolker/dubins_curves.git
+    version: noetic
+  geographic_visualization_msgs:
+    type: git
+    url: git@github.com:rolker/geographic_visualization_msgs.git
+    version: noetic
+  udp_bridge:
+    type: git
+    url: git@github.com:rolker/udp_bridge.git
+    version: noetic
