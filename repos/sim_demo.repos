@@ -1,0 +1,77 @@
+repositories:
+  project11:
+    type: git
+    url: git@github.com:rolker/project11.git
+    version: noetic
+  asv_helm:
+    type: git
+    url: git@github.com:rolker/asv_helm.git
+    version: noetic
+  asv_sim:
+    type: git
+    url: git@github.com:rolker/asv_sim.git
+    version: noetic
+  helm_manager:
+    type: git
+    url: git@github.com:rolker/helm_manager.git
+    version: noetic
+  hover:
+    type: git
+    url: git@github.com:rolker/hover.git
+    version: noetic
+  mission_manager:
+    type: git
+    url: git@github.com:rolker/mission_manager.git
+    version: noetic
+  mpc:
+    type: git
+    url: git@github.com:rolker/mpc.git
+    version: noetic
+  path_follower:
+    type: git
+    url: git@github.com:rolker/path_follower.git
+    version: noetic
+  path_planner:
+    type: git
+    url: git@github.com:rolker/path_planner.git
+    version: noetic
+  dubins_curves:
+    type: git
+    url: git@github.com:rolker/dubins_curves.git
+    version: noetic
+  geographic_visualization_msgs:
+    type: git
+    url: git@github.com:rolker/geographic_visualization_msgs.git
+    version: noetic
+  udp_bridge:
+    type: git
+    url: git@github.com:rolker/udp_bridge.git
+    version: noetic
+  command_bridge:
+    type: git
+    url: git@github.com:rolker/command_bridge
+    version: noetic
+  dubins_curves:
+    type: git
+    url: git@github.com:rolker/dubins_curves.git
+    version: noetic
+  geographic_visualization_msgs:
+    type: git
+    url: git@github.com:rolker/geographic_visualization_msgs.git
+    version: noetic
+  udp_bridge:
+    type: git
+    url: git@github.com:rolker/udp_bridge.git
+    version: noetic
+  camp:
+    type: git
+    url: git@github.com:rolker/CCOMAutonomousMissionPlanner.git
+    version: noetic
+  joy_to_helm:
+    type: git
+    url: git@github.com:rolker/joy_to_helm.git
+    version: noetic
+  mru_transform:
+    type: git
+    url: git@github.com:rolker/mru_transform.git
+    version: noetic
