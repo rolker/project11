@@ -8,7 +8,7 @@
   <arg name="verbose" default="false"/>
 
   <param name="/use_sim_time" type="bool" value="true"/>
-  <rosparam command="load" file="$(find project11)/parameters/ben.yaml" ns="$(arg namespace)"/>
+  <rosparam command="load" file="$(find ben_project11)/parameters/ben.yaml" ns="$(arg namespace)"/>
   
   <node if="$(arg override_mpc)" pkg="path_follower" type="mpc_adapter_node" name="mpc_adapter" ns="$(arg namespace)"/>
   

@@ -3,7 +3,7 @@
   <arg name="operator_namespace" default="operator"/>
 
   <param name="/use_sim_time" type="bool" value="true"/>
-  <rosparam command="load" file="$(find project11)/parameters/ben.yaml" ns="$(arg namespace)"/>
+  <rosparam command="load" file="$(find ben_project11)/parameters/ben.yaml" ns="$(arg namespace)"/>
 
   <arg name="override_mpc" default="false"/>
   <node if="$(arg override_mpc)" pkg="path_follower" type="mpc_adapter_node" name="mpc_adapter" ns="$(arg namespace)"/>
