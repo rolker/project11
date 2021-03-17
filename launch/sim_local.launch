@@ -45,7 +45,7 @@
   <arg name="bathy_grid_path" default="$(find mbes_sim)/data/US5NH02M.tiff"/>
   <node pkg="mbes_sim" type="mbes_sim_node.py" name="mbes_sim" args="$(arg bathy_grid_path)" ns="$(arg namespace)"/>
     
-  <node pkg="joy" type="joy_node" name="joy_node_dynamic_obstacle_1">
+<!--  <node pkg="joy" type="joy_node" name="joy_node_dynamic_obstacle_1">
       <remap from="joy" to="joy_1"/>
       <param name="dev" type="string" value="/dev/input/js1" />
       <param name="autorepeat_rate" value="10" />
@@ -61,7 +61,7 @@
       <param name="autorepeat_rate" value="10" />
   </node>
 
-  <node pkg="traffic_sim" type="traffic_sim_node.py" name="traffic_sim"/>
+  <node pkg="traffic_sim" type="traffic_sim_node.py" name="traffic_sim"/>-->
     
   <node pkg="manda_coverage" type="manda_coverage_node" name="manda_coverage" ns="$(arg namespace)"/>
 

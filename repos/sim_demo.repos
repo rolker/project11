@@ -75,3 +75,19 @@ repositories:
     type: git
     url: git@github.com:rolker/mru_transform.git
     version: noetic
+  marine_msgs:
+    type: git
+    url: git@github.com:rolker/marine_msgs.git
+    version: noetic
+  ben_project11:
+    type: git
+    url: git@github.com:rolker/ben_project11.git
+    version: noetic
+  mbes_sim:
+    type: git
+    url: git@github.com:rolker/mbes_sim.git
+    version: noetic
+  manda_coverage:
+    type: git
+    url: git@github.com:rolker/manda_coverage.git
+    version: noetic
