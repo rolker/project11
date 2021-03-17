@@ -1,7 +1,7 @@
 <launch>
   <arg name="namespace"/>
   
-  <rosparam command="load" file="$(find project11)/parameters/vehicle.yaml" ns="$(arg namespace)"/>
+  <rosparam command="load" file="$(find project11)/config/vehicle.yaml" ns="$(arg namespace)"/>
   <arg name="host"/>
   <rosparam param="udp_bridge/remotes/operator/host" subst_value="True" ns="$(arg namespace)">$(arg host)</rosparam>
   <node pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)"/>

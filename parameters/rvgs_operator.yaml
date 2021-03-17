@@ -1,8 +1,0 @@
-project11/role: operator
-posmv_nmea/input: /dev/ttyUSB0
-posmv_nmea/input_type: serial
-posmv_nmea/input_speed: 38400
-base/dimension_to_bow: 3
-base/dimension_to_stern: 10
-base/dimension_to_stbd: 4
-base/dimension_to_port: 2

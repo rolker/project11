@@ -26,7 +26,7 @@ jobs:
     - name: Create workspace
       run: mkdir -p ../catkin_ws/src
     - name: Install repos
-      run: vcs import --input repos/sim_demo.repos ../catkin_ws/src/
+      run: vcs import --input config/repos/sim_demo.repos ../catkin_ws/src/
     - name: Install ROS dependencies
       working-directory: ../catkin_ws/
       run: DEBIAN_FRONTEND=noninteractive rosdep install --from-paths src --ignore-src -r -y
