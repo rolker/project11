@@ -37,19 +37,19 @@ A typical setup has a ROS master running on the robot with some key nodes includ
 
 ### Operator user interface - CAMP
 
-The [CCOM Autonomous Mission Planner](../../CCOMAutonomousMissionPlanner), also known as CAMP, displays the vehicle's position on background georeferenced charts and maps. It also allows the planning of missions to be sent to the vehicle and to manage the vehicle's piloting mode.
+The [CCOM Autonomous Mission Planner](../../../CCOMAutonomousMissionPlanner), also known as CAMP, displays the vehicle's position on background georeferenced charts and maps. It also allows the planning of missions to be sent to the vehicle and to manage the vehicle's piloting mode.
 
 ### UDP Bridge - udp_bridge
 
-The [UDP Bridge](https://github.com/CCOMJHC/udp_bridge) sends select ROS topics between ROS masters. It allows control and monitoring over wireless unreliable networks.
+The [UDP Bridge](../../../udp_bridge) sends select ROS topics between ROS masters. It allows control and monitoring over wireless unreliable networks.
 
 ### Mission Manager - mission_manager
 
-The [Mission Manager](https://github.com/CCOMJHC/mission_manager) receives missions from CAMP and executes them. It also handles requests such as hover.
+The [Mission Manager](../../../mission_manager) receives missions from CAMP and executes them. It also handles requests such as hover.
 
 ### Helm Manager - helm_manager
 
-The [Helm Manager](https://github.com/CCOMJHC/helm_manager) controls which commands get sent to the underlying hardware. It reacts to changes in piloting mode by sending messages to the piloting mode enable topics and only allowing incoming control messages from the current piloting mode to be sent to the hardware interface.
+The [Helm Manager](../../../helm_manager) controls which commands get sent to the underlying hardware. It reacts to changes in piloting mode by sending messages to the piloting mode enable topics and only allowing incoming control messages from the current piloting mode to be sent to the hardware interface.
 
 ### Piloting modes
 
