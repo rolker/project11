@@ -12,8 +12,7 @@
   </node>-->
   <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender" ns="$(arg namespace)"/>
    
-  <arg name="operator_transformations"/>
-  <node if="$(arg operator_transformations)" pkg="mru_transform" type="mru_transform_node" name="mru_transform" ns="$(arg namespace)"/>
+  <node  pkg="mru_transform" type="mru_transform_node" name="mru_transform" ns="$(arg namespace)"/>
     
   <arg name="operator_joystick"/>
   <node if="$(arg operator_joystick)" pkg="joy" type="joy_node" name="joy_node" ns="$(arg namespace)">

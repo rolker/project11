@@ -1,13 +1,13 @@
 <launch>
-    <rosparam command="load" file="$(find project11)/parameters/rvgs_operator.yaml" />
-    <include file="$(find project11)/launch/operator_core.launch">
-        <arg name="host" default="mystiquec"/>
-        <arg name="operator_transformations" value="1"/>
-        <arg name="operator_joystick" value="1"/>
-    </include>
+  <arg name="namespace" default="operator"/>
 
-    <node pkg="flir" type="flir_decode_node.py" name="flir_decode_node"/>
-    <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
+  <include file="$(find project11)/launch/operator_core.launch">
+    <arg name="host" default="mystiquec"/>
+    <arg name="operator_joystick" value="1"/>
+    <arg name="namespace" value="$(arg namespace)"/>
+  </include>
+
+  <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
 </launch>
 
 

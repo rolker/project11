@@ -1,5 +1,5 @@
 <launch>
-  <arg name="namespace"/>
+  <arg name="namespace" default="operator"/>
   <arg name="chart" default="/workspace/13283/13283_2.KAP"/>
   <arg name="rqt" default="false"/>
 

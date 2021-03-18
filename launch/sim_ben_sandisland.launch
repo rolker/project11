@@ -15,7 +15,6 @@
   <include file="$(find project11)/launch/vehicle_core.launch">
     <arg name="host" value="localhost"/>
     <arg name="override_mpc" value="$(arg override_mpc)"/>
-    <arg name="transform_params" default="/project11/transformations/static"/>
     <arg name="namespace" default="$(arg namespace)"/>
   </include>
   
