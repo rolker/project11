@@ -1,4 +1,3 @@
-[![noetic](../../actions/workflows/ros.yml/badge.svg)](../../actions/workflows/ros.yml)
 [![docker-noetic-ros-base](../../actions/workflows/ros-base-docker.yml/badge.svg)](../../actions/workflows/ros-base-docker.yml)
 
 # Project11: A mapping focused open-sourced software framework for Autonomous Surface Vehicles
@@ -11,17 +10,22 @@ over unreliable wireless networks; and to provide an environment to develop adva
 
 See the following for detailed instructions on setting up a Simulation Environment:
 
-[Installing Project11's backseat driver system and simulator.lation Instructions](documentation/Installation.md)
+[Installing Project11's backseat driver system and simulator.](documentation/Installation.md)
 
 ### Quick Installation Guide
 
 If you have an available ROS Noetic system, you can quickly install and run Project11 with the following:
 
-    git clone --recursive https://github.com/CCOMJHC/project11.git
+    mkdir -p project11/catkin_ws/src
+    cd project11/catkin_ws/src
+    git clone https://github.com/rolker/project11.git
 
-    sudo apt-get install python3-rosdep
+    sudo apt-get install python3-rosdep python3-vcstool
     rosdep update
-    rosdep install --from-paths project11/catkin_ws/src --ignore-src -r -y
+
+    vcs import < project11/config/repos/sim_demo.repos
+    
+    rosdep install --from-paths . --ignore-src -r -y
 
     sudo apt install qtpositioning5-dev libqt5svg5-dev
 
@@ -37,7 +41,7 @@ A typical setup has a ROS master running on the robot with some key nodes includ
 
 ### Operator user interface - CAMP
 
-The [CCOM Autonomous Mission Planner](../../../CCOMAutonomousMissionPlanner), also known as CAMP, displays the vehicle's position on background georeferenced charts and maps. It also allows the planning of missions to be sent to the vehicle and to manage the vehicle's piloting mode.
+The [CCOM Autonomous Mission Planner](../../../camp), also known as CAMP, displays the vehicle's position on background georeferenced charts and maps. It also allows the planning of missions to be sent to the vehicle and to manage the vehicle's piloting mode.
 
 ### UDP Bridge - udp_bridge
 
