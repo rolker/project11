@@ -8,6 +8,7 @@ udp_bridge/remotes:
           - source: project11/status/mission_manager
           - source: sensors/flir_engine
           - source: sensors/ais/contact
+          - source: sensors/lidar/points
           - source: /diagnostics
           - source: nav/orientation
           - source: nav/position
