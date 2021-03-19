@@ -3,7 +3,7 @@ udp_bridge/remotes:
         host: localhost
         port: 4200
         topics:
-          - source: project11/piloting_mode
-          - source: project11/mission_plan
           - source: project11/command
+            destination: project11/command
           - source: piloting_mode/manual/helm
+            destination: piloting_mode/manual/helm

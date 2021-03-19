@@ -7,19 +7,18 @@ udp_bridge/remotes:
           - source: project11/heartbeat
           - source: project11/status/mission_manager
           - source: sensors/flir_engine
-          - source: sensors/heading
-          - source: contact
-          - source: diagnostics
+          - source: sensors/ais/contact
+          - source: /diagnostics
           - source: nav/orientation
           - source: nav/position
           - source: nav/velocity
-          - source: coverage
-          - source: mbes_ping
           - source: project11/response
           - source: sensors/radar
           - source: project11/display
           - source: mbr/9372/2510/margin_avg
           - source: mbr/9372/2510/margin_min
+          - source: /tf
+          - source: /tf_static
             
 helm_manager/piloting_modes/active: ['manual', 'autonomous']
 helm_manager/piloting_modes/standby: ['standby']
