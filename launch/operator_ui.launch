@@ -1,10 +1,13 @@
 <launch>
   <arg name="namespace" default="operator"/>
-  <arg name="chart" default="/workspace/13283/13283_2.KAP"/>
+  <arg name="robotNamespace" default="ben"/>
+  <arg name="backgroundChart" default="$(find camp)/workspace/13283/13283_2.KAP"/>
   <arg name="rqt" default="false"/>
 
   <node if="$(arg rqt)" pkg="rqt_gui" type="rqt_gui" name="rqt"/>
-  <node pkg="camp" type="CCOMAutonomousMissionPlanner" name="camp"  args="$(find camp)/workspace/ $(find camp)$(arg chart)" ns="$(arg namespace)"/>
+  <node pkg="camp" type="CCOMAutonomousMissionPlanner" name="camp"  args="$(find camp)/workspace/ $(arg backgroundChart)" ns="$(arg namespace)">
+    <param name="robotNamespace" value="$(arg robotNamespace"/>
+  </node>
 </launch>
 
 

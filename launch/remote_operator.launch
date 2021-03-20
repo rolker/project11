@@ -1,4 +1,31 @@
 <launch>
-    <node pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge_remote" ns="remote" args="_port:=4200"/>
-    <node pkg="camp" type="CCOMAutonomousMissionPlanner" name="camp"  args="$(find camp)/workspace/"/>
+    <arg name="namespace" default="remote"/>
+    <arg name="remoteHost"/>
+    <arg name="remotePort"/>
+    <arg name="robotNamespace"/>
+    <arg name="backgroundChart" default="$(find camp)/workspace/13283/13283_2.KAP"/>
+
+
+    <node pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge_remote" ns="$(arg namespace)"/>
+
+    <include file="$(find project11)/launch/operator_ui.launch">
+      <arg name="namespace" value="$(arg namespace)"/>
+      <arg name="robotNamespace" value="$(arg robotNamespace)"/>
+      <arg name="backgroundChart" value="$(arg backgroundChart)"/>
+    </include>
+
+    <node pkg="rosservice" type="rosservice" name="get_tf" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /tf /tf 1 0.0"/>
+
+    <node pkg="rosservice" type="rosservice" name="get_heartbeat" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /$(arg robotNamespace)/project11/heartbeat /$(arg robotNamespace)/project11/heartbeat 1 0.0"/>
+
+    <node pkg="rosservice" type="rosservice" name="get_display" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /$(arg robotNamespace)/project11/display /$(arg robotNamespace)/project11/display 1 0.0"/>
+
+    <node pkg="rosservice" type="rosservice" name="get_mission_manager_status" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /$(arg robotNamespace)/project11/status/mission_manager /$(arg robotNamespace)/project11/status/mission_manager 1 0.0"/>
+
+    <node pkg="rosservice" type="rosservice" name="get_position" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /$(arg robotNamespace)/nav/position /$(arg robotNamespace)/nav/position 1 0.0"/>
+
+    <node pkg="rosservice" type="rosservice" name="get_orientation" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /$(arg robotNamespace)/nav/orientation /$(arg robotNamespace)/nav/orientation 1 0.0"/>
+
+    <node pkg="rosservice" type="rosservice" name="get_velocity" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /$(arg robotNamespace)/nav/velocity /$(arg robotNamespace)/nav/velocity 1 0.0"/>
+
 </launch>
