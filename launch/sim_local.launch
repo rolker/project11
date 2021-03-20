@@ -16,7 +16,6 @@
   
   <include file="$(find project11)/launch/operator_core.launch">
     <arg name="host" value="localhost"/>
-    <arg name="operator_transformations" value="0"/>
     <arg name="operator_joystick" value="1"/>
     <arg name="namespace" default="$(arg operator_namespace)"/>
   </include>
