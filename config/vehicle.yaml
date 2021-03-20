@@ -9,6 +9,7 @@ udp_bridge/remotes:
           - source: sensors/flir_engine
           - source: sensors/ais/contact
           - source: sensors/lidar/velodyne_points
+            period: 1.0
           - source: /diagnostics
           - source: nav/orientation
           - source: nav/position
