@@ -3,6 +3,7 @@
     <arg name="remoteHost"/>
     <arg name="remotePort"/>
     <arg name="robotNamespace"/>
+    <arg name="operatorNamespace" default="operator"/>
     <arg name="backgroundChart" default="$(find camp)/workspace/13283/13283_2.KAP"/>
 
 
@@ -13,6 +14,15 @@
       <arg name="robotNamespace" value="$(arg robotNamespace)"/>
       <arg name="backgroundChart" value="$(arg backgroundChart)"/>
     </include>
+
+  <node pkg="joy" type="joy_node" name="joy_node" ns="$(arg namespace)">
+    <param name="autorepeat_rate" value="10.0"/>
+  </node>
+    
+  <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm" ns="$(arg namespace)">
+    <remap from="helm" to="piloting_mode/manual/helm"/>
+  </node>
+
 
     <node pkg="rosservice" type="rosservice" name="get_tf" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /tf /tf 1 0.0"/>
 
@@ -28,4 +38,7 @@
 
     <node pkg="rosservice" type="rosservice" name="get_velocity" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /$(arg robotNamespace)/nav/velocity /$(arg robotNamespace)/nav/velocity 1 0.0"/>
 
+    <node pkg="rosservice" type="rosservice" name="send_send_command" args="call /$(arg namespace)/udp_bridge_remote/remote_advertise $(arg remoteHost) $(arg remotePort) /$(arg namespace)/project11/send_command /$(arg operatorNamespace)/project11/send_command 1 0.0"/>
+
+    <node pkg="rosservice" type="rosservice" name="send_helm" args="call /$(arg namespace)/udp_bridge_remote/remote_advertise $(arg remoteHost) $(arg remotePort) /$(arg namespace)/piloting_mode/manual/helm /$(arg operatorNamespace)/piloting_mode/manual/helm 1 0.0"/>
 </launch>
