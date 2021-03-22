@@ -26,6 +26,9 @@
 
     <node pkg="rosservice" type="rosservice" name="get_tf" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /tf /tf 1 0.0"/>
 
+    <node pkg="rosservice" type="rosservice" name="get_diag" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /diagnostics /diagnostics 1 0.0"/>
+
+
     <node pkg="rosservice" type="rosservice" name="get_heartbeat" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /$(arg robotNamespace)/project11/heartbeat /$(arg robotNamespace)/project11/heartbeat 1 0.0"/>
 
     <node pkg="rosservice" type="rosservice" name="get_display" args="call /$(arg namespace)/udp_bridge_remote/remote_subscribe $(arg remoteHost) $(arg remotePort) /$(arg robotNamespace)/project11/display /$(arg robotNamespace)/project11/display 1 0.0"/>
