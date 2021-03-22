@@ -12,7 +12,6 @@ udp_bridge/remotes:
           - source: nav/orientation
           - source: nav/position
           - source: nav/velocity
-          - source: project11/response
           - source: sensors/radar
           - source: project11/display
           - source: mbr/9372/2510/margin_avg

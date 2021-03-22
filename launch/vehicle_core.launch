@@ -1,5 +1,6 @@
 <launch>
   <arg name="namespace"/>
+  <arg name="operatorNamespace" default="operator"/>
   
   <rosparam command="load" file="$(find project11)/config/vehicle.yaml" ns="$(arg namespace)"/>
   <arg name="host"/>
@@ -47,4 +48,7 @@
     <remap from="piloting_mode" to="project11/piloting_mode"/>
     <param name="piloting_mode_prefix" value="piloting_mode/"/>
   </node>
+
+  <node pkg="rosservice" type="rosservice" name="send_response" args="call /$(arg namespace)/udp_bridge/remote_advertise $(arg host) 4201 /$(arg namespace)/project11/response /$(arg operatorNamespace)/project11/response 1 0.0"/>
+
 </launch>
