@@ -1,10 +1,18 @@
 <launch>
   <arg name="namespace" default="operator"/>
+  <arg name="robotNamespace" default="ben"/>
+
+  <rosparam command="load" file="$(find ben_project11)/config/ben.yaml" ns="$(arg namespace)"/>
+
+  <include file="$(find ben_description)/launch/load.launch">
+    <arg name="namespace" value="$(arg robotNamespace)"/>
+  </include>
+
 
   <include file="$(find project11)/launch/operator_core.launch">
     <arg name="operatorJoystick" value="1"/>
     <arg name="namespace" value="$(arg namespace)"/>
-    <arg name="robotNamespace" value="ben"/>
+    <arg name="robotNamespace" value="$(arg robotNamespace)"/>
   </include>
 
   <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
