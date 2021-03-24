@@ -17,8 +17,6 @@
     <param name="remote" value="$(arg robotNamespace)"/>
   </node>
    
-  <node  pkg="mru_transform" type="mru_transform_node" name="mru_transform" ns="$(arg namespace)"/>
-    
   <node if="$(arg operatorJoystick)" pkg="joy" type="joy_node" name="joy_node" ns="$(arg namespace)">
     <param name="autorepeat_rate" value="10.0"/>
   </node>

@@ -8,6 +8,8 @@
     <arg name="namespace" value="$(arg robotNamespace)"/>
   </include>
 
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" ns="$(arg robotNamespace)"/>
+
 
   <include file="$(find project11)/launch/operator_core.launch">
     <arg name="operatorJoystick" value="1"/>
