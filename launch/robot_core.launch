@@ -1,11 +1,14 @@
 <launch>
   <arg name="namespace"/>
-  <arg name="operatorNamespace" default="operator"/>
-  
-  <rosparam command="load" file="$(find project11)/config/vehicle.yaml" ns="$(arg namespace)"/>
-  <arg name="host"/>
-  <rosparam param="udp_bridge/remotes/operator/host" subst_value="True" ns="$(arg namespace)">$(arg host)</rosparam>
-  <node pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)"/>
+  <arg name="enableBridge" default="true"/>
+  <arg name="localPort" default="4200"/>
+  <arg name="override_mpc" default="false"/>
+
+  <rosparam command="load" file="$(find project11)/config/robot.yaml" ns="$(arg namespace)"/>
+
+  <node if="$(arg enableBridge)" pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)">
+    <param name="port" value="$(arg localPort)"/>
+  </node>
     
   <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver" ns="$(arg namespace)"/>
 
@@ -37,7 +40,6 @@
 
     
   <node pkg="path_planner" type="path_planner_node" name="path_planner" ns="$(arg namespace)"/>
-  <arg name="override_mpc" default="false"/>
   <node unless="$(arg override_mpc)" pkg="mpc" type="mpc_node" name="mpc" ns="$(arg namespace)"/>
   
   <node pkg="helm_manager" type="helm_manager_node" name="helm_manager" ns="$(arg namespace)">
@@ -48,7 +50,5 @@
     <remap from="piloting_mode" to="project11/piloting_mode"/>
     <param name="piloting_mode_prefix" value="piloting_mode/"/>
   </node>
-
-  <node pkg="rosservice" type="rosservice" name="send_response" args="call /$(arg namespace)/udp_bridge/remote_advertise $(arg host) 4201 /$(arg namespace)/project11/response /$(arg operatorNamespace)/project11/response 1 0.0"/>
 
 </launch>

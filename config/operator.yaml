@@ -1,9 +1,7 @@
 udp_bridge/remotes:
-    vehicle:
+    robot:
         host: localhost
         port: 4200
         topics:
-          - source: project11/command
-            destination: project11/command
-          - source: piloting_mode/manual/helm
-            destination: piloting_mode/manual/helm
+          project11_command: {source: project11/command}
+          piloting_mode_manual_helm: {source: piloting_mode/manual/helm}

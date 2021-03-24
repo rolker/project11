@@ -1,0 +1,19 @@
+udp_bridge/remotes:
+    operator:
+        host: localhost
+        port: 4201
+        topics:
+          nav_orientation: {source: nav/orientation}
+          nav_position: {source: nav/position}
+          nav_velocity: {source: nav/velocity}
+          project11_display: {source: project11/display}
+          project11_heartbeat: {source: project11/heartbeat}
+          project11_status_mission_manager: {source: project11/status/mission_manager}
+          project11_response: {source: project11/response}
+          diagnostics: {source: /diagnostics}
+          tf: {source: /tf}
+          tf_static: {source: /tf_static}
+            
+helm_manager/piloting_modes/active: ['manual', 'autonomous']
+helm_manager/piloting_modes/standby: ['standby']
+helm_manager/piloting_mode_prefix: 'piloting_mode/'

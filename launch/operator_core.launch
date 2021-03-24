@@ -1,21 +1,25 @@
 <launch>
-  <arg name="namespace"/>
+  <arg name="namespace" default="operator"/>
+  <arg name="robotNamespace" default="robot"/>
+  <arg name="localPort" default="4201"/>
+  <arg name="operatorJoystick"/>
+  <arg name="enableBridge" default="true"/>
   
   <rosparam command="load" file="$(find project11)/config/operator.yaml" ns="$(arg namespace)"/>
-  <arg name="host"/>
-  <rosparam param="udp_bridge/remotes/vehicle/host" subst_value="True" ns="$(arg namespace)">$(arg host)</rosparam>
-  <node pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)" args="_port:=4201"/>
 
-<!--  <node pkg="range_and_bearing" type="range_and_bearing_node" name="range_and_bearing" ns="$(arg namespace)">
-    <remap from="input1" to="base/position"/>
-    <remap from="input2" to="posmv/position"/>
-  </node>-->
+  <node if="$(arg enableBridge)" pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)">
+    <param name="port" value="$(arg localPort)"/>
+  </node>
+
   <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender" ns="$(arg namespace)"/>
+
+  <node pkg="remote_manager" type="remote_manager_node" name="remote_manager" ns="$(arg namespace)">
+    <param name="remote" value="$(arg robotNamespace)"/>
+  </node>
    
   <node  pkg="mru_transform" type="mru_transform_node" name="mru_transform" ns="$(arg namespace)"/>
     
-  <arg name="operator_joystick"/>
-  <node if="$(arg operator_joystick)" pkg="joy" type="joy_node" name="joy_node" ns="$(arg namespace)">
+  <node if="$(arg operatorJoystick)" pkg="joy" type="joy_node" name="joy_node" ns="$(arg namespace)">
     <param name="autorepeat_rate" value="10.0"/>
   </node>
     

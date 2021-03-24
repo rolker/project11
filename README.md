@@ -29,7 +29,7 @@ If you have an available ROS Noetic system, you can quickly install and run Proj
 
     sudo apt install qtpositioning5-dev libqt5svg5-dev
 
-    cd project11/catkin_ws
+    cd ..
     catkin_make
     
     source devel/setup.bash

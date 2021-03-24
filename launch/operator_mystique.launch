@@ -2,12 +2,15 @@
   <arg name="namespace" default="operator"/>
 
   <include file="$(find project11)/launch/operator_core.launch">
-    <arg name="host" default="mystiquec"/>
-    <arg name="operator_joystick" value="1"/>
+    <arg name="operatorJoystick" value="1"/>
     <arg name="namespace" value="$(arg namespace)"/>
+    <arg name="robotNamespace" value="ben"/>
   </include>
 
   <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
+
+  <rosparam command="load" file="$(find ben_hardware)/config/operator.yaml" ns="$(arg namespace)"/>
+
 </launch>
 
 

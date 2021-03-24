@@ -8,16 +8,17 @@
   <arg name="override_mpc" default="false"/>
   <node if="$(arg override_mpc)" pkg="path_follower" type="mpc_adapter_node" name="mpc_adapter" ns="$(arg namespace)"/>
     
-  <include file="$(find project11)/launch/vehicle_core.launch">
-    <arg name="host" value="localhost"/>
+  <include file="$(find project11)/launch/robot_core.launch">
     <arg name="override_mpc" value="$(arg override_mpc)"/>
     <arg name="namespace" default="$(arg namespace)"/>
+    <arg name="enableBridge" value="false"/>
   </include>
   
   <include file="$(find project11)/launch/operator_core.launch">
-    <arg name="host" value="localhost"/>
-    <arg name="operator_joystick" value="1"/>
+    <arg name="operatorJoystick" value="true"/>
     <arg name="namespace" default="$(arg operator_namespace)"/>
+    <arg name="robotNamespace" default="$(arg namespace)"/>
+    <arg name="enableBridge" value="false"/>
   </include>
     
   <include file="$(find project11)/launch/operator_ui.launch">
@@ -43,25 +44,5 @@
   <arg name="bathy_grid_path" default="$(find mbes_sim)/data/US5NH02M.tiff"/>
   <node pkg="mbes_sim" type="mbes_sim_node.py" name="mbes_sim" args="$(arg bathy_grid_path)" ns="$(arg namespace)"/>
     
-<!--  <node pkg="joy" type="joy_node" name="joy_node_dynamic_obstacle_1">
-      <remap from="joy" to="joy_1"/>
-      <param name="dev" type="string" value="/dev/input/js1" />
-      <param name="autorepeat_rate" value="10" />
-  </node>
-  <node pkg="joy" type="joy_node" name="joy_node_dynamic_obstacle_2">
-      <remap from="joy" to="joy_2"/>
-      <param name="dev" type="string" value="/dev/input/js2" />
-      <param name="autorepeat_rate" value="10" />
-  </node>
-  <node pkg="joy" type="joy_node" name="joy_node_dynamic_obstacle_3">
-      <remap from="joy" to="joy_3"/>
-      <param name="dev" type="string" value="/dev/input/js3" />
-      <param name="autorepeat_rate" value="10" />
-  </node>
-
-  <node pkg="traffic_sim" type="traffic_sim_node.py" name="traffic_sim"/>-->
-    
   <node pkg="manda_coverage" type="manda_coverage_node" name="manda_coverage" ns="$(arg namespace)"/>
-
-
 </launch>
