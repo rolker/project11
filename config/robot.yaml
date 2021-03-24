@@ -6,6 +6,7 @@ udp_bridge/remotes:
           nav_orientation: {source: nav/orientation}
           nav_position: {source: nav/position}
           nav_velocity: {source: nav/velocity}
+          nav_active_sensor: {source: nav/active_sensor}
           project11_display: {source: project11/display}
           project11_heartbeat: {source: project11/heartbeat}
           project11_status_mission_manager: {source: project11/status/mission_manager}
