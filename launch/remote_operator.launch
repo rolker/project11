@@ -47,6 +47,8 @@
 
   <node pkg="rosservice" type="rosservice" name="get_velocity" args="call /$(arg namespace)/udp_bridge/remote_subscribe $(arg operatorNamespace) /$(arg robotNamespace)/nav/velocity /$(arg robotNamespace)/nav/velocity 1 0.0"/>
 
+  <node pkg="rosservice" type="rosservice" name="get_active_sensor" args="call /$(arg namespace)/udp_bridge/remote_subscribe $(arg operatorNamespace) /$(arg robotNamespace)/nav/active_sensor /$(arg robotNamespace)/nav/active_sensor 1 0.0"/>
+
   <node pkg="rosservice" type="rosservice" name="send_send_command" args="call /$(arg namespace)/udp_bridge/remote_advertise $(arg operatorNamespace) /$(arg namespace)/project11/send_command /$(arg operatorNamespace)/project11/send_command 1 0.0"/>
 
   <node pkg="rosservice" type="rosservice" name="send_helm" args="call /$(arg namespace)/udp_bridge/remote_advertise $(arg operatorNamespace) /$(arg namespace)/piloting_mode/manual/helm /$(arg operatorNamespace)/piloting_mode/manual/helm 1 0.0"/>
