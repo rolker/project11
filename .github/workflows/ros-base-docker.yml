@@ -19,8 +19,6 @@ jobs:
       run: DEBIAN_FRONTEND=noninteractive apt -y install git python3-vcstool
     - name: Checkout Project11
       uses: actions/checkout@v2
-    - name: Add temporary rosdep source
-      run: echo 'yaml https://github.com/rolker/rosdistro/raw/add_qtpositioning5-dev_rosdep_rule/rosdep/base.yaml' | sudo tee /etc/ros/rosdep/sources.list.d/10-rolker.list
     - name: Update rosdep
       run: rosdep update
     - name: Create workspace
