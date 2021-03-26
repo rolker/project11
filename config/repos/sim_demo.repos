@@ -75,6 +75,14 @@ repositories:
     type: git
     url: https://github.com/rolker/project11.git
     version: noetic
+  project11_simulation:
+    type: git
+    url: https://github.com/rolker/project11_simulation.git
+    version: noetic
+  remote_manager:
+    type: git
+    url: https://github.com/rolker/remote_manager.git
+    version: noetic
   udp_bridge:
     type: git
     url: https://github.com/rolker/udp_bridge.git

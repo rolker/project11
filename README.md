@@ -10,7 +10,7 @@ over unreliable wireless networks; and to provide an environment to develop adva
 
 See the following for detailed instructions on setting up a Simulation Environment:
 
-[Installing Project11's backseat driver system and simulator.](documentation/Installation.md)
+[Installing Project11's backseat driver system and simulator.](doc/Installation.md)
 
 ### Quick Installation Guide
 
