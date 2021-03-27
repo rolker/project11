@@ -83,6 +83,10 @@ repositories:
     type: git
     url: https://github.com/rolker/remote_manager.git
     version: noetic
+  traffic_sim:
+    type: git
+    url: https://github.com/rolker/traffic_sim.git
+    version: noetic
   udp_bridge:
     type: git
     url: https://github.com/rolker/udp_bridge.git

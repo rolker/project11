@@ -7,19 +7,6 @@ CCOM/JHC's ASVs are capable of operating with a backseat driver, which is a comp
 
 ROS is offically supported on Ubuntu Linux so the Project 11 system runs on Ubuntu. The actual system consists of two separate computers, each running Ubuntu, comunicating over an unreliable wireless connection. For simulation puposes, the system has been designed to also work on a single computer.
 
-A common directory structure has been created that typically resides in the user's home directory. The same structure is used both on the vehicle and on the operator station.
-
-    project11/
-    ├── catkin_ws
-    ├── configuration
-    ├── documentation
-    ├── executed_missions
-    ├── log
-    ├── ros
-    └── scripts
-
-ROS development is done in the catkin_ws directory while ROS uses the ros directory at runtime. The documentation directory is where this and other documents live. The scripts directory contains useful shell scripts that help during development and operation.
-
 ## Background knowledge
 
 ### Ubuntu Linux
@@ -92,22 +79,26 @@ The version control client git should already be installed so it only needs to b
 
 ## Creating the Project 11 directory structure.
 
-Fetching the Project11 workspace. 
+Create the Project11 workspace. 
 
-    git clone --recursive https://github.com/CCOMJHC/project11.git
+    mkdir -p project11/catkin_ws/src
 
-Alternatively, you may want to use SSH if you have an SSH key setup on github.
+    git clone https://github.com/CCOMJHC/project11.git project11/catkin_ws/src/project11/
 
-    git clone --recursive git@github.com:CCOMJHC/project11.git
 
 Install additional packages available from the package manager.
     
-    sudo apt-get install python3-rosdep
+    sudo apt install python3-rosdep python3-vcstool
+
+Clone remaining repos using vcs.
+
+    vcs import --input project11/catkin_ws/src/project11/config/repos/sim_demo.repos project11/catkin_ws/src/
+
+Install ROS dependencies.
+
     rosdep update
-    cd project11/catkin_ws
-    rosdep install --from-paths src --ignore-src -r -y
+    rosdep install --from-paths project11/catkin_ws/src --ignore-src -r -y
     
-    sudo apt install qtpositioning5-dev libqt5svg5-dev
     
 ## Build the packages
 Build in the catkin workspace.
@@ -140,7 +131,7 @@ Usage: call wsource once inside your catkin workspace.
 
 Once catkin_make completes without error in ~/project11/catkin_ws/, we can try starting the simulation.
 
-    roslaunch project11 sim_local.launch
+    roslaunch project11_simulation sim_local.launch
 
 You may encouter an error about a python script not being able to import a module. That may indicate that the catkin workspace's setup script needs to be resourced.
 
@@ -149,7 +140,7 @@ You may encouter an error about a python script not being able to import a modul
 Once sim_local.launch is succesfully launch, we can verify that things are running:
 
     rostopic list
-    rostopic echo /udp/position
+    rostopic echo /ben/odom
     
     
 ## Contributing back to Project11
