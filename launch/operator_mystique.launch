@@ -17,7 +17,7 @@
     <arg name="robotNamespace" value="$(arg robotNamespace)"/>
   </include>
 
-  <node pkg="mbr" type="mbr_logger.py" name="mbr_node" ns="$(arg robotNamespace)"/>
+  <node pkg="mbr" type="mbr_logging.py" name="mbr_node" ns="$(arg namespace)"/>
 
   <rosparam command="load" file="$(find ben_hardware)/config/operator.yaml" ns="$(arg namespace)"/>
 
