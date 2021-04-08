@@ -37,7 +37,7 @@ If you have an available ROS Noetic system, you can quickly install and run Proj
     
 ## Major components and concepts
 
-A typical setup has a ROS master running on the robot with some key nodes including the `mission_manager`, the `helm_manager` and the `udp_bridge`. The operator station runs a separate ROS master that also runs a `udp_bridge` node as well as `camp`, the CCOM Autonomous Mission Planner which provide a planning and monitoring interface.
+A typical setup has a ROS core running on the robot with some key nodes including the `mission_manager`, the `helm_manager` and the `udp_bridge`. The operator station runs a separate ROS core that also runs a `udp_bridge` node as well as `camp`, the CCOM Autonomous Mission Planner which provide a planning and monitoring interface.
 
 ### Operator user interface - CAMP
 
@@ -45,7 +45,7 @@ The [CCOM Autonomous Mission Planner](../../../camp), also known as CAMP, displa
 
 ### UDP Bridge - udp_bridge
 
-The [UDP Bridge](../../../udp_bridge) sends select ROS topics between ROS masters. It allows control and monitoring over wireless unreliable networks.
+The [UDP Bridge](../../../udp_bridge) sends select ROS topics between ROS cores. It allows control and monitoring over wireless unreliable networks.
 
 ### Mission Manager - mission_manager
 

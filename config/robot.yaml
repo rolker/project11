@@ -14,6 +14,7 @@ udp_bridge/remotes:
           diagnostics: {source: /diagnostics}
           tf: {source: /tf}
           tf_static: {source: /tf_static}
+          control_helm: {source: control/helm}
             
 helm_manager/piloting_modes/active: ['manual', 'autonomous']
 helm_manager/piloting_modes/standby: ['standby']
