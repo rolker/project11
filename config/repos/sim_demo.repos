@@ -1,93 +1,93 @@
 repositories:
   asv_helm:
     type: git
-    url: https://github.com/rolker/asv_helm.git
+    url: https://github.com/CCOMJHC/asv_helm.git
     version: noetic
   asv_sim:
     type: git
-    url: https://github.com/rolker/asv_sim.git
+    url: https://github.com/CCOMJHC/asv_sim.git
     version: noetic
   ben_project11:
     type: git
-    url: https://github.com/rolker/ben_project11.git
+    url: https://github.com/CCOMJHC/ben_project11.git
     version: noetic
   camp:
     type: git
-    url: https://github.com/rolker/CCOMAutonomousMissionPlanner.git
+    url: https://github.com/CCOMJHC/CCOMAutonomousMissionPlanner.git
     version: noetic
   command_bridge:
     type: git
-    url: https://github.com/rolker/command_bridge
+    url: https://github.com/CCOMJHC/command_bridge
     version: noetic
   dubins_curves:
     type: git
-    url: https://github.com/rolker/dubins_curves.git
+    url: https://github.com/CCOMJHC/dubins_curves.git
     version: noetic
   geographic_visualization_msgs:
     type: git
-    url: https://github.com/rolker/geographic_visualization_msgs.git
+    url: https://github.com/CCOMJHC/geographic_visualization_msgs.git
     version: noetic
   helm_manager:
     type: git
-    url: https://github.com/rolker/helm_manager.git
+    url: https://github.com/CCOMJHC/helm_manager.git
     version: noetic
   hover:
     type: git
-    url: https://github.com/rolker/hover.git
+    url: https://github.com/CCOMJHC/hover.git
     version: noetic
   joy_to_helm:
     type: git
-    url: https://github.com/rolker/joy_to_helm.git
+    url: https://github.com/CCOMJHC/joy_to_helm.git
     version: noetic
   manda_coverage:
     type: git
-    url: https://github.com/rolker/manda_coverage.git
+    url: https://github.com/CCOMJHC/manda_coverage.git
     version: noetic
   marine_msgs:
     type: git
-    url: https://github.com/rolker/marine_msgs.git
+    url: https://github.com/CCOMJHC/marine_msgs.git
     version: noetic
   mbes_sim:
     type: git
-    url: https://github.com/rolker/mbes_sim.git
+    url: https://github.com/CCOMJHC/mbes_sim.git
     version: noetic
   mission_manager:
     type: git
-    url: https://github.com/rolker/mission_manager.git
+    url: https://github.com/CCOMJHC/mission_manager.git
     version: noetic
   mpc:
     type: git
-    url: https://github.com/rolker/mpc.git
+    url: https://github.com/CCOMJHC/mpc.git
     version: noetic
   mru_transform:
     type: git
-    url: https://github.com/rolker/mru_transform.git
+    url: https://github.com/CCOMJHC/mru_transform.git
     version: noetic
   path_follower:
     type: git
-    url: https://github.com/rolker/path_follower.git
+    url: https://github.com/CCOMJHC/path_follower.git
     version: noetic
   path_planner:
     type: git
-    url: https://github.com/rolker/path_planner.git
+    url: https://github.com/CCOMJHC/path_planner.git
     version: noetic
   project11:
     type: git
-    url: https://github.com/rolker/project11.git
+    url: https://github.com/CCOMJHC/project11.git
     version: noetic
   project11_simulation:
     type: git
-    url: https://github.com/rolker/project11_simulation.git
+    url: https://github.com/CCOMJHC/project11_simulation.git
     version: noetic
   remote_manager:
     type: git
-    url: https://github.com/rolker/remote_manager.git
+    url: https://github.com/CCOMJHC/remote_manager.git
     version: noetic
   traffic_sim:
     type: git
-    url: https://github.com/rolker/traffic_sim.git
+    url: https://github.com/CCOMJHC/traffic_sim.git
     version: noetic
   udp_bridge:
     type: git
-    url: https://github.com/rolker/udp_bridge.git
+    url: https://github.com/CCOMJHC/udp_bridge.git
     version: noetic
