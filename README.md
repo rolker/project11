@@ -31,7 +31,7 @@ If you have an available ROS Noetic system, you can quickly install and run Proj
     catkin_make
     
     source devel/setup.bash
-    roslaunch project11 sim_local.launch
+    roslaunch project11_simulation sim_local.launch
     
 ## Major components and concepts
 
