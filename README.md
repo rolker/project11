@@ -18,7 +18,7 @@ If you have an available ROS Noetic system, you can quickly install and run Proj
 
     mkdir -p project11/catkin_ws/src
     cd project11/catkin_ws/src
-    git clone https://github.com/rolker/project11.git
+    git clone https://github.com/CCOMJHC/project11.git
 
     sudo apt-get install python3-rosdep python3-vcstool
     rosdep update
@@ -26,8 +26,6 @@ If you have an available ROS Noetic system, you can quickly install and run Proj
     vcs import < project11/config/repos/sim_demo.repos
     
     rosdep install --from-paths . --ignore-src -r -y
-
-    sudo apt install qtpositioning5-dev libqt5svg5-dev
 
     cd ..
     catkin_make
