@@ -10,6 +10,13 @@ namespace project11
   {
     return 90.0-180.0*tf2::getYaw(a)/M_PI;
   }
+
+  inline double speedOverGround(const geometry_msgs::Vector3 & v)
+  {
+    tf2::Vector3 v3;
+    tf2::fromMsg(v, v3);
+    return v3.length();
+  }
   
   typedef gz4d::GeoPointLatLongDegrees LatLongDegrees;
   typedef gz4d::GeoPointECEF ECEF;
