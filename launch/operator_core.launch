@@ -11,7 +11,7 @@
     <param name="port" value="$(arg localPort)"/>
   </node>
 
-  <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender" ns="$(arg namespace)"/>
+  <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender" ns="$(arg robotNamespace)"/>
 
   <node pkg="remote_manager" type="remote_manager_node" name="remote_manager" ns="$(arg namespace)">
     <param name="remote" value="$(arg robotNamespace)"/>
