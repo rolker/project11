@@ -17,11 +17,11 @@
     <param name="remote" value="$(arg robotNamespace)"/>
   </node>
    
-  <node if="$(arg operatorJoystick)" pkg="joy" type="joy_node" name="joy_node" ns="$(arg namespace)">
+  <node if="$(arg operatorJoystick)" pkg="joy" type="joy_node" name="joy_node" ns="$(arg robotNamespace)">
     <param name="autorepeat_rate" value="10.0"/>
   </node>
     
-  <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm" ns="$(arg namespace)">
+  <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm" ns="$(arg robotNamespace)">
     <remap from="helm" to="piloting_mode/manual/helm"/>
   </node>
 </launch>
