@@ -2,7 +2,7 @@
   <arg name="namespace" default="operator"/>
   <arg name="robotNamespace" default="ben"/>
 
-  <rosparam command="load" file="$(find ben_project11)/config/ben.yaml" ns="$(arg namespace)"/>
+  <rosparam command="load" file="$(find ben_project11)/config/ben_operator.yaml" ns="$(arg namespace)"/>
 
   <include file="$(find ben_description)/launch/load.launch">
     <arg name="namespace" value="$(arg robotNamespace)"/>
