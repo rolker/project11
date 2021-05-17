@@ -22,6 +22,12 @@
 
   <rosparam command="load" file="$(find ben_hardware)/config/operator.yaml" ns="$(arg namespace)"/>
 
+  <include file="$(find project11)/launch/operator_loggers_mystique.launch">
+    <arg name="namespace" value="$(arg namespace)"/>
+    <arg name="robotNamespace" value="$(arg robotNamespace)"/>
+  </include>
+
+
 </launch>
 
 
