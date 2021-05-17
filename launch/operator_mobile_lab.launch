@@ -1,5 +1,5 @@
 <launch>
-    <rosparam command="load" file="$(find project11)/parameters/mobile_lab.yaml" />
+    <rosparam command="load" file="$(find ccomjhc_project11)/configuration/mobile_lab.yaml" />
     <arg name="ais_log_dir" default="$(find project11)/logs/"/>
     <node pkg="ais" type="ais_node.py" name="ais_node" args="$(arg ais_log_dir)">
       <param name="input_type" value="serial"/>
