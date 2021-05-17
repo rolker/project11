@@ -18,6 +18,7 @@
   </include>
 
   <node pkg="mbr" type="mbr_logging.py" name="mbr_node" ns="$(arg namespace)"/>
+  <node pkg="ubiquiti" type="ubiquiti_node.py" name="ubiquity" ns="$(arg namespace)"/>
 
   <rosparam command="load" file="$(find ben_hardware)/config/operator.yaml" ns="$(arg namespace)"/>
 
