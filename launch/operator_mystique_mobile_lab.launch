@@ -1,23 +1,6 @@
 <launch>
-    <rosparam command="load" file="$(find project11)/parameters/mobile_lab.yaml" />
-    <include file="$(find project11)/launch/operator_core.launch">
-        <arg name="host" default="mystiquec"/>
-        <arg name="operator_transformations" value="1"/>
-        <arg name="operator_joystick" value="1"/>
-    </include>
-    <node pkg="flir" type="flir_decode_node.py" name="flir_decode_node"/>
-    <node pkg="mbr" type="mbr_node.py" name="mbr_node" />
-    <node pkg="mbr" type="mbr_logging.py" name="mbr_logging" />
-    <arg name="ais_log_dir" default="$(find ais)/logs/"/>
-    <node pkg="ais" type="ais_node.py" name="ais_node" args="$(arg ais_log_dir)"/>
-    
-    <node pkg="axis_tracker" type="axis_tracker_node.py" name="axis_tracker" />
-    <include file="$(find project11)/launch/camera_johnny5.launch" />
-
-    
-    <node pkg="marine_traffic_com" type="marine_traffic_node.py" name="marine_traffic_com"/>
-    
-    <include file="$(find project11)/launch/operator_loggers.launch"/>
+    <include file="$(find project11)/launch/operator_mystique.launch"/>
+    <include file="$(find project11)/launch/operator_mobile_lab.launch" />
 </launch>
 
 
