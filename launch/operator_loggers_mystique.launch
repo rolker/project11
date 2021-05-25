@@ -1,29 +1,30 @@
 <launch>
   <arg name="namespace" default="operator"/>
   <arg name="robotNamespace" default="ben"/>
+  <arg name="logDirectory"/>
 
-    <node pkg="rosbag" type="record" name="operator_logging" args="-o $(find project11)/logs/operator
-        /tf
-        /tf_static
-        /diagnostics
-        /$(arg robotNamespace)/odom
-        /$(arg robotNamespace)/nav/active_sensor
-        /$(arg robotNamespace)/nav/orientation
-        /$(arg robotNamespace)/nav/position
-        /$(arg robotNamespace)/nav/velocity
-        /$(arg robotNamespace)/joy
-        /$(arg robotNamespace)/piloting_mode/manual/helm
-        /$(arg robotNamespace)/project11/command
-        /$(arg robotNamespace)/project11/display
-        /$(arg robotNamespace)/project11/heartbeat
-        /$(arg robotNamespace)/project11/response
-        /$(arg robotNamespace)/project11/send_command
-        /$(arg robotNamespace)/project11/status/mission_manager
-        /$(arg robotNamespace)/sensors/ais/contact
-        /$(arg namespace)/mbr/2510/9442/mean_margin
-        /$(arg namespace)/mbr/2510/RX_bw_kbs
-        /$(arg namespace)/mbr/2510/TX_bw_kbs
-        /$(arg namespace)/udp_bridge/channel_info
-        /ubiquiti/BENBoat5G
-    " />    
+  <node pkg="rosbag" type="record" name="operator_logging" args="-o $(arg logDirectory)/operator
+      /tf
+      /tf_static
+      /diagnostics
+      /$(arg robotNamespace)/odom
+      /$(arg robotNamespace)/nav/active_sensor
+      /$(arg robotNamespace)/nav/orientation
+      /$(arg robotNamespace)/nav/position
+      /$(arg robotNamespace)/nav/velocity
+      /$(arg robotNamespace)/joy
+      /$(arg robotNamespace)/piloting_mode/manual/helm
+      /$(arg robotNamespace)/project11/command
+      /$(arg robotNamespace)/project11/display
+      /$(arg robotNamespace)/project11/heartbeat
+      /$(arg robotNamespace)/project11/response
+      /$(arg robotNamespace)/project11/send_command
+      /$(arg robotNamespace)/project11/status/mission_manager
+      /$(arg robotNamespace)/sensors/ais/contact
+      /$(arg namespace)/mbr/2510/9442/mean_margin
+      /$(arg namespace)/mbr/2510/RX_bw_kbs
+      /$(arg namespace)/mbr/2510/TX_bw_kbs
+      /$(arg namespace)/udp_bridge/channel_info
+      /ubiquiti/BENBoat5G
+  " />    
 </launch>

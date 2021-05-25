@@ -1,16 +1,17 @@
 <launch>
-    <rosparam command="load" file="$(find ccomjhc_project11)/configuration/mobile_lab.yaml" />
-    <arg name="ais_log_dir" default="$(find project11)/logs/"/>
-    <node pkg="ais" type="ais_node.py" name="ais_node" args="$(arg ais_log_dir)">
-      <param name="input_type" value="serial"/>
-      <param name="input" value="/dev/ttyUSB0"/>
-      <param name="input_speed" value="38400"/>
-    </node>
+  <arg name="logDirectory"/>
+
+  <rosparam command="load" file="$(find ccomjhc_project11)/configuration/mobile_lab.yaml" />
+  <node pkg="ais" type="ais_node.py" name="ais_node" args="$(arg logDirectory)/">
+    <param name="input_type" value="serial"/>
+    <param name="input" value="/dev/ttyUSB0"/>
+    <param name="input_speed" value="38400"/>
+  </node>
     
-    <node pkg="axis_tracker" type="axis_tracker_node.py" name="axis_tracker" />
-    <include file="$(find project11)/launch/camera_johnny5.launch" />
+  <node pkg="axis_tracker" type="axis_tracker_node.py" name="axis_tracker" />
+  <include file="$(find project11)/launch/camera_johnny5.launch" />
     
-    <node pkg="marine_traffic_com" type="marine_traffic_node.py" name="marine_traffic_com"/>
+  <node pkg="marine_traffic_com" type="marine_traffic_node.py" name="marine_traffic_com"/>
 </launch>
 
 

@@ -1,7 +1,11 @@
 <launch>
-    <include file="$(find project11)/launch/operator_mystique.launch"/>
-    <include file="$(find project11)/launch/operator_mobile_lab.launch" />
+  <arg name="logDirectory"/>
+
+  <include file="$(find project11)/launch/operator_mystique.launch">
+    <arg name="logDirectory" value="$(arg logDirectory)"/>
+  </include>
+  
+  <include file="$(find project11)/launch/operator_mobile_lab.launch">
+    <arg name="logDirectory" value="$(arg logDirectory)"/>
+  </include>
 </launch>
-
-
-
