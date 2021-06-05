@@ -19,6 +19,7 @@
    
   <node if="$(arg operatorJoystick)" pkg="joy" type="joy_node" name="joy_node" ns="$(arg robotNamespace)">
     <param name="autorepeat_rate" value="10.0"/>
+    <param name="deadzone" value="0.0"/>
   </node>
     
   <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm" ns="$(arg robotNamespace)">
