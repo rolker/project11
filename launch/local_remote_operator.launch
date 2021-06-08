@@ -1,0 +1,16 @@
+<launch>
+  
+  <!-- Launch CAMP on a machine on same network as operator and pointing to its roscore -->
+
+  <arg name="namespace" default="remote"/>
+  <arg name="robotNamespace"/>
+  <arg name="operatorNamespace" default="operator"/>
+  <arg name="backgroundChart" default="$(find camp)/workspace/13283/13283_2.KAP"/>
+
+  <include file="$(find project11)/launch/operator_ui.launch">
+    <arg name="namespace" value="$(arg namespace)"/>
+    <arg name="robotNamespace" value="$(arg robotNamespace)"/>
+    <arg name="backgroundChart" value="$(arg backgroundChart)"/>
+  </include>
+
+</launch>
