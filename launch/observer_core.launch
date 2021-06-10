@@ -1,0 +1,16 @@
+<launch>
+  <arg name="namespace" default="observer"/>
+  <arg name="localPort" default="4201"/>
+  <arg name="enableBridge" default="true"/>
+  
+  <node if="$(arg enableBridge)" pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)">
+    <param name="port" value="$(arg localPort)"/>
+  </node>
+
+  <node name="soundplay_node" pkg="sound_play" type="soundplay_node.py" ns="$(arg namespace)">
+    <remap from="robotsound" to="project11/robotsound"/>
+  </node>
+
+</launch>
+
+
