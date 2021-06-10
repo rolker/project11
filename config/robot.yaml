@@ -16,6 +16,21 @@ udp_bridge/remotes:
           tf_static: {source: /tf_static}
           control_helm: {source: control/helm}
           odom: {source: odom}
+    observer:
+        host: localhost
+        port: 4202
+        topics:
+          nav_orientation: {source: nav/orientation}
+          nav_position: {source: nav/position}
+          nav_velocity: {source: nav/velocity}
+          nav_active_sensor: {source: nav/active_sensor}
+          project11_display: {source: project11/display}
+          project11_heartbeat: {source: project11/heartbeat}
+          project11_status_mission_manager: {source: project11/status/mission_manager}
+          tf: {source: /tf}
+          tf_static: {source: /tf_static}
+          control_helm: {source: control/helm}
+          odom: {source: odom}
             
 helm_manager/piloting_modes/active: ['manual', 'autonomous']
 helm_manager/piloting_modes/standby: ['standby']
