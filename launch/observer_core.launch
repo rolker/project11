@@ -1,6 +1,6 @@
 <launch>
   <arg name="namespace" default="observer"/>
-  <arg name="localPort" default="4201"/>
+  <arg name="localPort" default="4202"/>
   <arg name="enableBridge" default="true"/>
   
   <node if="$(arg enableBridge)" pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)">
