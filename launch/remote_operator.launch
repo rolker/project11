@@ -32,6 +32,9 @@
 
   <node pkg="rosservice" type="rosservice" name="get_tf" args="call /$(arg namespace)/udp_bridge/remote_subscribe $(arg operatorNamespace)  /tf /tf 1 0.0"/>
 
+  <node pkg="rosservice" type="rosservice" name="get_odom" args="call /$(arg namespace)/udp_bridge/remote_subscribe $(arg operatorNamespace)  /$(arg robotNamespace)/odom /$(arg robotNamespace)/odom 1 0.0"/>
+
+
   <node pkg="rosservice" type="rosservice" name="get_diag" args="call /$(arg namespace)/udp_bridge/remote_subscribe $(arg operatorNamespace) /diagnostics /diagnostics 1 0.0"/>
 
 
