@@ -13,7 +13,7 @@ repositories:
     version: noetic
   camp:
     type: git
-    url: https://github.com/CCOMJHC/CCOMAutonomousMissionPlanner.git
+    url: https://github.com/CCOMJHC/camp.git
     version: noetic
   command_bridge:
     type: git
