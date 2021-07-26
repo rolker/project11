@@ -7,7 +7,7 @@
   
   <rosparam command="load" file="$(find project11)/config/operator.yaml" ns="$(arg namespace)"/>
 
-  <node if="$(arg enableBridge)" pkg="p11_udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)">
+  <node if="$(arg enableBridge)" pkg="udp_bridge" type="udp_bridge_node" name="p11_udp_bridge" ns="$(arg namespace)">
     <param name="port" value="$(arg localPort)"/>
   </node>
 
