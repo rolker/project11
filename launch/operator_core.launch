@@ -7,26 +7,26 @@
   
   <rosparam command="load" file="$(find project11)/config/operator.yaml" ns="$(arg namespace)"/>
 
-  <node if="$(arg enableBridge)" pkg="udp_bridge" type="udp_bridge_node" name="p11_udp_bridge" ns="$(arg namespace)">
+  <node if="$(arg enableBridge)" pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)">
     <param name="port" value="$(arg localPort)"/>
   </node>
 
-  <node pkg="command_bridge" type="command_bridge_sender_node.py" name="p11_command_bridge_sender" ns="$(arg robotNamespace)"/>
+  <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender" ns="$(arg robotNamespace)"/>
 
-  <node pkg="remote_manager" type="remote_manager_node" name="p11_remote_manager" ns="$(arg namespace)">
+  <node pkg="remote_manager" type="remote_manager_node" name="remote_manager" ns="$(arg namespace)">
     <param name="remote" value="$(arg robotNamespace)"/>
   </node>
    
-  <node if="$(arg operatorJoystick)" pkg="joy" type="joy_node" name="p11_joy_node" ns="$(arg robotNamespace)">
+  <node if="$(arg operatorJoystick)" pkg="joy" type="joy_node" name="joy_node" ns="$(arg robotNamespace)">
     <param name="autorepeat_rate" value="10.0"/>
     <param name="deadzone" value="0.0"/>
   </node>
     
-  <node pkg="joy_to_helm" type="joy_to_helm.py" name="p11_joy_to_helm" ns="$(arg robotNamespace)">
+  <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm" ns="$(arg robotNamespace)">
     <remap from="helm" to="piloting_mode/manual/helm"/>
   </node>
 
-  <node name="p11_soundplay_node" pkg="sound_play" type="soundplay_node.py" ns="$(arg namespace)">
+  <node name="soundplay_node" pkg="sound_play" type="soundplay_node.py" ns="$(arg namespace)">
     <remap from="robotsound" to="project11/robotsound"/>
   </node>
 

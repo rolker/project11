@@ -1,4 +1,4 @@
-p11_udp_bridge/remotes:
+udp_bridge/remotes:
     robot:
         host: localhost
         port: 4200
