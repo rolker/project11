@@ -4,6 +4,7 @@
   <arg name="localPort" default="4201"/>
   <arg name="operatorJoystick" default="true"/>
   <arg name="enableBridge" default="true"/>
+  <arg name="enableSound" default="false"/>
   
   <rosparam command="load" file="$(find project11)/config/operator.yaml" ns="$(arg namespace)"/>
 
@@ -23,10 +24,10 @@
   </node>
     
   <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm" ns="$(arg robotNamespace)">
-    <remap from="helm" to="piloting_mode/manual/helm"/>
+    <remap from="helm" to="project11/piloting_mode/manual/helm"/>
   </node>
 
-  <node name="soundplay_node" pkg="sound_play" type="soundplay_node.py" ns="$(arg namespace)">
+  <node if="$(arg enableSound)" name="soundplay_node" pkg="sound_play" type="soundplay_node.py" ns="$(arg namespace)">
     <remap from="robotsound" to="project11/robotsound"/>
   </node>
 
