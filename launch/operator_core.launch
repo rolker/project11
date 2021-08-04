@@ -2,7 +2,7 @@
   <arg name="namespace" default="operator"/>
   <arg name="robotNamespace" default="robot"/>
   <arg name="localPort" default="4201"/>
-  <arg name="operatorJoystick"/>
+  <arg name="operatorJoystick" default="true"/>
   <arg name="enableBridge" default="true"/>
   
   <rosparam command="load" file="$(find project11)/config/operator.yaml" ns="$(arg namespace)"/>

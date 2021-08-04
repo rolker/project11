@@ -8,11 +8,11 @@
   <node if="$(arg rqt)" pkg="rqt_gui" type="rqt_gui" name="rqt"/>
 
   <node pkg="camp" type="CCOMAutonomousMissionPlanner" name="camp"  args="$(find camp)/workspace/ $(arg backgroundChart)" ns="$(arg namespace)">
-    <param name="robotNamespace" value="$(arg robotNamespace"/>
+    <param name="robotNamespace" value="$(arg robotNamespace)"/>
   </node>
 
   <node if="$(arg dual_camp)" pkg="camp" type="CCOMAutonomousMissionPlanner" name="camp2"  args="$(find camp)/workspace/ $(arg backgroundChart)" ns="$(arg namespace)">
-    <param name="robotNamespace" value="$(arg robotNamespace"/>
+    <param name="robotNamespace" value="$(arg robotNamespace)"/>
   </node>
 
 </launch>
