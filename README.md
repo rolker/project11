@@ -21,6 +21,7 @@ If you have an available ROS Noetic system, you can quickly install and run Proj
     git clone https://github.com/CCOMJHC/project11.git
 
     sudo apt-get install python3-rosdep python3-vcstool
+    sudo rosdep init
     rosdep update
 
     vcs import < project11/config/repos/sim_demo.repos
