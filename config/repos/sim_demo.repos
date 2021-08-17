@@ -75,6 +75,10 @@ repositories:
     type: git
     url: https://github.com/CCOMJHC/project11.git
     version: noetic
+  project11_msgs:
+    type: git
+    url: https://github.com/CCOMJHC/project11_msgs.git
+    version: noetic
   project11_simulation:
     type: git
     url: https://github.com/CCOMJHC/project11_simulation.git
