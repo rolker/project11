@@ -88,7 +88,7 @@ repositories:
     url: https://github.com/CCOMJHC/remote_manager.git
   robots/ben_description:
     type: git
-    url: https://github.com/rolker/ben_description.git
+    url: https://github.com/CCOMJHC/ben_description.git
     version: noetic
   traffic_sim:
     type: git
