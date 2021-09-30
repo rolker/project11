@@ -86,7 +86,7 @@ repositories:
   remote_manager:
     type: git
     url: https://github.com/CCOMJHC/remote_manager.git
-  robots/ben_description:
+  ben_description:
     type: git
     url: https://github.com/CCOMJHC/ben_description.git
     version: noetic
