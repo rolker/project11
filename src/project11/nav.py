@@ -87,7 +87,7 @@ class EarthTransforms(object):
 
         
 
-    def geoToPose(self, lat, lon, heading, frame_id=None, time=rospy.Time()):
+    def geoToPose(self, lat, lon, heading=None, frame_id=None, time=rospy.Time()):
         """ Returns a PoseStamped in given frame from given geographic position.
         
         Args:
@@ -115,12 +115,13 @@ class EarthTransforms(object):
         ecef_pose.pose.position.z = ecef[2]
         ret = do_transform_pose(ecef_pose, earth_to_frame)
 
-        yaw = math.radians(headingToYaw(heading))
-        quat = quaternion_about_axis(yaw, (0,0,1))
-        ret.pose.orientation.x = quat[0]
-        ret.pose.orientation.y = quat[1]
-        ret.pose.orientation.z = quat[2]
-        ret.pose.orientation.w = quat[3]
+        if heading is not None:
+            yaw = math.radians(headingToYaw(heading))
+            quat = quaternion_about_axis(yaw, (0,0,1))
+            ret.pose.orientation.x = quat[0]
+            ret.pose.orientation.y = quat[1]
+            ret.pose.orientation.z = quat[2]
+            ret.pose.orientation.w = quat[3]
 
         return ret
 
