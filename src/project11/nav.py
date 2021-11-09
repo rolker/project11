@@ -4,6 +4,7 @@ import rospy
 import tf2_ros
 
 from geographic_msgs.msg import GeoPose
+from geographic_msgs.msg import GeoPointStamped
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 
@@ -11,6 +12,7 @@ import project11.wgs84
 import project11.geodesic
 
 from tf2_geometry_msgs import do_transform_pose
+from tf2_geometry_msgs import do_transform_point
 from tf.transformations import quaternion_about_axis
 from tf.transformations import euler_from_quaternion
 
@@ -141,6 +143,24 @@ class EarthTransforms(object):
         for p in poses:
             ret.append(transformPoseToGeoPose(p, map_to_earth))
         return ret
+
+    def pointToGeoPoint(self, point):
+        try:
+            map_to_earth = self.tfBuffer.lookup_transform("earth", point.header.frame_id, rospy.Time())
+        except Exception as e:
+            rospy.logerr("Cannot lookup transform from <earth> to {}".format(point.header.frame_id))
+            rospy.logerr(e)
+            return None
+        ecef = do_transform_point(point, map_to_earth)
+        latlon = project11.wgs84.fromECEFtoLatLong(ecef.point.x, ecef.point.y, ecef.point.z)
+        gp = GeoPointStamped()
+        gp.position.latitude = math.degrees(latlon[0])
+        gp.position.longitude = math.degrees(latlon[1])
+        gp.position.altitude = latlon[2]
+        gp.header.stamp = point.header.stamp
+        return gp
+
+        
 
 
 
