@@ -23,7 +23,10 @@
     <remap from="odom" to="project11/odom"/>
   </node>
 
-  <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager" output="screen" ns="$(arg namespace)"/>
+  <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager" output="screen" ns="$(arg namespace)">
+      <param name="map_frame" value="$(arg namespace)/map"/>
+  </node>
+
     <!--<node pkg="survey_manager" type="survey_manager_node" name="survey_manager"/>-->
 
   <node pkg="dubins_curves" type="dubins_curves_node" name="dubins_curves" ns="$(arg namespace)"/>
