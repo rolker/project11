@@ -1,8 +1,0 @@
-<launch>
-  <rosparam>
-/mru_transform/sensors:
- - {name: posmv, topics: { position: '/posmv/position', orientation: '/posmv/orientation', velocity: '/posmv/velocity'}}
-  </rosparam>
-  <node pkg="posmv" type="posmv_node.py" name="posmv"/>
-  <node pkg="mru_transform" type="mru_transform_node" name="mru_transform"/>
-</launch>
