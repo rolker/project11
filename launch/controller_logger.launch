@@ -1,9 +1,0 @@
-<launch>
-    <node pkg="rosbag" type="record" name="controller_test_logger" args="-o $(find project11)/logs/controller_test --split --duration=1h
-              /controller_msgs
-              /mpc/parameter_descriptions
-              /mpc/parameter_updates
-              /reference_trajectory
-              /heartbeat
-    " />
-</launch>
