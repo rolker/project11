@@ -5,7 +5,9 @@ import tf2_ros
 
 from geographic_msgs.msg import GeoPose
 from geographic_msgs.msg import GeoPointStamped
+from geographic_msgs.msg import GeoPoint
 from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PointStamped
 from nav_msgs.msg import Odometry
 
 import project11.wgs84
@@ -17,6 +19,7 @@ from tf.transformations import quaternion_about_axis
 from tf.transformations import euler_from_quaternion
 
 import math
+import copy
 
 def distanceBearingDegrees(start_lat, start_lon, dest_lat, dest_lon):
     """ Returns distance and bearing of a geodesic line.
@@ -60,17 +63,28 @@ def yawToHeading(yaw):
     """
     return 90.0-yaw
 
-def transformPoseToGeoPose(pose, transform):
-    """Transforms a Pose to a GeoPose using given transform to earth frame"""
-    ecef = do_transform_pose(pose, transform)
-    latlon = project11.wgs84.fromECEFtoLatLong(ecef.pose.position.x, ecef.pose.position.y, ecef.pose.position.z)
-    gp = GeoPose()
+def transformPointToGeoPoint(point, transform):
+    """Transforms a Point or PointStamped to a GeoPointStamped using given transform to earth frame"""
+    ps = point
+    if not hasattr(point, 'header'):
+        ps = PointStamped()
+        ps.point = point
+    ecef = do_transform_point(point, transform)
+    latlon = project11.wgs84.fromECEFtoLatLong(ecef.point.x, ecef.point.y, ecef.point.z)
+    gp = GeoPointStamped()
     gp.position.latitude = math.degrees(latlon[0])
     gp.position.longitude = math.degrees(latlon[1])
     gp.position.altitude = latlon[2]
-    gp.orientation = pose.pose.orientation
+    gp.header = copy.deepcopy(ps.header)
+    gp.header.frame_id = 'wgs84'
     return gp
 
+def transformPoseToGeoPose(pose, transform):
+    """Transforms a Pose to a GeoPose using given transform to earth frame"""
+    gp = GeoPose()
+    gp.position = transformPointToGeoPoint(pose.position, transform)
+    gp.orientation = copy.deepcopy(pose.pose.orientation)
+    return gp
 
 class EarthTransforms(object):
     """Help transform coordinates between Lat/Lon and map space"""
@@ -127,21 +141,48 @@ class EarthTransforms(object):
 
         return ret
 
-
-    def poseListToGeoPoseList(self, poses, map_frame = None):
+    def mapToEarthTransform(self, map_frame = None, timestamp=rospy.Time()):
         if map_frame is None:
             map_frame = self.map_frame
 
         try:
-            map_to_earth = self.tfBuffer.lookup_transform("earth", map_frame, rospy.Time())
+            return self.tfBuffer.lookup_transform("earth", map_frame, timestamp)
         except Exception as e:
             rospy.logerr("Cannot lookup transform from <earth> to {}".format(map_frame))
             rospy.logerr(e)
-            return None
 
+    def poseListToGeoPoseList(self, poses, map_frame = None):
+        map_to_earth = self.mapToEarthTransform(map_frame)
+        if map_to_earth is not None:
+            ret = []
+            for p in poses:
+                ret.append(transformPoseToGeoPose(p, map_to_earth))
+            return ret
+
+    def pointListToGeoPointList(self, points, map_frame = None):
+        """ Transforms a list of Point or PointStamped messages to GeoPointStamped
+
+        The frame_id of a PointStamped will be used if not empty.
+        The map_frame if not None, or the default map_frame will be used for Point
+        messages and PointStamped messages with an empty frame_id.
+        """
+        transforms = {}
         ret = []
-        for p in poses:
-            ret.append(transformPoseToGeoPose(p, map_to_earth))
+        default_time = rospy.Time()
+        for p in points:
+            if hasattr(p, 'header'):
+                transform_key = (p.header.frame_id, p.header.stamp)
+            else:
+                transform_key = ('', default_time)
+            if not transform_key in transforms:
+                frame_id = transform_key[0]
+                if frame_id == '':
+                    frame_id = map_frame
+                transforms[transform_key] = self.mapToEarthTransform(frame_id, transform_key[1])
+            if transforms[transform_key] is not None:
+                ret.append(transformPointToGeoPoint(p, transforms[transform_key]))
+            else:
+                ret.append(None)
         return ret
 
     def pointToGeoPoint(self, point):
@@ -157,7 +198,8 @@ class EarthTransforms(object):
         gp.position.latitude = math.degrees(latlon[0])
         gp.position.longitude = math.degrees(latlon[1])
         gp.position.altitude = latlon[2]
-        gp.header.stamp = point.header.stamp
+        gp.header = copy.deepcopy(point.header)
+        gp.header.frame_id = 'wgs84'
         return gp
 
         
