@@ -26,7 +26,7 @@
 
   <include if="$(arg old_nav_stack)" file="$(find project11)/launch/old_nav_stack.launch">
     <arg name="namespace" value="$(arg namespace)"/>
-    <arg name="override_mpc" value="$(override_mpc)"/>
+    <arg name="override_mpc" value="$(arg override_mpc)"/>
 1  </include>
   
   <node pkg="helm_manager" type="helm_manager_node" name="helm_manager" ns="$(arg namespace)">
