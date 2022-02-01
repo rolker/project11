@@ -42,6 +42,8 @@ A typical setup has a ROS core running on the robot with some key nodes includin
 
 The [CCOM Autonomous Mission Planner](../../../camp), also known as CAMP, displays the vehicle's position on background georeferenced charts and maps. It also allows the planning of missions to be sent to the vehicle and to manage the vehicle's piloting mode.
 
+![Camp](docs/CAMP_3Click_Survey_Pattern.gif)
+
 ### UDP Bridge - udp_bridge
 
 The [UDP Bridge](../../../udp_bridge) sends select ROS topics between ROS cores. It allows control and monitoring over wireless unreliable networks.
