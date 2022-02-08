@@ -239,14 +239,14 @@ class RobotNavigation(EarthTransforms):
           Lat/Long in radians and altitude in meters.
         """
         if self.odometry is None:
-            rospy.logwarn("mission_manager: There is no current odomentry, "
+            rospy.logwarn_throttle(2, "There is no current odomentry, "
                           "so can't determine position!")
             return None
         
         try:
             odom_to_earth = self.tfBuffer.lookup_transform("earth", self.odometry.header.frame_id, rospy.Time())
         except Exception as e:
-            rospy.logerr("mission_manager: Cannot lookup transform from <earth>"
+            rospy.logerr("Cannot lookup transform from <earth>"
                          " to odometry frame_id")
             rospy.logerr(e)
             return None
