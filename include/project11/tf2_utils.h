@@ -13,13 +13,18 @@ namespace project11
   class Transformations
   {
   public:
-      Transformations():m_tf_listener(m_tf_buffer)
+      Transformations(tf2_ros::Buffer* external_buffer = nullptr):external_buffer_(external_buffer)
       {
+        if(!external_buffer_)
+        {
+          tf_buffer_ = std::make_shared<tf2_ros::Buffer>();
+          tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+        }
       }
       
       bool canTransform(std::string map_frame="map")
       {
-        return m_tf_buffer.canTransform("earth", map_frame, ros::Time(0), ros::Duration(0.5));
+        return buffer().canTransform("earth", map_frame, ros::Time(0), ros::Duration(0.5));
       }
 
       geometry_msgs::Point wgs84_to_map(geographic_msgs::GeoPoint const &position, std::string map_frame="map")
@@ -27,7 +32,7 @@ namespace project11
         geometry_msgs::Point ret;
         try
         {
-          geometry_msgs::TransformStamped t = m_tf_buffer.lookupTransform(map_frame,"earth",ros::Time(0));
+          geometry_msgs::TransformStamped t = buffer().lookupTransform(map_frame,"earth",ros::Time(0));
           LatLongDegrees p_ll;
           fromMsg(position, p_ll);
           ECEF p_ecef = p_ll;
@@ -47,7 +52,7 @@ namespace project11
           geographic_msgs::GeoPoint ret;
           try
           {
-            geometry_msgs::TransformStamped t = m_tf_buffer.lookupTransform("earth",map_frame,ros::Time(0));
+            geometry_msgs::TransformStamped t = buffer().lookupTransform("earth",map_frame,ros::Time(0));
             geometry_msgs::Point out;
             tf2::doTransform(point,out,t);
             ECEF out_ecef;
@@ -64,12 +69,20 @@ namespace project11
       
       const tf2_ros::Buffer& operator()() const
       {
-        return m_tf_buffer;
+        return buffer();
       }
       
     private:
-      tf2_ros::Buffer m_tf_buffer;
-      tf2_ros::TransformListener m_tf_listener;
+      tf2_ros::Buffer &buffer() const
+      {
+        if(external_buffer_)
+          return *external_buffer_;
+        return *tf_buffer_;
+      }
+
+      std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+      std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+      tf2_ros::Buffer* external_buffer_=nullptr;
     };
 }
 

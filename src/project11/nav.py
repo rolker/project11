@@ -223,6 +223,8 @@ class RobotNavigation(EarthTransforms):
           msg: A nav_msgs/Odometry message.
         """
         self.odometry = msg
+        if self.map_frame is None:
+            self.map_frame = msg.header.frame_id
 
     def positionLatLon(self):
         """ Return last known position lat/lon of the vehicle.

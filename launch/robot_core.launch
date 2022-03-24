@@ -2,8 +2,7 @@
   <arg name="namespace"/>
   <arg name="enableBridge" default="true"/>
   <arg name="localPort" default="4200"/>
-  <arg name="override_mpc" default="false"/>
-  <arg name="old_nav_stack" default="true"/>
+  <arg name="default_nav_stack" default="true"/>
 
   <rosparam command="load" file="$(find project11)/config/robot.yaml" ns="$(arg namespace)"/>
 
@@ -23,11 +22,6 @@
     <remap from="nav/active_sensor" to="project11/nav/active_sensor"/>
     <remap from="odom" to="project11/odom"/>
   </node>
-
-  <include if="$(arg old_nav_stack)" file="$(find project11)/launch/old_nav_stack.launch">
-    <arg name="namespace" value="$(arg namespace)"/>
-    <arg name="override_mpc" value="$(arg override_mpc)"/>
-1  </include>
   
   <node pkg="helm_manager" type="helm_manager_node" name="helm_manager" ns="$(arg namespace)">
     <remap from="out/helm" to="project11/control/helm"/>
@@ -36,6 +30,17 @@
     <remap from="status/helm" to="project11/status/helm"/>
     <remap from="piloting_mode" to="project11/piloting_mode"/>
     <param name="piloting_mode_prefix" value="project11/piloting_mode/"/>
+  </node>
+
+  <node pkg="mission_manager" type="mission_manager_navigator.py" name="mission_manager" ns="$(arg namespace)">
+      <param name="map_frame" value="$(arg namespace)/map"/>
+  </node>
+
+  <node pkg="project11_navigation" type="navigator" name="navigator" ns="$(arg namespace)">
+    <rosparam if="$(arg default_nav_stack)" file="$(find project11_navigation)/config/default_stack.yaml" command="load"/>
+    <remap from="~/cmd_vel" to="project11/piloting_mode/autonomous/cmd_vel"/>
+    <remap from="~/enable" to="project11/piloting_mode/autonomous/active"/>
+    <remap from="odom" to="project11/odom"/>
   </node>
 
 </launch>

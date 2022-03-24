@@ -16,7 +16,7 @@ namespace project11
     return (M_PI/2.0)-tf2::getYaw(a);
   }
 
-  inline double speedOverGround(const geometry_msgs::Vector3 & v)
+  template <typename T> inline double speedOverGround(const T & v)
   {
     tf2::Vector3 v3;
     tf2::fromMsg(v, v3);
