@@ -7,6 +7,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   geometry_msgs
   tf2
+  tf2_geometry_msgs
   tf2_ros
 )
 
@@ -15,7 +16,7 @@ catkin_python_setup()
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES project11_utils
-  CATKIN_DEPENDS roscpp geometry_msgs tf2 tf2_ros
+  CATKIN_DEPENDS roscpp geometry_msgs tf2 tf2_geometry_msgs tf2_ros
 )
 
 include_directories(
