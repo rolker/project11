@@ -4,15 +4,21 @@
   <arg name="backgroundChart" default="$(find camp)/workspace/13283/13283_2.KAP"/>
   <arg name="rqt" default="false"/>
   <arg name="dual_camp" default="false"/>
+  <arg name="range_topic" default="range"/>
+  <arg name="bearing_topic" default="bearing"/>
 
   <node if="$(arg rqt)" pkg="rqt_gui" type="rqt_gui" name="rqt"/>
 
   <node pkg="camp" type="CCOMAutonomousMissionPlanner" name="camp"  args="$(find camp)/workspace/ $(arg backgroundChart)" ns="$(arg namespace)">
     <param name="robotNamespace" value="$(arg robotNamespace)"/>
+    <remap from="range" to="$(arg range_topic)"/>
+    <remap from="bearing" to="$(arg bearing_topic)"/>
   </node>
 
   <node if="$(arg dual_camp)" pkg="camp" type="CCOMAutonomousMissionPlanner" name="camp2"  args="$(find camp)/workspace/ $(arg backgroundChart)" ns="$(arg namespace)">
     <param name="robotNamespace" value="$(arg robotNamespace)"/>
+    <remap from="range" to="$(arg range_topic)"/>
+    <remap from="bearing" to="$(arg bearing_topic)"/>
   </node>
 
 </launch>
