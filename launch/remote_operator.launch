@@ -30,7 +30,7 @@
 
   <!-- <node pkg="rosservice" type="rosservice" name="add_remote" args="call /$(arg namespace)/udp_bridge/add_remote $(arg operatorNamespace) $(arg remoteHost) $(arg remotePort)"/> -->
 
-  <node pkg="rosservice" type="rosservice" name="get_tf" args="call /$(arg namespace)/udp_bridge/remote_subscribe $(arg operatorNamespace)  /tf /tf 1 0.0"/>
+  <!-- <node pkg="rosservice" type="rosservice" name="get_tf" args="call /$(arg namespace)/udp_bridge/remote_subscribe $(arg operatorNamespace)  /tf /tf 1 0.0"/>
 
   <node pkg="rosservice" type="rosservice" name="get_odom" args="call /$(arg namespace)/udp_bridge/remote_subscribe $(arg operatorNamespace)  /$(arg robotNamespace)/odom /$(arg robotNamespace)/odom 1 0.0"/>
 
@@ -54,5 +54,5 @@
 
   <node pkg="rosservice" type="rosservice" name="send_send_command" args="call /$(arg namespace)/udp_bridge/remote_advertise $(arg operatorNamespace) /$(arg namespace)/project11/send_command /$(arg operatorNamespace)/project11/send_command 1 0.0"/>
 
-  <node pkg="rosservice" type="rosservice" name="send_helm" args="call /$(arg namespace)/udp_bridge/remote_advertise $(arg operatorNamespace) /$(arg namespace)/piloting_mode/manual/helm /$(arg operatorNamespace)/piloting_mode/manual/helm 1 0.0"/>
+  <node pkg="rosservice" type="rosservice" name="send_helm" args="call /$(arg namespace)/udp_bridge/remote_advertise $(arg operatorNamespace) /$(arg namespace)/piloting_mode/manual/helm /$(arg operatorNamespace)/piloting_mode/manual/helm 1 0.0"/> -->
 </launch>
