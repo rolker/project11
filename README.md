@@ -24,7 +24,7 @@ If you have an available ROS Noetic system, you can quickly install and run Proj
     sudo rosdep init
     rosdep update
 
-    vcs import < project11/config/repos/sim_demo.repos
+    vcs import < project11/config/repos/simulator.repos
     
     rosdep install --from-paths . --ignore-src -r -y
 

@@ -92,7 +92,7 @@ Install additional packages available from the package manager.
 
 Clone remaining repos using vcs.
 
-    vcs import --input project11/catkin_ws/src/project11/config/repos/sim_demo.repos project11/catkin_ws/src/
+    vcs import --input project11/catkin_ws/src/project11/config/repos/simulator.repos project11/catkin_ws/src/
 
 Install ROS dependencies.
 
