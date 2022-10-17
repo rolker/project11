@@ -94,6 +94,9 @@ repositories:
   remote_manager:
     type: git
     url: https://github.com/CCOMJHC/remote_manager.git
+  s57_layer:
+    type: git
+    url: https://github.com/CCOMJHC/s57_layer.git
   ben_description:
     type: git
     url: https://github.com/CCOMJHC/ben_description.git
