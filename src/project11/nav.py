@@ -24,7 +24,7 @@ import copy
 def distanceBearingDegrees(start_lat, start_lon, dest_lat, dest_lon):
     """ Returns distance and bearing of a geodesic line.
 
-    Uses python11.geodesic library to determine bearing (degrees, NED)
+    Uses project11.geodesic library to determine bearing (degrees, NED)
     from start lat/lon to destination lat/lon.
 
     TODO: Write Args documentation.
