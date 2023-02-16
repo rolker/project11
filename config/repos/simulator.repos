@@ -51,10 +51,6 @@ repositories:
     type: git
     url: https://github.com/CCOMJHC/manda_coverage.git
     version: noetic
-  marine_msgs:
-    type: git
-    url: https://github.com/CCOMJHC/marine_msgs.git
-    version: noetic
   marine_sensor_msgs:
     type: git
     url: https://github.com/CCOMJHC/marine_sensor_msgs.git
