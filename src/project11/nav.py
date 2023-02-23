@@ -103,7 +103,7 @@ class EarthTransforms(object):
 
         
 
-    def geoToPose(self, lat, lon, heading=None, frame_id=None, time=rospy.Time()):
+    def geoToPose(self, lat, lon, heading=None, frame_id=None, time=rospy.Time(), timeout=rospy.Duration(0)):
         """ Returns a PoseStamped in given frame from given geographic position.
         
         Args:
@@ -118,7 +118,7 @@ class EarthTransforms(object):
             frame_id = self.map_frame
 
         try:
-            earth_to_frame = self.tfBuffer.lookup_transform(frame_id, "earth", time)
+            earth_to_frame = self.tfBuffer.lookup_transform(frame_id, "earth", time, timeout)
         except Exception as e:
             rospy.logerr("mission_manager: Cannot lookup transform from {} to <earth>".format(frame_id))
             rospy.logerr(e)
