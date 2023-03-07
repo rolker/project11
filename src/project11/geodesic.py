@@ -28,7 +28,7 @@ def direct(lon1,lat1,azimuth,distance):
     b = 6356752.314245   # length of minor axis of the ellipsoid (radius at the poles)
     f = 1/298.257223563  # flattening of the ellipsoid
 
-    epsilon = 1e-12;
+    epsilon = 1e-12
 
     #U is 'reduced latitude'
     tanU1 = (1.0-f)*math.tan(phi1)
@@ -51,22 +51,22 @@ def direct(lon1,lat1,azimuth,distance):
     sigma = distance/(b*A)
     
     while True:
-        cos2Sigmam = math.cos(2.0*sigma1+sigma);
+        cos2Sigmam = math.cos(2.0*sigma1+sigma)
         sinSigma = math.sin(sigma)
         cosSigma = math.cos(sigma)
         
         deltaSigma = B*sinSigma*(cos2Sigmam+.25*B*(cosSigma*(-1.0+2.0*cos2Sigmam*cos2Sigmam)-(B/6.0)*cos2Sigmam*(-3.0+4.0*sinSigma*sinSigma)*(-3.0+4.0*cos2Sigmam*cos2Sigmam)))
-        last_sigma = sigma;
-        sigma = (distance/(b*A))+deltaSigma;
+        last_sigma = sigma
+        sigma = (distance/(b*A))+deltaSigma
         if abs(last_sigma-sigma) <= epsilon:
             break
 
-    cos2Sigmam = math.cos(2.0*sigma1+sigma);
+    cos2Sigmam = math.cos(2.0*sigma1+sigma)
             
     phi2 = math.atan2(sinU1*math.cos(sigma)+cosU1*math.sin(sigma)*cosAlpha1,(1-f)*math.sqrt(sinAlpha*sinAlpha+pow(sinU1*math.sin(sigma)-cosU1*math.cos(sigma)*cosAlpha1,2)))
     l = math.atan2(math.sin(sigma)*sinAlpha1,cosU1*math.cos(sigma)-sinU1*math.sin(sigma)*cosAlpha1)
     C = (f/16.0)*cos2Alpha*(4.0+f*(4.0-3.0*cos2Alpha))
-    L = l-(1.0-C)*f*sinAlpha*(sigma+C*math.sin(sigma)*(cos2Sigmam+C*math.cos(sigma)*(-1+2.0*cos2Sigmam*cos2Sigmam)));
+    L = l-(1.0-C)*f*sinAlpha*(sigma+C*math.sin(sigma)*(cos2Sigmam+C*math.cos(sigma)*(-1+2.0*cos2Sigmam*cos2Sigmam)))
 
     lat2 = phi2
     lon2 = lon1 + L
@@ -87,7 +87,7 @@ def inverse(lon1,lat1,lon2,lat2):
     b = 6356752.314245   # length of minor axis of the ellipsoid (radius at the poles)
     f = 1/298.257223563  # flattening of the ellipsoid
     
-    epsilon = 1e-12;
+    epsilon = 1e-12
     
     phi1 = lat1
     phi2 = lat2
@@ -111,7 +111,10 @@ def inverse(lon1,lat1,lon2,lat2):
         sinSigma = math.sqrt(((cosU2*sinl)**2)+(cosU1*sinU2-sinU1*cosU2*cosl)**2)
         cosSigma = sinU1*sinU2+cosU1*cosU2*cosl
         sigma = math.atan2(sinSigma,cosSigma)
-        sinAlpha = (cosU1*cosU2*sinl)/sinSigma
+        try:
+            sinAlpha = (cosU1*cosU2*sinl)/sinSigma
+        except Exception as e:
+            return 0,0
 
         cos2Alpha = 1-sinAlpha*sinAlpha
         if cos2Alpha == 0:

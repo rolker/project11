@@ -48,7 +48,7 @@ def toECEFfromDegrees(latitude, longitude, altitude=0.0):
 
 def fromECEFtoLatLong(x, y, z):
   """
-  Returns Lat/Long in radsians and altitude in meters.
+  Returns Lat/Long in radians and altitude in meters.
   x,y,z : ECEF coordinates in meters
   """
   r = math.sqrt(x*x+y*y)
