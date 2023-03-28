@@ -3,6 +3,7 @@
   <arg name="enableBridge" default="true"/>
   <arg name="localPort" default="4200"/>
   <arg name="default_nav_stack" default="true"/>
+  <arg name="odom_topic" default="project11/odom"/>
 
   <rosparam command="load" file="$(find project11)/config/robot.yaml" ns="$(arg namespace)"/>
 
@@ -29,6 +30,7 @@
     <remap from="heartbeat" to="project11/heartbeat"/>
     <remap from="status/helm" to="project11/status/helm"/>
     <remap from="piloting_mode" to="project11/piloting_mode"/>
+    <remap from="odom" to="$(arg odom_topic)"/>
     <param name="piloting_mode_prefix" value="project11/piloting_mode/"/>
   </node>
 

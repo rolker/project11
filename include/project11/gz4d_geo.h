@@ -988,6 +988,10 @@ namespace gz4d
       return Angle<T,PU,rt::PositivePeriod>(l) == r;
     }
 
+    template<typename T, typename PU, typename RT> bool isnan(const Angle<T, PU, RT>& angle)
+    {
+        return ::isnan(angle.value());
+    }
     
     // interpolates period aware angles
     // a and b are the input angles, p is proportion of a vs b to weight.

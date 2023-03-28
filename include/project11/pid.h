@@ -12,7 +12,7 @@ class PID
 {
 public:  
 
-  void configure(ros::NodeHandle& nh)
+  void configure(ros::NodeHandle nh)
   {
     Kp_ = nh.param("Kp", Kp_);
     Ki_ = nh.param("Ki", Ki_);
@@ -106,6 +106,21 @@ public:
       debug_pub_.publish(debug);
 
     return control_effort;
+  }
+
+  double Kp() const
+  {
+    return Kp_;
+  }
+
+  double Ki() const
+  {
+    return Ki_;
+  }
+
+  double Kd() const
+  {
+    return Kd_;
   }
 
 private:
