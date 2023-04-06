@@ -1,7 +1,6 @@
 udp_bridge/remotes:
     operator:
         host: localhost
-        port: 4201
         topics:
           nav_orientation: {source: project11/nav/orientation}
           nav_position: {source: project11/nav/position}
