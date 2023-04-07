@@ -57,8 +57,8 @@ namespace gz4d
 //         return (l == "true" || l == "yes" || l == "on" || l == "1" || l == "t" || l == "y");
 //     }
     
-    template<typename T> inline T Nan(){return std::numeric_limits<T>::quiet_NaN();}
-    template<typename T> inline bool IsNan(T value){return (boost::math::isnan)(value);}
+//    template<typename T> inline T Nan(){return std::numeric_limits<T>::quiet_NaN();}
+//    template<typename T> inline bool IsNan(T value){return (boost::math::isnan)(value);}
 
     /// Used by std::shared_ptr's to hold pointers it shouldn't auto-delete.
     struct NullDeleter
@@ -318,8 +318,8 @@ namespace gz4d
             Point(Vector<T,4> const &v):Vector<T,3>(v[0]/v[3],v[1]/v[3],v[2]/v[3]){}
             Point(T x, T y, T z):Vector<T,3>(x, y, z){}
             using Vector<T, 3>::operator=;
-            static Point Invalid(){return Vector<T,3>(Nan<T>());}
-            bool IsValid() const {return !(IsNan(Vector<T,3>::values[0])||IsNan(Vector<T,3>::values[1])||IsNan(Vector<T,3>::values[2]));}
+            static Point Invalid(){return Vector<T,3>(std::nan(""));}
+            bool IsValid() const {return !(std::isnan(Vector<T,3>::values[0])||std::isnan(Vector<T,3>::values[1])||std::isnan(Vector<T,3>::values[2]));}
             operator Vector<T, 4>() const {return Vector<T,4>(Vector<T,3>::values[0],Vector<T,3>::values[1],Vector<T,3>::values[2],1);}
     };
 
@@ -386,7 +386,7 @@ namespace gz4d
 
         bool empty() const
         {
-            return IsNan(_min[0]) || _min[0] > _max[0];
+            return std::isnan(_min[0]) || _min[0] > _max[0];
         }
 
         T getCenter() const
@@ -1005,12 +1005,6 @@ namespace gz4d
             ret = b+(a-b)*p;
         return ret;
     }
-
-    template <typename T, typename PU, typename RT> inline bool IsNan(Angle<T,PU,RT> const &a)
-    {
-        return IsNan(a.value());
-    }
-    
     
     template <typename T, typename RT> inline T sin(Angle<T,pu::Radian,RT> const &a)
     {
@@ -1351,7 +1345,7 @@ namespace gz4d
               double sinU2 = sin(U2);
 
               double l = L;
-              double last_l = Nan<double>();
+              double last_l = std::nan("");
               double cosl;
               double sinl;
               double sinSigma;
@@ -1376,7 +1370,7 @@ namespace gz4d
                   else
                       cos2Sigmam = cosSigma-((2.0*sinU1*sinU2)/cos2Alpha);
 
-                  if (!IsNan(last_l) && fabs(last_l - l) <= epsilon)
+                  if (!std::isnan(last_l) && fabs(last_l - l) <= epsilon)
                       break;
                   last_l = l;
       
