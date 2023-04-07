@@ -990,7 +990,7 @@ namespace gz4d
 
     template<typename T, typename PU, typename RT> bool isnan(const Angle<T, PU, RT>& angle)
     {
-        return ::isnan(angle.value());
+        return std::isnan(angle.value());
     }
     
     // interpolates period aware angles
