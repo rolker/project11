@@ -43,7 +43,7 @@ def timerCallback(event):
             ns.velocity_topic = nav_source['velocity_topic']
           except KeyError:
             pass
-        p.nav_sources.append(ns)
+          p.nav_sources.append(ns)
       except KeyError:
         pass
 
