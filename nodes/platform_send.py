@@ -63,8 +63,24 @@ def timerCallback(event):
         p.reference_y = platform['reference_y']
       except KeyError:
         pass
+      try:
+        p.color.r = platform['color']['red']
+      except KeyError:
+        pass
+      try:
+        p.color.g = platform['color']['green']
+      except KeyError:
+        pass
+      try:
+        p.color.b = platform['color']['blue']
+      except KeyError:
+        pass
 
       p.color.a = 1.0
+      try:
+        p.color.a = platform['color']['alpha']
+      except KeyError:
+        pass
 
       pl.platforms.append(p)
     platform_pub.publish(pl)
