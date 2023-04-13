@@ -2,6 +2,7 @@ udp_bridge/remotes:
     operator:
         port: 4200
         topics:
+          platforms: {source: /project11/platforms}
           nav_orientation: {source: project11/nav/orientation}
           nav_position: {source: project11/nav/position}
           nav_velocity: {source: project11/nav/velocity}
