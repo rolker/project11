@@ -15,6 +15,10 @@ repositories:
     type: git
     url: https://github.com/CCOMJHC/asv_sim.git
     version: noetic
+  ben_description:
+    type: git
+    url: https://github.com/CCOMJHC/ben_description.git
+    version: noetic
   ben_project11:
     type: git
     url: https://github.com/CCOMJHC/ben_project11.git
@@ -51,10 +55,13 @@ repositories:
     type: git
     url: https://github.com/CCOMJHC/manda_coverage.git
     version: noetic
-  marine_sensor_msgs:
+  marine_ais:
     type: git
-    url: https://github.com/CCOMJHC/marine_sensor_msgs.git
-    version: noetic
+    url: https://github.com/CCOMJHC/marine_ais.git
+  marine_msgs:
+    type: git
+    url: https://github.com/CCOMJHC/marine_msgs.git
+    version: main
   mission_manager:
     type: git
     url: https://github.com/CCOMJHC/mission_manager.git
@@ -93,14 +100,6 @@ repositories:
   s57_layer:
     type: git
     url: https://github.com/CCOMJHC/s57_layer.git
-  ben_description:
-    type: git
-    url: https://github.com/CCOMJHC/ben_description.git
-    version: noetic
-  traffic_sim:
-    type: git
-    url: https://github.com/CCOMJHC/traffic_sim.git
-    version: noetic
   udp_bridge:
     type: git
     url: https://github.com/CCOMJHC/udp_bridge.git
