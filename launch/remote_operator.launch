@@ -25,8 +25,8 @@
   </node>
 
   <param name="/$(arg namespace)/udp_bridge/remotes/operator/name" value="$(arg operatorNamespace)"/>
-  <param name="/$(arg namespace)/udp_bridge/remotes/operator/host" value="$(arg remoteHost)"/>
-  <param name="/$(arg namespace)/udp_bridge/remotes/operator/port" value="$(arg remotePort)"/>
+  <param name="/$(arg namespace)/udp_bridge/remotes/operator/connections/default/host" value="$(arg remoteHost)"/>
+  <param name="/$(arg namespace)/udp_bridge/remotes/operator/connections/default/port" value="$(arg remotePort)"/>
 
   <!-- <node pkg="rosservice" type="rosservice" name="add_remote" args="call /$(arg namespace)/udp_bridge/add_remote $(arg operatorNamespace) $(arg remoteHost) $(arg remotePort)"/> -->
 

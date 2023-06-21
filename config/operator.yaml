@@ -1,5 +1,7 @@
 udp_bridge/remotes:
-    robot:
+  robot:
+    connections:
+      default:
         host: localhost
         port: 4200
         topics:

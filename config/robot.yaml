@@ -1,5 +1,7 @@
 udp_bridge/remotes:
-    operator:
+  operator:
+    connections:
+      default:
         port: 4200
         topics:
           platforms: {source: /project11/platforms}
