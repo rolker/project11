@@ -8,21 +8,27 @@
   
   <rosparam command="load" file="$(find project11)/config/operator.yaml" ns="$(arg namespace)"/>
 
+  <!-- The udp_bridge_node is what sends and receives messages from select topics to the robot. -->
   <node if="$(arg enableBridge)" pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)">
     <param name="port" value="$(arg localPort)"/>
   </node>
 
+  <!-- Command bridge is used to robustly send operator commands over an unreliable connection. -->
   <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender" ns="$(arg robotNamespace)"/>
 
+  <!-- Redirects operator commands to the robot. -->
   <node pkg="remote_manager" type="remote_manager_node" name="remote_manager" ns="$(arg namespace)">
     <param name="remote" value="$(arg robotNamespace)"/>
   </node>
-   
+
+  <!-- Driver for joystick device. -->   
   <node if="$(arg operatorJoystick)" pkg="joy" type="joy_node" name="joy_node" ns="$(arg robotNamespace)">
     <param name="autorepeat_rate" value="10.0"/>
     <param name="deadzone" value="0.0"/>
   </node>
     
+  <!-- joy_to_helm converts joystick messages to Helm messages with throttle and rudder values, and 
+  sends piloting_mode change commands based on button clicks.-->
   <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm" ns="$(arg robotNamespace)">
     <remap from="helm" to="project11/piloting_mode/manual/helm"/>
   </node>
