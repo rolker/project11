@@ -1,9 +1,11 @@
-udp_bridge/remotes:
-  robot:
-    connections:
-      default:
-        host: localhost
-        port: 4200
-        topics:
-          project11_command: {source: project11/command}
-          piloting_mode_manual_helm: {source: project11/piloting_mode/manual/helm}
+udp_bridge:
+  name: operator
+  remotes:
+    robot:
+      connections:
+        default:
+          host: localhost
+          port: 4200
+          topics:
+            project11_command: {source: project11/command}
+            piloting_mode_manual_helm: {source: project11/piloting_mode/manual/helm}

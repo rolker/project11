@@ -1,23 +1,25 @@
-udp_bridge/remotes:
-  operator:
-    connections:
-      default:
-        port: 4200
-        topics:
-          platforms: {source: /project11/platforms}
-          nav_orientation: {source: project11/nav/orientation}
-          nav_position: {source: project11/nav/position}
-          nav_velocity: {source: project11/nav/velocity}
-          nav_active_sensor: {source: project11/nav/active_sensor}
-          project11_display: {source: project11/display}
-          project11_heartbeat: {source: project11/heartbeat}
-          project11_status_mission_manager: {source: project11/status/mission_manager}
-          project11_response: {source: project11/response}
-          diagnostics: {source: /diagnostics}
-          tf: {source: /tf}
-          tf_static: {source: /tf_static}
-          control_helm: {source: project11/control/helm}
-          odom: {source: project11/odom}
+udp_bridge:
+  name: robot
+  remotes:
+    operator:
+      connections:
+        default:
+          port: 4200
+          topics:
+            platforms: {source: /project11/platforms}
+            nav_orientation: {source: project11/nav/orientation}
+            nav_position: {source: project11/nav/position}
+            nav_velocity: {source: project11/nav/velocity}
+            nav_active_sensor: {source: project11/nav/active_sensor}
+            project11_display: {source: project11/display}
+            project11_heartbeat: {source: project11/heartbeat}
+            project11_status_mission_manager: {source: project11/status/mission_manager}
+            project11_response: {source: project11/response}
+            diagnostics: {source: /diagnostics}
+            tf: {source: /tf}
+            tf_static: {source: /tf_static}
+            control_helm: {source: project11/control/helm}
+            odom: {source: project11/odom}
             
 helm_manager/piloting_modes/active: ['manual', 'autonomous']
 helm_manager/piloting_modes/standby: ['standby']
