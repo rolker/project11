@@ -4,12 +4,14 @@
   <arg name="localPort" default="4200"/>
   <arg name="default_nav_stack" default="true"/>
   <arg name="odom_topic" default="project11/odom"/>
+  <arg name="bridge_name" default="$(arg namespace)"/>
 
   <rosparam command="load" file="$(find project11)/config/robot.yaml" ns="$(arg namespace)"/>
 
   <!-- The udp_bridge_node is what sends and receives messages from select topics to the operator. -->
   <node if="$(arg enableBridge)" pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)">
     <param name="port" value="$(arg localPort)"/>
+    <param name="name" value="$(arg bridge_name)"/>
   </node>
     
   <!-- Command bridge is used to robustly send operator commands over an unreliable connection. -->
