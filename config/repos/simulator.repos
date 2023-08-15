@@ -1,12 +1,4 @@
 repositories:
-  alex_mpc:
-    type: git
-    url: https://github.com/CCOMJHC/alex_mpc.git
-    version: noetic
-  alex_path_planner:
-    type: git
-    url: https://github.com/CCOMJHC/alex_path_planner.git
-    version: noetic
   asv_helm:
     type: git
     url: https://github.com/CCOMJHC/asv_helm.git
@@ -50,10 +42,6 @@ repositories:
   joy_to_helm:
     type: git
     url: https://github.com/CCOMJHC/joy_to_helm.git
-    version: noetic
-  manda_coverage:
-    type: git
-    url: https://github.com/CCOMJHC/manda_coverage.git
     version: noetic
   marine_ais:
     type: git
