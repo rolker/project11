@@ -5,6 +5,7 @@ udp_bridge:
       connections:
         default:
           port: 4200
+          maximumBytesPerSecond: 1000000
           topics:
             platforms: {source: /project11/platforms}
             nav_orientation: {source: project11/nav/orientation}
