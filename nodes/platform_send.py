@@ -5,10 +5,13 @@ from project11_msgs.msg import PlatformList, Platform, NavSource
 rospy.init_node("platform_sender")
 
 namespace = rospy.get_namespace()
+print('namespace', namespace)
 if len(namespace) > 1 and namespace[0] == '/':
   namespace = namespace[1:]
-namespace = namespace.split('/')[0]
-print('namespace',namespace)
+#namespace = namespace.split('/')[0]
+if len(namespace) > 0 and namespace[-1] == '/':
+  namespace = namespace[:-1]
+print('trimmed namespace',namespace)
 
 platform_pub = rospy.Publisher("/project11/platforms", PlatformList, queue_size=5)
 
