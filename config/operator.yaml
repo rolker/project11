@@ -6,6 +6,3 @@ udp_bridge:
         default:
           host: localhost
           port: 4200
-          topics:
-            project11_command: {source: project11/command}
-            piloting_mode_manual_helm: {source: project11/piloting_mode/manual/helm}

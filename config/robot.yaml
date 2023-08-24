@@ -21,6 +21,8 @@ udp_bridge:
             tf_static: {source: /tf_static}
             control_helm: {source: project11/control/helm}
             odom: {source: project11/odom}
+            nav_visualization_markers: {source: navigator/visualization_markers}
+
             
 helm_manager/piloting_modes/active: ['manual', 'autonomous']
 helm_manager/piloting_modes/standby: ['standby']

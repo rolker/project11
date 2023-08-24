@@ -14,6 +14,7 @@
     <param name="port" value="$(arg localPort)"/>
   </node>
   <rosparam param="udp_bridge/remotes/robot/name" ns="$(arg namespace)" subst_value="True">"$(arg robotBridgeName)"</rosparam>
+  <rosparam param="udp_bridge/remotes/robot/connections/default/topics" ns="$(arg namespace)" subst_value="True">{project11_command: {source: /$(arg robotNamespace)/project11/command}, piloting_mode_manual_helm: {source: /$(arg robotNamespace)/project11/piloting_mode/manual/helm}}</rosparam>
 
   <!-- Command bridge is used to robustly send operator commands over an unreliable connection. -->
   <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender" ns="$(arg robotNamespace)"/>
