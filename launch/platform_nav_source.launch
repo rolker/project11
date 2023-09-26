@@ -1,0 +1,19 @@
+<launch>
+  <arg name="namespace"/>
+  <arg name="platform_name" default="$(arg namespace)"/>
+  <arg name="nav_source" default="nav"/>
+  <arg name="position_topic" default="sensors/$(arg nav_source)/position"/>
+  <arg name="orientation_topic" default="sensors/$(arg nav_source)/orientation"/>
+  <arg name="velocity_topic" default="sensors/$(arg nav_source)/velocity"/>
+
+  <group ns="$(arg namespace)">
+    <group ns="project11/platforms/$(arg platform_name)/nav_sources/$(arg nav_source)">
+      <rosparam param="position_topic" subst_value="True">/$(arg namespace)/$(arg position_topic)</rosparam>
+      <rosparam param="orientation_topic" subst_value="True">/$(arg namespace)/$(arg orientation_topic)</rosparam>
+      <rosparam param="velocity_topic" subst_value="True">/$(arg namespace)/$(arg velocity_topic)</rosparam>
+    </group>
+
+    <!-- Todo add mru_transform and udp_bridge configs -->
+  </group>
+
+</launch>

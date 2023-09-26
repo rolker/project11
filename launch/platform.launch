@@ -1,0 +1,17 @@
+<launch>
+  <arg name="namespace"/>
+  <arg name="platform_name" default="$(arg namespace)"/>
+  <arg name="platform_package" default="$(arg namespace)_project11"/>
+  <arg name="platform_config" default="$(find $(arg platform_package))/config/platform.yaml"/>
+
+  <group ns="$(arg namespace)">
+    <group ns="project11/platforms/$(arg platform_name)">
+      <rosparam file="$(arg platform_config)" command="load"/>
+      <rosparam param="namespace" subst_value="True">$(arg namespace)</rosparam>
+      <rosparam param="robot_description" subst_value="True">$(arg namespace)/robot_description</rosparam>
+    </group>
+
+    <node pkg="project11" type="platform_send.py" name="platform_sender"/>
+  </group>
+
+</launch>

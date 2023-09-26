@@ -20,21 +20,23 @@
   <node pkg="command_bridge" type="command_bridge_sender_node.py" name="command_bridge_sender" ns="$(arg robotNamespace)"/>
 
   <!-- Redirects operator commands to the robot. -->
-  <node pkg="remote_manager" type="remote_manager_node" name="remote_manager" ns="$(arg namespace)">
+  <!-- <node pkg="remote_manager" type="remote_manager_node" name="remote_manager" ns="$(arg namespace)">
     <param name="remote" value="$(arg robotNamespace)"/>
-  </node>
+  </node> -->
 
-  <!-- Driver for joystick device. -->   
-  <node if="$(arg operatorJoystick)" pkg="joy" type="joy_node" name="joy_node" ns="$(arg robotNamespace)">
-    <param name="autorepeat_rate" value="10.0"/>
-    <param name="deadzone" value="0.0"/>
-  </node>
+  <!-- Driver for joystick device. -->
+  <group if="$(arg operatorJoystick)" ns="$(arg robotNamespace)">    
+    <node  pkg="joy" type="joy_node" name="joy_node" >
+      <param name="autorepeat_rate" value="10.0"/>
+      <param name="deadzone" value="0.0"/>
+    </node>
     
-  <!-- joy_to_helm converts joystick messages to Helm messages with throttle and rudder values, and 
-  sends piloting_mode change commands based on button clicks.-->
-  <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm" ns="$(arg robotNamespace)">
+    <!-- joy_to_helm converts joystick messages to Helm messages with throttle and rudder values, and 
+    sends piloting_mode change commands based on button clicks.-->
+    <node pkg="joy_to_helm" type="joy_to_helm.py" name="joy_to_helm">
     <remap from="helm" to="project11/piloting_mode/manual/helm"/>
-  </node>
+    </node>
+  </group>
 
   <node if="$(arg enableSound)" name="soundplay_node" pkg="sound_play" type="soundplay_node.py" ns="$(arg namespace)">
     <remap from="robotsound" to="project11/robotsound"/>

@@ -50,10 +50,12 @@
   <!-- project11_navigation is the plugin based navigation stack that uses a list of tasks to plan trajectories
   and generate commands to drive the robot. -->
   <node pkg="project11_navigation" type="navigator" name="navigator" ns="$(arg namespace)">
-    <rosparam if="$(arg default_nav_stack)" file="$(find project11_navigation)/config/default_stack.yaml" command="load"/>
     <remap from="~/cmd_vel" to="project11/piloting_mode/autonomous/cmd_vel"/>
     <remap from="~/enable" to="project11/piloting_mode/autonomous/active"/>
     <remap from="odom" to="project11/odom"/>
   </node>
+  <include if="$(arg default_nav_stack)" file="$(find project11_navigation)/launch/default_nav_stack.launch">
+    <arg name="namespace" value="$(arg namespace)/navigator"/>
+  </include>
 
 </launch>
