@@ -5,9 +5,9 @@ import tf2_ros
 
 from geographic_msgs.msg import GeoPose
 from geographic_msgs.msg import GeoPointStamped
-from geographic_msgs.msg import GeoPoint
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import Quaternion
 from nav_msgs.msg import Odometry
 
 import project11.wgs84
@@ -62,6 +62,40 @@ def yawToHeading(yaw):
         Float, heading: degrees, NED
     """
     return 90.0-yaw
+
+def yawRadiansToQuaternionMsg(yaw):
+    """ Convert yaw (radians, ENU) to a quaternion msg.
+
+    Args:
+        yaw: float  yaw: degrees, ENU
+        
+    Returns:
+        geometry_msgs/Quaternion
+    """
+    ret = Quaternion() 
+    if yaw is not None:
+        quat = quaternion_about_axis(yaw, (0,0,1))
+        ret.x = quat[0]
+        ret.y = quat[1]
+        ret.z = quat[2]
+        ret.w = quat[3]
+    return ret
+
+def headingToQuaternionMsg(heading):
+    """ Convert heading (degrees, NED) to a quaternion msg.
+
+    Args:
+        heading: float heading: degrees, NED
+        
+    Returns:
+        geometry_msgs/Quaternion
+    """
+    ret = Quaternion() 
+    if heading is not None:
+        yaw = math.radians(headingToYaw(heading))
+    else:
+        yaw = None
+    return yawRadiansToQuaternionMsg(yaw)
 
 def transformPointToGeoPoint(point, transform):
     """Transforms a Point or PointStamped to a GeoPointStamped using given transform to earth frame"""
@@ -132,12 +166,7 @@ class EarthTransforms(object):
         ret = do_transform_pose(ecef_pose, earth_to_frame)
 
         if heading is not None:
-            yaw = math.radians(headingToYaw(heading))
-            quat = quaternion_about_axis(yaw, (0,0,1))
-            ret.pose.orientation.x = quat[0]
-            ret.pose.orientation.y = quat[1]
-            ret.pose.orientation.z = quat[2]
-            ret.pose.orientation.w = quat[3]
+            ret.pose.orientation = headingToQuaternionMsg(heading)
 
         return ret
 

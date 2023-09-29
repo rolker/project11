@@ -43,7 +43,7 @@
   </node>
 
   <!-- mission_manager handles commands from the operator and manages the task list sent to the navigator.-->
-  <node pkg="mission_manager" type="mission_manager_navigator.py" name="mission_manager" ns="$(arg namespace)">
+  <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager" ns="$(arg namespace)">
       <param name="map_frame" value="$(arg namespace)/map"/>
   </node>
 

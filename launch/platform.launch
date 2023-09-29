@@ -2,7 +2,7 @@
   <arg name="namespace"/>
   <arg name="platform_name" default="$(arg namespace)"/>
   <arg name="platform_package" default="$(arg namespace)_project11"/>
-  <arg name="platform_config" default="$(find $(arg platform_package))/config/platform.yaml"/>
+  <arg name="platform_config" default="$(eval find(arg('platform_package'))+'/config/platform.yaml')"/>
 
   <group ns="$(arg namespace)">
     <group ns="project11/platforms/$(arg platform_name)">
