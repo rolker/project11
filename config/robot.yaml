@@ -16,7 +16,7 @@ udp_bridge:
             project11_heartbeat: {source: project11/heartbeat}
             project11_status_mission_manager: {source: project11/status/mission_manager}
             project11_response: {source: project11/response}
-            diagnostics: {source: /diagnostics}
+            # diagnostics: {source: /diagnostics}
             tf: {source: /tf}
             tf_static: {source: /tf_static}
             control_helm: {source: project11/control/helm}
