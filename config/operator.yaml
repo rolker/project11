@@ -4,5 +4,5 @@ udp_bridge:
     robot:
       connections:
         default:
-          host: localhost
+#          host: localhost
           port: 4200
