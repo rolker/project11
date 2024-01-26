@@ -20,7 +20,7 @@ udp_bridge:
             tf: {source: /tf}
             tf_static: {source: /tf_static}
             control_helm: {source: project11/control/helm}
-            odom: {source: project11/odom}
+            odom: {source: odom}
             nav_visualization_markers: {source: navigator/visualization_markers}
 
             

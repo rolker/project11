@@ -242,7 +242,7 @@ class RobotNavigation(EarthTransforms):
         EarthTransforms.__init__(self, tfBuffer)
         self.odometry = None
 
-        self.odom_sub = rospy.Subscriber('project11/odom', Odometry, self.odometryCallback, queue_size = 1)
+        self.odom_sub = rospy.Subscriber('odom', Odometry, self.odometryCallback, queue_size = 1)
 
 
     def odometryCallback(self, msg):

@@ -3,7 +3,6 @@
   <arg name="enableBridge" default="true"/>
   <arg name="localPort" default="4200"/>
   <arg name="default_nav_stack" default="true"/>
-  <arg name="odom_topic" default="project11/odom"/>
   <arg name="bridge_name" default="$(arg namespace)"/>
 
   <rosparam command="load" file="$(find project11)/config/robot.yaml" ns="$(arg namespace)"/>
@@ -26,7 +25,6 @@
     <remap from="nav/orientation" to="project11/nav/orientation"/>
     <remap from="nav/velocity" to="project11/nav/velocity"/>
     <remap from="nav/active_sensor" to="project11/nav/active_sensor"/>
-    <remap from="odom" to="project11/odom"/>
   </node>
   
   <!-- helm_manager is the low level heart of project11. It manages which control messages get 
@@ -38,7 +36,6 @@
     <remap from="heartbeat" to="project11/heartbeat"/>
     <remap from="status/helm" to="project11/status/helm"/>
     <remap from="piloting_mode" to="project11/piloting_mode"/>
-    <remap from="odom" to="$(arg odom_topic)"/>
     <param name="piloting_mode_prefix" value="project11/piloting_mode/"/>
   </node>
 
@@ -52,7 +49,6 @@
   <node pkg="project11_navigation" type="navigator" name="navigator" ns="$(arg namespace)">
     <remap from="~/cmd_vel" to="project11/piloting_mode/autonomous/cmd_vel"/>
     <remap from="~/enable" to="project11/piloting_mode/autonomous/active"/>
-    <remap from="odom" to="project11/odom"/>
   </node>
   <include if="$(arg default_nav_stack)" file="$(find project11_navigation)/launch/default_nav_stack.launch">
     <arg name="namespace" value="$(arg namespace)/navigator"/>
