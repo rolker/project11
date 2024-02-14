@@ -5,53 +5,72 @@
   <arg name="default_nav_stack" default="true"/>
   <arg name="bridge_name" default="$(arg namespace)"/>
 
-  <rosparam command="load" file="$(find project11)/config/robot.yaml" ns="$(arg namespace)"/>
+  <arg name="tf_prefix" default="$(arg namespace)"/>
+  <arg name="base_frame" value="$(arg tf_prefix)/base_link"/>
+  <arg name="map_frame" value="$(arg tf_prefix)/map"/>
+  <arg name="odom_frame" value="$(arg tf_prefix)/odom"/>
 
-  <!-- The udp_bridge_node is what sends and receives messages from select topics to the operator. -->
-  <node if="$(arg enableBridge)" pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge" ns="$(arg namespace)">
-    <param name="port" value="$(arg localPort)"/>
-    <param name="name" value="$(arg bridge_name)"/>
-  </node>
+
+  <group ns="$(arg namespace)">
+
+    <rosparam command="load" file="$(find project11)/config/robot.yaml"/>
+
+    <!-- The udp_bridge_node is what sends and receives messages from select topics to the operator. -->
+    <node if="$(arg enableBridge)" pkg="udp_bridge" type="udp_bridge_node" name="udp_bridge">
+      <param name="port" value="$(arg localPort)"/>
+      <param name="name" value="$(arg bridge_name)"/>
+    </node>
+      
+    <!-- Command bridge is used to robustly send operator commands over an unreliable connection. -->
+    <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver"/>
+
+    <!-- mru_transform Provides tf2 transforms from multiple gps and motion sensor sources. -->
+    <node pkg="mru_transform" type="mru_transform_node" name="mru_transform">
+      <param name="base_frame" value="$(arg base_frame)"/>
+      <param name="map_frame" value="$(arg map_frame)"/>
+      <param name="odom_frame" value="$(arg odom_frame)"/>
+      <remap from="nav/position" to="project11/nav/position"/>
+      <remap from="nav/orientation" to="project11/nav/orientation"/>
+      <remap from="nav/velocity" to="project11/nav/velocity"/>
+      <remap from="nav/active_sensor" to="project11/nav/active_sensor"/>
+    </node>
     
-  <!-- Command bridge is used to robustly send operator commands over an unreliable connection. -->
-  <node pkg="command_bridge" type="command_bridge_receiver_node.py" name="command_bridge_receiver" ns="$(arg namespace)"/>
+    <!-- helm_manager is the low level heart of project11. It manages which control messages get 
+    sent to the robot based on piloting mode and reports the piloting mode and other status
+    as a heartbeat message. -->
+    <node pkg="helm_manager" type="helm_manager_node" name="helm_manager">
+      <remap from="out/helm" to="project11/control/helm"/>
+      <remap from="out/cmd_vel" to="project11/control/cmd_vel"/>
+      <remap from="heartbeat" to="project11/heartbeat"/>
+      <remap from="status/helm" to="project11/status/helm"/>
+      <remap from="piloting_mode" to="project11/piloting_mode"/>
+      <param name="piloting_mode_prefix" value="project11/piloting_mode/"/>
+    </node>
 
-  <!-- mru_transform Provides tf2 transforms from multiple gps and motion sensor sources. -->
-  <node pkg="mru_transform" type="mru_transform_node" name="mru_transform" ns="$(arg namespace)">
-    <param name="base_frame" value="$(arg namespace)/base_link"/>
-    <param name="map_frame" value="$(arg namespace)/map"/>
-    <param name="odom_frame" value="$(arg namespace)/odom"/>
-    <remap from="nav/position" to="project11/nav/position"/>
-    <remap from="nav/orientation" to="project11/nav/orientation"/>
-    <remap from="nav/velocity" to="project11/nav/velocity"/>
-    <remap from="nav/active_sensor" to="project11/nav/active_sensor"/>
-  </node>
-  
-  <!-- helm_manager is the low level heart of project11. It manages which control messages get 
-  sent to the robot based on piloting mode and reports the piloting mode and other status
-  as a heartbeat message. -->
-  <node pkg="helm_manager" type="helm_manager_node" name="helm_manager" ns="$(arg namespace)">
-    <remap from="out/helm" to="project11/control/helm"/>
-    <remap from="out/cmd_vel" to="project11/control/cmd_vel"/>
-    <remap from="heartbeat" to="project11/heartbeat"/>
-    <remap from="status/helm" to="project11/status/helm"/>
-    <remap from="piloting_mode" to="project11/piloting_mode"/>
-    <param name="piloting_mode_prefix" value="project11/piloting_mode/"/>
-  </node>
+    <!-- mission_manager handles commands from the operator and manages the task list sent to the navigator.-->
+    <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager">
+        <param name="map_frame" value="$(arg map_frame)"/>
+    </node>
 
-  <!-- mission_manager handles commands from the operator and manages the task list sent to the navigator.-->
-  <node pkg="mission_manager" type="mission_manager_node.py" name="mission_manager" ns="$(arg namespace)">
-      <param name="map_frame" value="$(arg namespace)/map"/>
-  </node>
+    <!-- project11_navigation is the plugin based navigation stack that uses a list of tasks to plan trajectories
+    and generate commands to drive the robot. -->
+    <node pkg="project11_navigation" type="navigator" name="navigator">
+      <remap from="~/cmd_vel" to="project11/piloting_mode/autonomous/cmd_vel"/>
+      <remap from="~/enable" to="project11/piloting_mode/autonomous/active"/>
+    </node>
+    <node pkg="project11_navigation" type="occupancy_vector_map_from_geo" name="occupancy_vector_map_from_geo">
+      <remap from="~/input" to="project11/avoidance_map"/>
+      <remap from="~/output" to="project11/avoidance_map_local"/>
+      <param name="frame_id" value="$(arg map_frame)"/>
+    </node>
+    <node pkg="project11_navigation" type="occupancy_grid_from_vector_map" name="occupancy_grid_from_vector_map">
+      <remap from="~/input" to="project11/avoidance_map_local"/>
+      <remap from="~/output" to="project11/avoidance_grid"/>
+    </node>
+    <include if="$(arg default_nav_stack)" file="$(find project11_navigation)/launch/default_nav_stack.launch">
+      <arg name="namespace" value="navigator"/>
+    </include>
 
-  <!-- project11_navigation is the plugin based navigation stack that uses a list of tasks to plan trajectories
-  and generate commands to drive the robot. -->
-  <node pkg="project11_navigation" type="navigator" name="navigator" ns="$(arg namespace)">
-    <remap from="~/cmd_vel" to="project11/piloting_mode/autonomous/cmd_vel"/>
-    <remap from="~/enable" to="project11/piloting_mode/autonomous/active"/>
-  </node>
-  <include if="$(arg default_nav_stack)" file="$(find project11_navigation)/launch/default_nav_stack.launch">
-    <arg name="namespace" value="$(arg namespace)/navigator"/>
-  </include>
+  </group>
 
 </launch>

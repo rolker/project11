@@ -22,23 +22,28 @@ namespace project11
         }
       }
       
-      bool canTransform(std::string map_frame="map")
+      bool canTransform(std::string map_frame="map", ros::Time target_time = ros::Time(0), ros::Duration timeout = ros::Duration(0.5))
       {
-        return buffer()->canTransform("earth", map_frame, ros::Time(0), ros::Duration(0.5));
+        return buffer()->canTransform("earth", map_frame, target_time, timeout);
       }
 
-      geometry_msgs::Point wgs84_to_map(geographic_msgs::GeoPoint const &position, std::string map_frame="map")
+      geometry_msgs::Point wgs84_to_map(geographic_msgs::GeoPoint const &position, std::string map_frame="map", ros::Time target_time = ros::Time(0))
       {
         geometry_msgs::Point ret;
         try
         {
-          geometry_msgs::TransformStamped t = buffer()->lookupTransform(map_frame,"earth",ros::Time(0));
+          geometry_msgs::TransformStamped t = buffer()->lookupTransform(map_frame,"earth",target_time);
           LatLongDegrees p_ll;
           fromMsg(position, p_ll);
+          bool alt_is_nan = std::isnan(position.altitude);
+          if(alt_is_nan)
+            p_ll.altitude() = 0.0;
           ECEF p_ecef = p_ll;
           geometry_msgs::Point in;
           toMsg(p_ecef, in);
           tf2::doTransform(in,ret,t);
+          if(alt_is_nan)
+            ret.z = std::nan("");
         }
         catch (tf2::TransformException &ex)
         {
@@ -47,12 +52,12 @@ namespace project11
         return ret;
       }
       
-      geographic_msgs::GeoPoint map_to_wgs84(geometry_msgs::Point const &point, std::string map_frame="map")
+      geographic_msgs::GeoPoint map_to_wgs84(geometry_msgs::Point const &point, std::string map_frame="map", ros::Time target_time = ros::Time(0))
       {
           geographic_msgs::GeoPoint ret;
           try
           {
-            geometry_msgs::TransformStamped t = buffer()->lookupTransform("earth",map_frame,ros::Time(0));
+            geometry_msgs::TransformStamped t = buffer()->lookupTransform("earth",map_frame, target_time);
             geometry_msgs::Point out;
             tf2::doTransform(point,out,t);
             ECEF out_ecef;

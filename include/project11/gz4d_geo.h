@@ -51,15 +51,6 @@ namespace gz4d
         return !(i%2);
     }
 
-//     inline bool IsTrue(std::string const &s)
-//     {
-//         std::string l = boost::algorithm::to_lower_copy(boost::algorithm::trim_copy(s));
-//         return (l == "true" || l == "yes" || l == "on" || l == "1" || l == "t" || l == "y");
-//     }
-    
-//    template<typename T> inline T Nan(){return std::numeric_limits<T>::quiet_NaN();}
-//    template<typename T> inline bool IsNan(T value){return (boost::math::isnan)(value);}
-
     /// Used by std::shared_ptr's to hold pointers it shouldn't auto-delete.
     struct NullDeleter
     {

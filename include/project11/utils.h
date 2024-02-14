@@ -23,24 +23,24 @@ namespace project11
     return v3.length();
   }
   
-  typedef gz4d::GeoPointLatLongDegrees LatLongDegrees;
-  typedef gz4d::GeoPointECEF ECEF;
-  typedef gz4d::Point<double> Point;
-  typedef gz4d::LocalENU ENUFrame;
+  using LatLongDegrees = gz4d::GeoPointLatLongDegrees;
+  using ECEF = gz4d::GeoPointECEF;
+  using Point = gz4d::Point<double>;
+  using ENUFrame = gz4d::LocalENU;
   
   // angle types that do not wrap
-  typedef gz4d::Angle<double, gz4d::pu::Degree, gz4d::rt::Unclamped> AngleDegrees;
-  typedef gz4d::Angle<double, gz4d::pu::Radian, gz4d::rt::Unclamped> AngleRadians;
+  using AngleDegrees = gz4d::Angle<double, gz4d::pu::Degree, gz4d::rt::Unclamped>;
+  using AngleRadians = gz4d::Angle<double, gz4d::pu::Radian, gz4d::rt::Unclamped>;
   
   // angle types that wrap at +/- half a circle
-  typedef gz4d::Angle<double, gz4d::pu::Degree, gz4d::rt::ZeroCenteredPeriod> AngleDegreesZeroCentered;
-  typedef gz4d::Angle<double, gz4d::pu::Radian, gz4d::rt::ZeroCenteredPeriod> AngleRadiansZeroCentered;
+  using AngleDegreesZeroCentered = gz4d::Angle<double, gz4d::pu::Degree, gz4d::rt::ZeroCenteredPeriod>;
+  using AngleRadiansZeroCentered = gz4d::Angle<double, gz4d::pu::Radian, gz4d::rt::ZeroCenteredPeriod>;
   
   // angle types that wrap at 0 and full circle
-  typedef gz4d::Angle<double, gz4d::pu::Degree, gz4d::rt::PositivePeriod> AngleDegreesPositive;
-  typedef gz4d::Angle<double, gz4d::pu::Radian, gz4d::rt::PositivePeriod> AngleRadiansPositive;
+  using AngleDegreesPositive = gz4d::Angle<double, gz4d::pu::Degree, gz4d::rt::PositivePeriod>;
+  using AngleRadiansPositive = gz4d::Angle<double, gz4d::pu::Radian, gz4d::rt::PositivePeriod>;
   
-  typedef gz4d::geo::WGS84::Ellipsoid WGS84;
+  using WGS84 = gz4d::geo::WGS84::Ellipsoid;
   
   template <typename A> void fromMsg(const A& a, LatLongDegrees &b)
   {

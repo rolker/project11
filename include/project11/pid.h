@@ -130,7 +130,7 @@ private:
     Ki_ = msg->Ki;
     Kd_ = msg->Kd;
     windup_limit_ = msg->windup_limit;
-    upper_limit_ = msg->windup_limit;
+    upper_limit_ = msg->upper_limit;
     lower_limit_ = msg->lower_limit;
   }
 
