@@ -1,33 +1,52 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.5.1)
+
 project(project11)
 
-add_compile_options(-std=c++11)
+set(CMAKE_CXX_STANDARD 17)
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
 
-find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  geometry_msgs
-  tf2
-  tf2_geometry_msgs
-  tf2_ros
-)
+find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 
-catkin_python_setup()
+find_package(geographic_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(project11_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(rclcpp REQUIRED)
 
-catkin_package(
-  INCLUDE_DIRS include
-  LIBRARIES project11_utils
-  CATKIN_DEPENDS roscpp geometry_msgs tf2 tf2_geometry_msgs tf2_ros
-)
 
-include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
-)
+ament_python_install_package(${PROJECT_NAME})
 
 add_library(project11_utils src/utils.cpp)
 
-install(DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-  FILES_MATCHING PATTERN "*.h"
-  PATTERN ".svn" EXCLUDE
+target_include_directories(project11_utils
+  PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+    "$<INSTALL_INTERFACE:include/${PROJECT_NAME}>"
 )
+
+ament_target_dependencies(project11_utils
+  rclcpp
+  tf2
+)
+
+install(
+  DIRECTORY include/
+  DESTINATION include/${PROJECT_NAME}
+)
+
+install(TARGETS project11_utils
+  EXPORT export_${PROJECT_NAME}
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+ament_export_dependencies(geographic_msgs geometry_msgs project11_msgs tf2_ros)
+
+ament_package()
+
