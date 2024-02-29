@@ -1,9 +1,9 @@
 #ifndef PROJECT11_PID_H
 #define PROJECT11_PID_H
 
-#include <ros/ros.h>
-#include <project11_msgs/PIDParameters.h>
-#include <project11_msgs/PIDDebug.h>
+#include <rclcpp/rclcpp.hpp>
+#include <project11_msgs/msg/pid_parameters.hpp>
+#include <project11_msgs/msg/pid_debug.hpp>
 
 namespace project11
 {
@@ -12,20 +12,28 @@ class PID
 {
 public:  
 
-  void configure(ros::NodeHandle nh)
+  PID(rclcpp::Node::SharedPtr node, std::string prefix = "pid")
   {
-    Kp_ = nh.param("Kp", Kp_);
-    Ki_ = nh.param("Ki", Ki_);
-    Kd_ = nh.param("Kd", Kd_);
-    windup_limit_ = nh.param("windup_limit", windup_limit_);
-    upper_limit_ = nh.param("upper_limit", upper_limit_);
-    lower_limit_ = nh.param("lower_limit", lower_limit_);
+    node_ = node;
+    update_parameters_callback_ = node->add_post_set_parameters_callback(std::bind(&PID::updateParameters, this, std::placeholders::_1));
 
-    max_dt_ = ros::Duration(nh.param("max_dt", max_dt_.toSec()));
+    parameter_prefix_ = prefix;
+    if(!parameter_prefix_.empty())
+      parameter_prefix_ += ".";
 
+    node->declare_parameter<double>(parameter_prefix_+"kp", Kp_);
+    node->declare_parameter<double>(parameter_prefix_+"ki", Ki_);
+    node->declare_parameter<double>(parameter_prefix_+"kd", Kd_);
+    node->declare_parameter<double>(parameter_prefix_+"windup_limit", windup_limit_);
+    node->declare_parameter<double>(parameter_prefix_+"upper_limit", upper_limit_);
+    node->declare_parameter<double>(parameter_prefix_+"lower_limit", lower_limit_);
 
-    set_parameters_sub_ = nh.subscribe("set_parameters", 10, &PID::parameters_callback, this);
-    debug_pub_ = nh.advertise<project11_msgs::PIDDebug>("debug", 10);
+    node->declare_parameter<double>(parameter_prefix_+"max_dt", max_dt_.seconds());
+    node->declare_parameter<bool>(parameter_prefix_+"publish_debug", false);
+
+    topic_prefix_ = prefix;
+    if(!topic_prefix_.empty())
+      topic_prefix_ += "/";
   }
 
   double setPoint(double set_point)
@@ -43,19 +51,19 @@ public:
   {
     integral_ = 0.0;
     last_error_ = 0.0;
-    last_timestamp_= ros::Time();
+    last_timestamp_= rclcpp::Time();
   }
 
-  double update(double process_variable, ros::Time timestamp=ros::Time())
+  double update(double process_variable, rclcpp::Time timestamp=rclcpp::Time())
   {
-    if(timestamp.is_zero())
-      timestamp = ros::Time::now();
+    if(timestamp.nanoseconds() == 0)
+      timestamp = node_->get_clock()->now();
 
     double error = set_point_ - process_variable;
     double derivative = 0.0;
-    ros::Duration dt;
+    auto dt = rclcpp::Duration::from_seconds(0.0);
 
-    if(last_timestamp_.isValid())
+    if(last_timestamp_.nanoseconds() != 0)
     {
       if(timestamp > last_timestamp_)
       {
@@ -67,11 +75,11 @@ public:
         }
         else
         {
-          integral_ += error*dt.toSec();
+          integral_ += error*dt.seconds();
           integral_ = std::min(integral_, windup_limit_);
           integral_ = std::max(integral_, -windup_limit_);
           
-          derivative = (error - last_error_)/dt.toSec();
+          derivative = (error - last_error_)/dt.seconds();
         }
       }
     }
@@ -83,27 +91,28 @@ public:
     control_effort = std::min(control_effort, upper_limit_);
     control_effort = std::max(control_effort, lower_limit_);
 
-    project11_msgs::PIDDebug debug;
-    debug.header.stamp = timestamp;
-    debug.parameters.Kp = Kp_;
-    debug.parameters.Ki = Ki_;
-    debug.parameters.Kd = Kd_;
-    debug.parameters.windup_limit = windup_limit_;
-    debug.parameters.upper_limit = upper_limit_;
-    debug.parameters.lower_limit = lower_limit_;
-    debug.set_point = set_point_;
-    debug.process_variable = process_variable;
-    debug.error = error;
-    debug.dt = dt.toSec();
-    debug.integral = integral_;
-    debug.derivative = derivative;
-    debug.control_effort = control_effort;
-    debug.p = Kp_*error;
-    debug.i = Ki_*integral_;
-    debug.d = Kd_*derivative;
-
-    if(debug_pub_)
-      debug_pub_.publish(debug);
+    if(debug_publisher_)
+    {
+      project11_msgs::msg::PIDDebug debug;
+      debug.header.stamp = timestamp;
+      debug.parameters.kp = Kp_;
+      debug.parameters.ki = Ki_;
+      debug.parameters.kd = Kd_;
+      debug.parameters.windup_limit = windup_limit_;
+      debug.parameters.upper_limit = upper_limit_;
+      debug.parameters.lower_limit = lower_limit_;
+      debug.set_point = set_point_;
+      debug.process_variable = process_variable;
+      debug.error = error;
+      debug.dt = dt.seconds();
+      debug.integral = integral_;
+      debug.derivative = derivative;
+      debug.control_effort = control_effort;
+      debug.p = Kp_*error;
+      debug.i = Ki_*integral_;
+      debug.d = Kd_*derivative;
+      debug_publisher_->publish(debug);
+    }
 
     return control_effort;
   }
@@ -124,22 +133,40 @@ public:
   }
 
 private:
-  void parameters_callback(const project11_msgs::PIDParameters::ConstPtr &msg)
+  void updateParameters(const std::vector<rclcpp::Parameter> & parameters)
   {
-    Kp_ = msg->Kp;
-    Ki_ = msg->Ki;
-    Kd_ = msg->Kd;
-    windup_limit_ = msg->windup_limit;
-    upper_limit_ = msg->upper_limit;
-    lower_limit_ = msg->lower_limit;
+    for(const auto& param: parameters)
+    {
+      if(param.get_name() == parameter_prefix_+"kp")
+        Kp_ = param.as_double();
+      if(param.get_name() == parameter_prefix_+"ki")
+        Ki_ = param.as_double();
+      if(param.get_name() == parameter_prefix_+"kd")
+        Kd_ = param.as_double();
+      if(param.get_name() == parameter_prefix_+"windup_limit")
+        windup_limit_ = param.as_double();
+      if(param.get_name() == parameter_prefix_+"upper_limit")
+        upper_limit_ = param.as_double();
+      if(param.get_name() == parameter_prefix_+"lower_limit")
+        lower_limit_ = param.as_double();
+      if(param.get_name() == parameter_prefix_+"max_dt")
+        max_dt_ = rclcpp::Duration::from_seconds(param.as_double());
+      if(param.get_name() == parameter_prefix_+"publish_debug")
+      {
+        if(param.as_bool())
+        {
+          if(!debug_publisher_)
+            debug_publisher_ = node_->create_publisher<project11_msgs::msg::PIDDebug>(topic_prefix_+"debug", 10);
+        }
+        else
+          debug_publisher_.reset();
+      }
+    }
   }
-
-  ros::Subscriber set_parameters_sub_;
-  ros::Publisher debug_pub_;
 
   double set_point_ = 0.0;
   
-  ros::Time last_timestamp_;
+  rclcpp::Time last_timestamp_;
   double last_error_;
 
   double integral_ = 0.0;
@@ -152,7 +179,17 @@ private:
   double upper_limit_ = 1000.0;
   double lower_limit_ = -1000.0;
 
-  ros::Duration max_dt_ = ros::Duration(5.0);
+  rclcpp::Duration max_dt_ = rclcpp::Duration::from_seconds(5.0);
+
+  /// Prepended to parameter names
+  std::string parameter_prefix_;
+
+  /// Prepended to topic names
+  std::string topic_prefix_;
+
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::node_interfaces::PostSetParametersCallbackHandle::SharedPtr update_parameters_callback_;
+  rclcpp::Publisher<project11_msgs::msg::PIDDebug>::SharedPtr debug_publisher_;
 
 };
 
