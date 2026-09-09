@@ -146,6 +146,20 @@ TEST(DepthAdaptiveLevel, FloatNarrowingCannotInvertTheLadder)
   EXPECT_EQ(depthAdaptiveLevel(1.0e40, narrow).level(), narrow.coarsest_level);
 }
 
+// The published policy IS the defaults. Every other test derives its
+// expectations from the same struct, so changing a default would keep the whole
+// suite green while contradicting the ladder the ADR and README publish to
+// operators. Pin the operator-decided values themselves (uma#369).
+TEST(DepthAdaptiveLevel, DefaultPolicyIsThePublishedOne)
+{
+  const DepthAdaptiveLevelPolicy policy;
+  EXPECT_DOUBLE_EQ(policy.capture_distance_scale, 0.05) <<
+    "mirrors cube_bathymetry::Parameters::capture_distance_scale — there is no "
+    "automated link between the two repos, so a change here must be deliberate";
+  EXPECT_EQ(policy.finest_level, 14u) << "operator-pinned fine clamp (~0.057 m cells)";
+  EXPECT_EQ(policy.coarsest_level, 8u) << "operator-pinned coarse clamp (~3.624 m cells)";
+}
+
 // The level must never get finer as the water gets deeper: a regression inside
 // one band would silently reintroduce the original bug at that band only.
 TEST(DepthAdaptiveLevel, MonotonicInDepth)
@@ -227,7 +241,12 @@ TEST(DepthAdaptiveLevel, RegressionAgainstFixedLevelTen)
   EXPECT_GT(gggs::Level(10).cellSize(), 0.05 * 9.0) << "the defect this issue reports";
 
   const DepthAdaptiveLevelPolicy policy;
-  for (double depth = transitionDepth(policy.finest_level); depth <= 60.0; depth += 0.05) {
+  // Start a hair ABOVE the fine clamp's boundary: exactly on it, which side of
+  // fromCellSize's ceil() the request lands on is a rounding accident that
+  // TransitionDepths deliberately declines to assert on.
+  for (double depth = transitionDepth(policy.finest_level) * 1.001; depth <= 60.0;
+    depth += 0.05)
+  {
     const double capture_radius_m = policy.capture_distance_scale * depth;
     ASSERT_LE(depthAdaptiveLevel(depth).cellSize(), capture_radius_m + 1e-9) <<
       "cell coarser than the capture radius at depth " << depth;

@@ -28,8 +28,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <limits>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 namespace marine_bathymetry_store
 {
@@ -38,8 +41,16 @@ namespace
 {
 
 /// Highest level `gggs::Level` accepts (level.h clamps `fromCellSize` to this
-/// and the constructor throws above it).
-constexpr uint8_t kMaxGggsLevel = 20;
+/// and the constructor throws above it). Derived from the GGGS level table, not
+/// transcribed from it: a table change is then a compile error here rather than
+/// a silently over-restrictive clamp.
+constexpr std::size_t kGggsLevelCount =
+  std::tuple_size<std::remove_cv_t<decltype(gggs::levels)>>::value;
+static_assert(kGggsLevelCount > 0, "the GGGS level table is empty");
+static_assert(
+  kGggsLevelCount - 1 <= std::numeric_limits<uint8_t>::max(),
+  "the GGGS level table no longer fits the uint8_t level type");
+constexpr uint8_t kMaxGggsLevel = static_cast<uint8_t>(kGggsLevelCount - 1);
 
 }  // namespace
 
@@ -99,7 +110,11 @@ gggs::Level depthAdaptiveLevel(double depth_m, const DepthAdaptiveLevelPolicy & 
 
   // fromCellSize returns the level whose cells are AT OR FINER than the request,
   // so a tile sized this way never has cells coarser than the capture radius
-  // that produced them.
+  // that produced them -- EXCEPT where the fine clamp binds. Below ~1.13 m of
+  // water the request (0.05 * d) is finer than the level-14 cell (0.057 m), and
+  // the clamp holds the lattice there: shallower than that, cells ARE coarser
+  // than the capture radius. That is the clamp doing its job, not a violated
+  // invariant.
   const uint8_t unclamped = gggs::Level::fromCellSize(requested_cell_size).level();
 
   return gggs::Level(std::clamp(unclamped, policy.coarsest_level, policy.finest_level));

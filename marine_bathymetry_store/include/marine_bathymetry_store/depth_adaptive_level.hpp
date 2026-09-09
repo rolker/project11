@@ -57,6 +57,12 @@
 /// | 13 | 0.113 m | 108.7 m | 2.26 m <= depth < 4.53 m |
 /// | 14 (fine clamp) | 0.057 m | 54.4 m | depth < 2.26 m |
 ///
+/// The clamps are the one exception to "a tile's cells are never coarser than
+/// the capture radius that produced them": below ~1.13 m of water the request
+/// (`0.05 · d`) is finer than a level-14 cell (0.057 m) and the fine clamp holds
+/// the lattice there, so cells shallower than that ARE coarser than the capture
+/// radius. Deeper than ~72.5 m the coarse clamp binds the other way.
+///
 /// Level 10 is what every `processed` tile is written at today, so relative to
 /// today each step finer is a **4x** cell- and tile-count increase over the same
 /// ground: 4x at level 11, 16x at 12, 64x at 13 and **256x** at the level-14
@@ -68,9 +74,18 @@
 /// **Decision unit: one level per store tile, sized from the SHALLOWEST depth in
 /// that tile.** The shallowest sounding has the tightest capture radius, so
 /// sizing the lattice from it is what keeps every sounding in the unit within
-/// its own capture distance of a node. The scalar signature encodes exactly that
-/// ("one depth decides one level") and may change — to a depth range, say —
-/// when the writer lands.
+/// its own capture distance of a node.
+///
+/// Note this is **circular as stated**: the level chosen *defines* the tile's
+/// extent (54.4 m at level 14, 869.7 m at level 10), so "the shallowest depth in
+/// that tile" is not determinable before the level is. The writer
+/// (cube_bathymetry#143) must break the circle — either by naming a
+/// level-independent decision region (a fixed patch, or the CUBE sheet's own
+/// tiles) and sizing from the shallowest depth in *that*, or by iterating to a
+/// fixpoint (choose a level from a provisional depth, re-read the shallowest
+/// depth over the resulting extent, repeat until stable). This function does not
+/// decide which; its scalar signature encodes only "one depth decides one
+/// level", and may change — to a depth range, say — when the writer lands.
 ///
 /// **Nothing calls this yet.** The writer is
 /// [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143):
@@ -137,6 +152,17 @@ struct DepthAdaptiveLevelPolicy
 ///         is inverted (`finest_level < coarsest_level`), if either clamp is
 ///         outside the GGGS level range, or if `capture_distance_scale` is not
 ///         finite and positive.
+///
+/// @note **Expected caller behaviour on the throw.** NaN is reachable in normal
+///   use — the "shallowest depth" of a decision unit with no data at all is NaN
+///   — and the destined caller (`import_bag`, cube_bathymetry#143) has no
+///   top-level catch around its tile loop, so an uncaught `invalid_argument`
+///   would end a multi-hour import. A no-data unit is not an error: the caller
+///   should **skip that unit** (there is nothing to write) rather than let the
+///   throw propagate, and treat the policy/configuration throws — which are
+///   genuine misconfiguration, identical for every tile — as fatal at startup.
+///   The throw exists so a NaN can never be *silently* mapped to a level, not to
+///   make an empty tile fatal.
 gggs::Level depthAdaptiveLevel(
   double depth_m, const DepthAdaptiveLevelPolicy & policy = DepthAdaptiveLevelPolicy());
 

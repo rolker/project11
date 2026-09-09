@@ -330,12 +330,20 @@ tile holds today, so each step finer is **4× the cells and tiles over the same
 ground**: 4× at 11, 16× at 12, 64× at 13, **256×** at the level-14 clamp.
 
 - **Decision unit**: one level per store tile, sized from the **shallowest**
-  depth in the tile (that sounding has the tightest capture radius). The scalar
-  signature may change when the writer lands.
+  depth in the tile (that sounding has the tightest capture radius). This is
+  circular as stated — the level chosen *defines* the tile extent — so the writer
+  (cube_bathymetry#143) must break the circle with a level-independent decision
+  region or a fixpoint iteration. The scalar signature may change when it lands.
+- **The clamps are the exception** to "cells are never coarser than the capture
+  radius": below ~1.13 m of water the request is finer than a level-14 cell and
+  the fine clamp holds the lattice there.
 - **Fails loud**: a non-finite depth, an inverted or out-of-range clamp, and a
-  non-positive `capture_distance_scale` all throw `std::invalid_argument`. Zero
-  depth returns the fine clamp, guarded before `fromCellSize` (whose `log2(0)`
-  path is undefined).
+  non-positive `capture_distance_scale` all throw `std::invalid_argument`. A
+  caller whose decision unit has no data (shallowest depth = NaN) should skip
+  that unit rather than let the throw end a multi-hour import. A zero depth —
+  and any request that underflows or overflows the float `fromCellSize` takes —
+  returns a clamp rather than reaching its undefined `log2(0)`/`log2(inf)` path:
+  the fine clamp at the underflow end, the coarse clamp at the overflow end.
 - **Nothing calls it yet.** `import_bag` builds one `cube::GeoMapSheet` per run
   and pins the store cell size to it, so CUBE's estimation grid and the store
   tiling are one resolution by construction; decoupling them is
