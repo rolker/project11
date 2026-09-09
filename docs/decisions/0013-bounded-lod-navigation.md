@@ -5,6 +5,15 @@
 Proposed (2026-08-21). Tracked by
 [rolker/unh_marine_autonomy#329](https://github.com/rolker/unh_marine_autonomy/issues/329).
 
+Amended 2026-08-22 while still *Proposed*, so this is an edit rather than a
+superseding ADR (the ADR-0001 immutability rule binds once **accepted**): D3
+gained the manifest-trust rules — authority scope, the coverage-vs-content
+staleness split, the permitted error direction, and the partial-read contract —
+which the original stated no position on. Raised during the review of
+[#331](https://github.com/rolker/unh_marine_autonomy/issues/331), the first
+consumer of D3, and tracked by
+[#334](https://github.com/rolker/unh_marine_autonomy/issues/334).
+
 Establishes the consumer-side model that [ADR-0010](0010-geospatial-world-model.md)
 (world model, D7 chart ladder, D9 per-layer LOD) and
 [ADR-0011](0011-overview-pyramid.md) (overview sidecar) produce data for, and
@@ -189,6 +198,52 @@ that is not available"*), and Cesium's `layer.json` `available` array is the
 widely-implemented equivalent that additionally allows several rectangles per
 level.
 
+**A manifest is authoritative only for the artifact that wrote it, and only
+about *which zones*, never about *what is in them*.** A derived manifest
+describes the derived tiles its producer owns. It is not a statement about the
+layer as a whole, and a consumer must never read one as though it were.
+
+Two failure modes follow, and they are not the same:
+
+- **Coverage staleness** — the manifest names a different set of zones than the
+  artifact now holds.
+- **Content staleness** — the zones are right but the data behind them was
+  derived from source tiles that have since changed.
+
+A producer that writes its manifest *into the same atomic publish as the tiles
+it describes* eliminates the first for its own artifact: the two cannot
+disagree, because they land together or not at all. It does nothing about the
+second. Regeneration is operator-invoked — nothing re-runs a pyramid builder
+after an import — so a derived manifest can be arbitrarily stale in content
+while remaining perfectly accurate about coverage, and nothing in the document
+reveals it. **Producers must therefore record enough provenance to make
+disagreement with their source detectable** (a generation time and a source
+tile count at minimum). Until a manifest carries that, a consumer cannot
+distinguish "current" from "long superseded" and must not present derived data
+as though it were freshly sourced.
+
+**The permitted error direction is under-reporting.** A consumer may conclude
+from a manifest *at least this much data is here*; it may never conclude *and
+nothing else is*. Absence of a zone is not evidence of absence of data —
+it may equally be a manifest that predates the data. Over-reporting is the
+dangerous direction and must be prevented where it is cheap to prevent: at
+write time, in the same publish as the tiles.
+
+**A partial read is not a successful read.** A reader that recovers only some of
+a manifest — a truncated document, a run it had to skip, a declared extent it
+had to refuse — has learned a *narrower* coverage than the artifact claims, and
+returning that as a complete answer converts a corrupt file into a confident
+lie about what a layer holds. Complete, partial, and absent must be
+distinguishable at the API boundary, and **partial takes the same path as
+absent**: fall back to the directory scan, which is always correct if slower.
+The scan is the floor this decision rests on; a manifest is an optimisation
+over it, never a replacement for it.
+
+None of this reaches a safety answer. Per D8 no query path consults a manifest
+or an overview level, so the worst outcome of a stale, partial, or absent
+manifest is a display that is coarser, blanker, or more out-of-date than it
+needed to be — never a wrong depth.
+
 **Corollary — coverage gaps are filled from coarser levels, and the fill is
 marked.** Where the selected level has no coverage, a coarser level's data may
 be drawn in its place. This matches how ECDIS has behaved for decades (S-52
@@ -311,6 +366,16 @@ guarantee and must never back a safety query.
   coverage manifest. Both are derivable from what is already on disk. **No
   migration is required** — a layer without them is readable, and a consumer
   falls back to today's level-as-resolution behaviour until they appear.
+- **Manifest writers owe provenance; manifest readers owe a partial-read
+  signal.** D3's trust rules are not satisfied by the first implementation
+  ([#331](https://github.com/rolker/unh_marine_autonomy/issues/331)), which
+  publishes the derived manifest atomically with its tiles — closing coverage
+  staleness for that artifact — but records no generation time or source tile
+  count, and returns a manifest object from a document whose runs it had to
+  skip or truncate. Both gaps are tracked by
+  [#334](https://github.com/rolker/unh_marine_autonomy/issues/334); until they
+  close, the scan fallback is the only fully correct read, and no consumer
+  should be written that cannot fall back to it.
 - **camp converges its two half-solutions.** `GggsTileLayer` gains
   `SonarLiveCacheLayer`'s budget and eviction; `SonarLiveCacheLayer` gains
   level selection. `camp-ADR-0013` and `camp-ADR-0010` become implementations
