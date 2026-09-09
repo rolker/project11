@@ -305,6 +305,23 @@ README's current structure before editing rather than assuming it.
 | `marine_bathymetry_store/README.md` | Document the new function; verify structure first |
 | `docs/decisions/0010-geospatial-world-model.md` | D9 amendment (dated, in the existing amendment style) |
 
+**Added after review round 1** (the pre-push `review-code` pass found that two
+store mechanisms silently assumed `processed` was single-level, so the
+amendment's safety argument did not hold; the operator directed that both be
+fixed in code here rather than deferred):
+
+| File | Change |
+|------|--------|
+| `marine_bathymetry_store/src/query.cpp` | `shallowestReliable` / `reliableSamples` read **every** native cell a query cell covers at a finer level, not one sample from its centre (uma-ADR-0013 D8) |
+| `marine_bathymetry_store/include/marine_bathymetry_store/query.hpp` | Region-aware contract; `bestSource` documented as the point/display query |
+| `marine_bathymetry_store/src/cell_geometry.hpp` | New — internal (not installed) cell/grid extent + iterator-inset helpers, shared by the query walk and the draft clear |
+| `marine_bathymetry_store/src/bathymetry_store.cpp` | `clearOverlappedDraft` walks every level `draft` holds; coarse draft cells clear only under full supersession and are otherwise counted |
+| `marine_bathymetry_store/include/marine_bathymetry_store/bathymetry_store.hpp` | Level-aware contract; new `DraftClearResult::coarse_draft_cells_retained` |
+| `marine_bathymetry_store/test/test_query.cpp` | Five region-coverage tests (four verified to fail against the previous walk) |
+| `marine_bathymetry_store/test/test_store.cpp` | Three cross-level draft-clear tests (two verified to fail against the previous clear) |
+| `marine_bathymetry_store/src/overview_pyramid.cpp` | Comment: whole-tile native-wins suppression is a constraint on a mixed-level writer |
+| `marine_autonomy/include/marine_autonomy/gggs/level.h` | Doc fix: `fromCellSize` returns at-or-finer (its `@return` said the opposite) |
+
 ## Principles Self-Check
 
 | Principle | Consideration |
@@ -323,7 +340,7 @@ README's current structure before editing rather than assuming it.
 |---|---|---|
 | `uma-ADR-0010` D9 | Yes | Amended in this PR (step 4), as a decided policy with the writer pending |
 | `uma-ADR-0013` D2/D3 | Yes, but already satisfied | `buildDepthOverviewPyramid` already emits per-tile geometric error + coverage manifest generically for any layer directory (#331); no new code needed once `processed` has mixed-level tiles |
-| `uma-ADR-0013` D8 | Yes | Stated explicitly in the D9 amendment, citing D8 by name rather than re-deriving the safety argument |
+| `uma-ADR-0013` D8 | Yes | **Revised after review round 1.** Citing D8 was not enough: the query point-sampled one cell per level, and the D8 anti-clobber (`clearOverlappedDraft`) was level-keyed and cleared nothing across levels. Both are fixed in this PR, and the amendment now records them as what a mixed-level `processed` required |
 | ADR-0001 (Adopt ADRs) | Yes | This PR is itself the ADR-amendment vehicle |
 
 ## Consequences
@@ -331,6 +348,9 @@ README's current structure before editing rather than assuming it.
 | If we change... | Also update... | Included in plan? |
 |---|---|---|
 | `processed` becomes mixed-level | `uma-ADR-0010` D9 | Yes (step 4) |
+| `processed` becomes mixed-level | `shallowestReliable` / `reliableSamples` must read the finest data for the **region** (D8) | Yes — added in round 1 (was not in the original plan) |
+| `processed` becomes mixed-level | `clearOverlappedDraft` must clear across levels | Yes — added in round 1 (was not in the original plan) |
+| `processed` becomes mixed-level | The overview pyramid's whole-tile native-wins suppression becomes a writer obligation (no two native levels over one parent) | Recorded in the ADR and at the suppression site; enforcement belongs to cube_bathymetry#143 |
 | A depth-adaptive policy exists in `marine_bathymetry_store` | `cube_bathymetry`'s `import_bag` must be re-architected to call it — one `GeoMapSheet` per run today (`import_bag_main.cpp:1030`, `:1130-1133`) ties the estimation grid to the store tiling | **No — filed as [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143)**. Load-bearing: this PR alone changes no on-disk behaviour |
 | Tile counts rise 4×–256× in shallow water | `import_bag`'s `max_resident_tiles` budget; store disk planning | Named here; belongs to cube_bathymetry#143 |
 | Existing level-10 Shoals/Massabesic `processed` stores stay untouched | Retroactive reprocess | No — tracked separately, gated on #366 (operator scope decision 4) |
@@ -376,8 +396,12 @@ README's current structure before editing rather than assuming it.
 
 ## Estimated Scope
 
-Single PR, in `unh_marine_autonomy` only. Small: one new header/source pair, one
-new test file, an ADR amendment, and a README update. The `cube_bathymetry`
+Single PR, in `unh_marine_autonomy` only. Originally small: one new
+header/source pair, one new test file, an ADR amendment, and a README update.
+Review round 1 added the two store-side consequences above (the region-aware
+safety query and the level-aware draft clear) with their tests — roughly a
+doubling, and the reason the amendment's safety claim is now true rather than
+asserted. The `cube_bathymetry`
 writer is a separate and substantially larger change
 (cube_bathymetry#143), consistent with the operator's "writer = offline
 `import_bag`/`processed` only, new imports only" scope.
