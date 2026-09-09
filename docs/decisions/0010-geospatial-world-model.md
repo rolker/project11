@@ -29,6 +29,10 @@ merged, host-verified work):
 - D9 — `reference` native-wins pyramid (mixed-level generalisation; amends the
   `reference` line below) —
   [uma#331](https://github.com/rolker/unh_marine_autonomy/issues/331)
+- D9 — depth-adaptive `processed` levels (the policy function and the amendment
+  below; the writer is a separate repo) —
+  [uma#369](https://github.com/rolker/unh_marine_autonomy/issues/369) +
+  [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143)
 
 Open follow-ons (adopted target, not yet fully materialized):
 
@@ -440,6 +444,92 @@ full-data replay remain offline properties).
   generated ([uma#188](https://github.com/rolker/unh_marine_autonomy/issues/188))
   with **shallowest-preserving aggregation** — never a mean; the rock must
   survive the downsample.
+
+  **Amended 2026-09-09
+  ([#369](https://github.com/rolker/unh_marine_autonomy/issues/369)):
+  `processed` is a depth-adaptive, mixed-level layer — one level per store tile,
+  chosen from the depth that tile covers. `draft` is unchanged and stays
+  fixed-level.** "Born at fine native levels" read as *one* fine level per
+  layer, and every `processed` tile written to date is level 10 (~0.906 m
+  cells) regardless of whether it holds 2 m or 15 m of water. CUBE's own capture
+  radius already follows depth — `capture_distance_scale · |depth|`
+  (`cube_bathymetry/.../parameters.h`, `node.cpp:154`) — so the lattice was the
+  only part of the chain that did not.
+
+  *The policy.* `marine_bathymetry_store::depthAdaptiveLevel` (this repo, #369)
+  requests a cell size of `0.05 · |depth|` — **no floor** — and maps it through
+  `gggs::Level::fromCellSize` (the level at or finer than the request), clamped
+  to `[8, 14]`:
+
+  | Level | Cell size | Applies when |
+  |---|---|---|
+  | 8 (coarse clamp) | 3.624 m | depth ≥ 72.47 m |
+  | 9 | 1.812 m | 36.24–72.47 m |
+  | 10 (every tile today) | 0.906 m | 18.12–36.24 m |
+  | 11 | 0.453 m | 9.06–18.12 m |
+  | 12 | 0.227 m | 4.53–9.06 m |
+  | 13 | 0.113 m | 2.26–4.53 m |
+  | 14 (fine clamp) | 0.057 m | depth < 2.26 m |
+
+  CUBE's 0.5 m term is deliberately **not** carried over: it is a minimum
+  *acceptance distance*, not a claim about achievable resolution, and treating
+  it as a resolution floor pins every depth shallower than ~18 m to level 11 —
+  a new fixed level across the whole surveyed range rather than an adaptive one.
+
+  *Storage, stated plainly.* Each level step is a **4× cell- and tile-count
+  increase over the same ground**, so against today's uniform level 10 the
+  multiplier is `4^(L-10)`: 4× at level 11, 16× at 12, 64× at 13 and **256× at
+  the level-14 clamp**. The whole-survey figure depends on the survey's
+  depth-area histogram, which has not been computed; it is bounded by 1× (all
+  water ≥ 18.1 m) and 256× (all water < 2.26 m). Tiles are dense 960×960 rasters
+  whether or not the survey fills them, and a level-14 tile spans only 54.4 m,
+  so shallow water also pays a partial-tile overhead — and `import_bag`'s
+  `max_resident_tiles` budget means something different at 16–256× the tile
+  count. The **coarse clamp is a bound, not a floor at today's resolution**:
+  between ~36 m and ~72 m the ladder returns level 9, coarser than today's 10.
+  That is deeper than either operator platform surveys, which is why it is
+  acceptable rather than a regression; if "never coarser than today" is ever
+  required, the coarse clamp becomes 10.
+
+  *The decision unit.* One level per **store tile**, sized from the
+  **shallowest** depth in that tile — the shallowest sounding carries the
+  tightest capture radius, so sizing from it keeps every sounding in the tile
+  within its own capture distance of a node. `depthAdaptiveLevel`'s scalar
+  signature encodes exactly that, and **may change** (to a depth range, say)
+  when the writer lands.
+
+  *The writer is pending — this is a decided policy, not as-built behaviour.*
+  Nothing writes depth-adaptive `processed` tiles yet, and no existing store is
+  affected. `import_bag` constructs one `cube::GeoMapSheet` for an entire run
+  (`import_bag_main.cpp:1030`) and pins the store cell size to that sheet
+  (`:1130-1133`), so CUBE's estimation grid and the store tiling are the same
+  resolution by construction; decoupling them is a re-architecture of the import
+  pipeline, tracked as
+  [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143).
+  Retroactive reprocessing of the existing level-10 Isles of Shoals and
+  Massabesic stores is out of scope and gated on
+  [#366](https://github.com/rolker/unh_marine_autonomy/issues/366) (import
+  ledger) — this policy applies to new imports only.
+
+  *Why a mixed-level `processed` is safe.*
+  [ADR-0013](0013-bounded-lod-navigation.md) D8: safety queries never consult an
+  LOD level. `shallowestReliable()` and any least-depth query read to the finest
+  available data for a region regardless of what is drawn, so a native level
+  boundary *inside* `processed` carries no operational risk — the same argument
+  the `reference` bullet below makes for its native-wins pyramid, and the same
+  one that exempts `chart` above. The D2/D3 obligations that come with a
+  mixed-level layer are already discharged generically:
+  `buildDepthOverviewPyramid` ([#331](https://github.com/rolker/unh_marine_autonomy/issues/331))
+  emits per-tile geometric error and a coverage manifest for `draft`,
+  `processed` and `reference` alike, so it needs no change when `processed`
+  starts holding more than one level.
+
+  *One asymmetry, for the display consumers.* `reference`'s mixed levels come
+  from **disjoint** source regions (S-102 footprints); `processed`'s come from
+  **depth bands within one contiguous survey**. A display consumer therefore
+  sees far more frequent level transitions across a single pass than `reference`
+  ever produces. That is a display/UX consideration for `camp`, not a
+  store-contract change.
 - **`reference`**: overview levels are generated, **native-wins**
   ([#331](https://github.com/rolker/unh_marine_autonomy/issues/331)). Fold
   upward from the layer's finest native level toward the apex, writing a derived
