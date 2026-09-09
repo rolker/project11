@@ -141,10 +141,15 @@ struct DepthAdaptiveLevelPolicy
 ///        consumers. `fromCellSize` takes a **float**, so the requested cell
 ///        size is guarded *after* narrowing: a request that is zero or
 ///        underflows to zero in float (a zero depth, or a depth around 1e-44)
-///        returns `finest_level`, and one that overflows to infinity (|depth|
-///        above ~6.8e39 at the default scale) returns `coarsest_level` — both
-///        the shoal-biased end for that input, and both short-circuiting the
-///        `log2(0)` / `log2(inf)` path whose cast to `int` is undefined.
+///        returns `finest_level`, and one that overflows to infinity returns
+///        `coarsest_level` — both the shoal-biased end for that input, and both
+///        short-circuiting the `log2(0)` / `log2(inf)` path whose cast to `int`
+///        is undefined. The overflow threshold is set by the **grid** size, not
+///        the cell size: `fromCellSize` multiplies by `cell_rows_per_grid` (960)
+///        in float before the `log2`, so the ladder breaks down at a cell size
+///        above ~3.5e35 — |depth| above **~7.1e36** at the default scale, three
+///        decades below `FLT_MAX`'s own ~6.8e39. Physically unreachable; the
+///        guard is on the value that actually overflows.
 /// @param policy Tunables; defaults to the decided uma#369 policy.
 /// @return The GGGS level to write the tile at.
 /// @throws std::invalid_argument if @p depth_m is not finite (a silently clamped

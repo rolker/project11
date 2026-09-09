@@ -138,6 +138,30 @@ TEST(DepthAdaptiveLevel, FloatNarrowingCannotInvertTheLadder)
   EXPECT_EQ(depthAdaptiveLevel(std::numeric_limits<double>::max()).level(),
     policy.coarsest_level);
 
+  // The REAL overflow threshold is three decades lower, and this is the band the
+  // guard used to miss: fromCellSize's first act is `cell_size * 960` IN FLOAT,
+  // so a request that is a perfectly finite float still overflows inside it and
+  // reaches the log2(0) cast. |depth| ~1e38 gives a cell size of 5e36 (finite as
+  // a float) whose grid size 4.8e39 is not.
+  //
+  // Honest about what this pins: the old guard's failure here is UNDEFINED
+  // BEHAVIOUR (`static_cast<int>` of a -inf `std::ceil(std::log2(x/0))`), not a
+  // wrong answer, and on this toolchain the undefined cast happens to clamp to
+  // the same coarsest level — so this case does NOT fail against the old guard.
+  // It is here because the documented threshold was wrong by three decades and
+  // the guard stopped short of the value it guards; the assertion pins the
+  // corrected boundary so a future edit cannot quietly move it back.
+  const double band_depth = 1.0e38;
+  const float band_cell = static_cast<float>(policy.capture_distance_scale * band_depth);
+  ASSERT_TRUE(std::isfinite(band_cell)) <<
+    "test input no longer sits in the cell-finite / grid-overflowing band";
+  ASSERT_FALSE(std::isfinite(band_cell * static_cast<float>(gggs::cell_rows_per_grid))) <<
+    "test input no longer overflows the grid size";
+  EXPECT_EQ(depthAdaptiveLevel(band_depth).level(), policy.coarsest_level) <<
+    "a request whose GRID size overflows in float reached fromCellSize's "
+    "log2(0) cast — the guard must be on the value that actually overflows";
+  EXPECT_EQ(depthAdaptiveLevel(-band_depth).level(), policy.coarsest_level);
+
   // The same must hold for a custom policy: the clamps, not hard-coded levels.
   DepthAdaptiveLevelPolicy narrow;
   narrow.coarsest_level = 6;

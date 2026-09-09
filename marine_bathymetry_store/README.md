@@ -343,7 +343,12 @@ ground**: 4× at 11, 16× at 12, 64× at 13, **256×** at the level-14 clamp.
   that unit rather than let the throw end a multi-hour import. A zero depth —
   and any request that underflows or overflows the float `fromCellSize` takes —
   returns a clamp rather than reaching its undefined `log2(0)`/`log2(inf)` path:
-  the fine clamp at the underflow end, the coarse clamp at the overflow end.
+  the fine clamp at the underflow end, the coarse clamp at the overflow end. The
+  overflow end is set by the **grid** size: `fromCellSize` multiplies the cell
+  size by 960 in float before the `log2`, so the break-down point is a cell size
+  above ~3.5e35 — **|depth| above ~7.1e36** at the default scale, three decades
+  below `FLT_MAX` itself. Physically unreachable; the guard is on the value that
+  actually overflows.
 - **Nothing calls it yet.** `import_bag` builds one `cube::GeoMapSheet` per run
   and pins the store cell size to it, so CUBE's estimation grid and the store
   tiling are one resolution by construction; decoupling them is

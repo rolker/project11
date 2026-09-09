@@ -100,11 +100,24 @@ gggs::Level depthAdaptiveLevel(double depth_m, const DepthAdaptiveLevelPolicy & 
   if (!(requested_cell_size > 0.0f)) {
     return gggs::Level(policy.finest_level);
   }
-  // Requested coarser than float can represent (|depth| above ~6.8e39 with the
-  // default scale): coarser than any GGGS level, so the coarse clamp is the
-  // answer. Both ends stay on the shoal-biased side: a depth that cannot be
-  // represented never silently picks the opposite end of the ladder.
-  if (!std::isfinite(requested_cell_size)) {
+  // Requested coarser than float can represent: coarser than any GGGS level, so
+  // the coarse clamp is the answer. Both ends stay on the shoal-biased side: a
+  // depth that cannot be represented never silently picks the opposite end of
+  // the ladder.
+  //
+  // Guard the GRID size, not the cell size. fromCellSize's first act is
+  // `cell_size * cell_rows_per_grid` (960) IN FLOAT, so the value that reaches
+  // the log2 is 960x the one narrowed here: a cell size above ~3.5e35 — |depth|
+  // above ~7.1e36 at the default scale, three decades below FLT_MAX's own
+  // ~6.8e39 — overflows INSIDE fromCellSize and lands on exactly the log2(0)
+  // cast this guard exists to prevent. Physically unreachable either way (the
+  // ocean is ~1e4 m deep), but a guard that stops three decades short of the
+  // value it guards is a guard that does not hold, and the ~6.8e39 figure that
+  // used to appear here, in the header, in the README and in the test was simply
+  // wrong.
+  const float requested_grid_size =
+    requested_cell_size * static_cast<float>(gggs::cell_rows_per_grid);
+  if (!std::isfinite(requested_grid_size)) {
     return gggs::Level(policy.coarsest_level);
   }
 
