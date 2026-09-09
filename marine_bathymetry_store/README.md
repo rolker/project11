@@ -48,7 +48,12 @@ map per layer, so source is the map, not a per-cell field. Priority is a
 read-only `reference` prior (ADR-0002 §D3), and never outranks a `processed`
 re-run cell. **Anti-clobber (D8):** a `processed` import clears overlapped `draft`
 cells **cell-wise** (only where it has data, so the re-run's gated-drop holes leave
-draft intact).
+draft intact) and **across GGGS levels** — `processed` is depth-adaptive and
+mixed-level (uma#369) while `draft` stays fixed-level, so the clear walks every
+level `draft` holds rather than keying on the processed tile's own level. A
+`draft` cell coarser than the processed tile clears only where that tile fully
+supersedes it; the ones it only partly covers are kept (the shoal-safe direction)
+and reported in `DraftClearResult::coarse_draft_cells_retained`.
 
 #### Write gates
 

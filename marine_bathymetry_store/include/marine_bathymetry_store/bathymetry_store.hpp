@@ -70,8 +70,18 @@ struct DraftClearResult
 {
   /// `Draft` cells transitioned from data → no-data by the clear.
   std::size_t cells_cleared = 0;
-  /// `Draft` tiles with ≥1 cleared cell (each once). Cache-invalidation seam.
+  /// `Draft` tiles with ≥1 cleared cell (each once, ascending). Cache-invalidation seam.
   std::vector<gggs::GridIndex> tiles_touched;
+  /// `Draft` cells **coarser** than the processed tile that overlap its data but
+  /// were deliberately kept, because this tile does not fully supersede them:
+  /// the draft cell extends past the processed tile's edge, or the processed
+  /// data has a no-data hole under it. Keeping them is the shoal-safe direction
+  /// (a retained draft blunder is a false alarm; a wrongly-cleared draft cell is
+  /// a lost hazard), but the residue is real, so it is **counted rather than
+  /// silent** — a caller clearing tile-by-tile can see that neighbouring
+  /// processed tiles still owe the rest of that draft cell's ground. Always 0
+  /// when `draft` is at or finer than `processed`, which is the deployed case.
+  std::size_t coarse_draft_cells_retained = 0;
 };
 
 /// @brief In-memory, GGGS-tiled, multi-layer, multi-level bathymetric store.
@@ -234,10 +244,21 @@ public:
   /// `save()` never deletes on-disk tiles). A processed **no-data** cell (a
   /// gated-drop hole) leaves the overlapping draft cell intact: harmless under
   /// `Processed > Draft` and strictly more coverage than clearing by footprint, so
-  /// stale gap-striping never accumulates under the authoritative surface. Clearing
-  /// operates at the processed cells' own level; draft data at a *different* GGGS
-  /// level is not reached (in practice draft and processed both come from CUBE at the
-  /// store level).
+  /// stale gap-striping never accumulates under the authoritative surface.
+  ///
+  /// **Level-aware (uma#369).** `processed` is depth-adaptive and mixed-level
+  /// while `draft` stays fixed-level, so the two no longer share a level and a
+  /// clear keyed on the processed tile's own `GridIndex` would match no draft
+  /// tile, clear nothing, and say nothing. The clear instead walks **every GGGS
+  /// level the `draft` layer holds**, and per draft cell:
+  /// - `draft` at or finer than `processed`: the draft cell lies inside exactly
+  ///   one processed cell (levels nest exactly), which decides it.
+  /// - `draft` **coarser** than `processed`: the draft cell is cleared only when
+  ///   this processed tile fully supersedes it — the cell lies entirely inside
+  ///   the tile and every processed cell under it has data. Otherwise it is kept
+  ///   (clearing would discard draft data over ground this tile does not speak
+  ///   for) and counted in `DraftClearResult::coarse_draft_cells_retained`, so
+  ///   the residue is reported rather than silent.
   ///
   /// This mutates only `Draft` — an ungated, freely-writable layer — so it needs no
   /// write-gate opt-in; `Reference`/`Chart` are never touched.
@@ -283,6 +304,16 @@ private:
     BathymetryStore & store,
     const geographic_msgs::msg::GeoPoint & min_pt,
     const geographic_msgs::msg::GeoPoint & max_pt);
+
+  /// @brief Does @p processed_tile fully supersede @p draft_cell?
+  ///
+  /// The per-cell decision behind `clearOverlappedDraft`, level-aware in both
+  /// directions (see that method's contract). Increments
+  /// `result.coarse_draft_cells_retained` when a coarser draft cell is kept
+  /// because this tile covers only part of it.
+  bool processedCoversDraftCell(
+    const BathymetryTile & processed_tile, const gggs::CellIndex & draft_cell,
+    DraftClearResult & result) const;
 
   /// @brief Find or create the tile for @p grid in @p layer.
   ///

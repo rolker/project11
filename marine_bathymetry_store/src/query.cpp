@@ -84,9 +84,10 @@ void forEachCoveredCell(
   const gggs::CellIndex & query_cell, uint8_t level, const Visitor & visit)
 {
   const gggs::Level fine(level);
-  // Inset the maximum corner: the GGGS area iterators are inclusive, so the
-  // unmodified NE corner would also visit the neighbouring cells that merely
-  // touch the query cell's edge (see cell_geometry.hpp).
+  // Inset both corners: the GGGS area iterators are inclusive, so the unmodified
+  // NE corner would also visit the neighbouring cells that merely touch the
+  // query cell's edge, and an exactly-on-boundary SW corner can round to the
+  // neighbour below (see cell_geometry.hpp).
   const GeoBox box = insetForIteration(cellBox(query_cell), level);
   for (gggs::GridAreaIterator grid_it(fine.gridIndex(box.min), fine.gridIndex(box.max));
     grid_it.valid(); grid_it.next())

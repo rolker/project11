@@ -82,27 +82,39 @@ inline geographic_msgs::msg::GeoPoint cellCenter(const gggs::CellIndex & cell)
   return boxCenter(cellBox(cell));
 }
 
-/// A quarter of a cell's angular span at @p level — the amount by which a
-/// maximum corner is pulled back inside a box before handing it to the GGGS
-/// area iterators.
+/// A quarter of a cell's angular span at @p level — the amount by which a box's
+/// corners are pulled inward before it is handed to the GGGS area iterators.
 ///
-/// Those iterators are **inclusive** of the cell containing the maximum corner,
-/// and a box's NE corner is the SW corner of the neighbouring cell, so passing
-/// the corner unmodified would visit a whole row and column of cells outside the
-/// box. Use the finest level involved so the inset is always smaller than one
-/// cell of every level being walked.
+/// Use the finest level involved, so the inset is always well under one cell of
+/// every level being walked.
 inline double cellInset(uint8_t level)
 {
   return 0.25 * gggs::Level(level).cellAngularSpan();
 }
 
-/// @p box with its maximum corner pulled `cellInset(level)` inside — ready for
-/// `gggs::GridAreaIterator` / `gggs::CellAreaIterator`, which are inclusive.
+/// @p box shrunk by `cellInset(level)` on **every** side — ready for
+/// `gggs::GridAreaIterator` / `gggs::CellAreaIterator`.
+///
+/// Both corners move, for two different reasons:
+/// - The **maximum** corner, because those iterators are *inclusive* of the cell
+///   containing it and a box's NE corner is the SW corner of its neighbour;
+///   passing it unmodified visits a whole row and column of cells outside the
+///   box.
+/// - The **minimum** corner, because a box corner that coincides exactly with a
+///   cell boundary (which it does whenever the box is itself a cell or a grid at
+///   another level — GGGS nests exactly) can land an ulp on the wrong side once
+///   the two levels' spans are computed by different routes, starting the walk
+///   one cell short and silently reading no-data outside the box.
+///
+/// Shrinking never drops a cell the box fully covers: such a cell spans at least
+/// one whole cell of @p level, four times the inset. A cell the box merely clips
+/// by less than a quarter of a cell of @p level can be dropped — an overlap
+/// finer than the finest level being reasoned about.
 inline GeoBox insetForIteration(const GeoBox & box, uint8_t level)
 {
   const double inset = cellInset(level);
   return GeoBox{
-    box.min,
+    gggs::geoPoint(box.min.latitude + inset, box.min.longitude + inset),
     gggs::geoPoint(box.max.latitude - inset, box.max.longitude - inset)};
 }
 

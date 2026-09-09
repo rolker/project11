@@ -21,14 +21,18 @@
 
 #include "marine_bathymetry_store/bathymetry_store.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <utility>
 #include <vector>
+
+#include "cell_geometry.hpp"
 
 namespace marine_bathymetry_store
 {
@@ -123,55 +127,149 @@ std::size_t BathymetryStore::importTiles(
   return inserted;
 }
 
+namespace
+{
+
+/// The distinct GGGS levels present in a layer's tile map, coarsest first.
+std::set<uint8_t> levelsPresent(const std::map<gggs::GridIndex, BathymetryTile> & tiles)
+{
+  std::set<uint8_t> levels;
+  for (const auto & [grid, tile] : tiles) {
+    (void)tile;
+    levels.insert(grid.level());
+  }
+  return levels;
+}
+
+}  // namespace
+
 DraftClearResult BathymetryStore::clearOverlappedDraft(
   const BathymetryTile & processed_tile)
 {
-  constexpr uint16_t edge = BathymetryTile::edge;
   DraftClearResult result;
-  const gggs::GridIndex & grid = processed_tile.index();
-  // Never create a draft tile where none exists: nothing to clear there, and an
-  // all-NaN draft tile would be a spurious on-disk artifact.
-  if (layerMap(SourceLayer::Draft).count(grid) == 0) {
-    return result;
+  const gggs::GridIndex & processed_grid = processed_tile.index();
+  if (!processed_grid.valid()) {
+    throw std::invalid_argument(
+            "BathymetryStore::clearOverlappedDraft: processed tile has an invalid GridIndex");
   }
-  const std::vector<double> & depth = processed_tile.depthBand();
-  bool touched = false;
-  for (uint32_t i = 0; i < depth.size(); ++i) {
-    if (std::isnan(depth[i])) {
-      continue;   // processed no-data (gated-drop hole): leave the draft cell
+  const auto & draft_tiles = layerMap(SourceLayer::Draft);
+  if (draft_tiles.empty()) {
+    return result;   // nothing to clear anywhere
+  }
+
+  const uint8_t processed_level = processed_grid.level();
+  const GeoBox processed_box = gridBox(processed_grid);
+  // Draft tiles touched, deduplicated: a coarse draft tile can be reached by
+  // several processed tiles, and one processed tile can reach several fine ones.
+  std::set<gggs::GridIndex> touched;
+
+  // Level-aware (uma#369): `processed` is depth-adaptive and mixed-level while
+  // `draft` stays fixed-level, so keying the clear on the processed tile's own
+  // GridIndex — which carries its level — would match no draft tile at all and
+  // clear nothing, silently, leaving superseded draft blunders to keep winning
+  // shallowestReliable. Walk EVERY level the draft layer actually holds.
+  for (const uint8_t draft_level : levelsPresent(draft_tiles)) {
+    const gggs::Level level(draft_level);
+    // Inset by the finer of the two levels so the inclusive area iterators never
+    // step onto ground outside the processed tile.
+    const uint8_t finest = std::max(draft_level, processed_level);
+    const GeoBox walk = insetForIteration(processed_box, finest);
+
+    for (gggs::GridAreaIterator grid_it(level.gridIndex(walk.min), level.gridIndex(walk.max));
+      grid_it.valid(); grid_it.next())
+    {
+      // Never create a draft tile where none exists: nothing to clear there, and
+      // an all-NaN draft tile would be a spurious on-disk artifact.
+      if (draft_tiles.count(*grid_it) == 0) {
+        continue;
+      }
+      for (gggs::CellAreaIterator cell_it(*grid_it, walk.min, walk.max);
+        cell_it.valid(); cell_it.next())
+      {
+        const gggs::CellIndex draft_cell = *cell_it;
+        const std::optional<BathyCell> draft = get(SourceLayer::Draft, draft_cell);
+        if (!draft.has_value() || !draft->hasData()) {
+          continue;   // draft has nothing here — nothing to clear
+        }
+        if (!processedCoversDraftCell(processed_tile, draft_cell, result)) {
+          continue;
+        }
+        // Write no-data in place: reads as no-data thereafter, tile marked dirty
+        // so the clear persists on the next save.
+        set(SourceLayer::Draft, draft_cell, BathyCell{});
+        ++result.cells_cleared;
+        touched.insert(draft_cell.grid());
+      }
     }
-    const uint16_t row = static_cast<uint16_t>(i / edge);
-    const uint16_t col = static_cast<uint16_t>(i % edge);
-    const gggs::CellIndex cell(grid, row, col);
-    const std::optional<BathyCell> draft = get(SourceLayer::Draft, cell);
-    if (!draft.has_value() || !draft->hasData()) {
-      continue;   // draft has nothing here — nothing to clear
-    }
-    // Write no-data in place: reads as no-data thereafter, tile marked dirty so
-    // the clear persists on the next save.
-    set(SourceLayer::Draft, cell, BathyCell{});
-    ++result.cells_cleared;
-    touched = true;
   }
-  if (touched) {
-    result.tiles_touched.push_back(grid);
-  }
+
+  result.tiles_touched.assign(touched.begin(), touched.end());
   return result;
+}
+
+bool BathymetryStore::processedCoversDraftCell(
+  const BathymetryTile & processed_tile, const gggs::CellIndex & draft_cell,
+  DraftClearResult & result) const
+{
+  const gggs::GridIndex & processed_grid = processed_tile.index();
+  const uint8_t processed_level = processed_grid.level();
+  const GeoBox draft_box = cellBox(draft_cell);
+
+  if (draft_cell.level() >= processed_level) {
+    // The draft cell is contained in exactly ONE processed cell (GGGS levels
+    // nest exactly), so that cell alone decides. A processed no-data cell (a
+    // gated-drop hole) leaves the draft cell intact — strictly more coverage
+    // than clearing by footprint, so stale gap-striping never accumulates under
+    // the authoritative surface.
+    const gggs::CellIndex processed_cell =
+      gggs::Level(processed_level).cellIndex(boxCenter(draft_box));
+    if (!(processed_cell.grid() == processed_grid)) {
+      return false;   // outside this processed tile
+    }
+    return processed_tile.get(processed_cell.row(), processed_cell.column()).hasData();
+  }
+
+  // The draft cell is COARSER than the processed tile: it covers many processed
+  // cells, and clearing it would discard draft data over ground this processed
+  // tile does not speak for. Clear it only when this tile fully supersedes it —
+  // the draft cell lies entirely inside the tile AND every processed cell under
+  // it has data. Anything short of that keeps the draft cell (the shoal-safe
+  // direction: a retained draft blunder is a false alarm, a wrongly-cleared
+  // draft cell is a lost hazard) and is COUNTED, so the caller sees residue
+  // rather than a silent no-op.
+  if (!boxContains(gridBox(processed_grid), draft_box)) {
+    ++result.coarse_draft_cells_retained;
+    return false;
+  }
+  const GeoBox walk = insetForIteration(draft_box, processed_level);
+  for (gggs::CellAreaIterator cell_it(processed_grid, walk.min, walk.max);
+    cell_it.valid(); cell_it.next())
+  {
+    if (!processed_tile.get(cell_it->row(), cell_it->column()).hasData()) {
+      ++result.coarse_draft_cells_retained;
+      return false;
+    }
+  }
+  return true;
 }
 
 DraftClearResult BathymetryStore::clearOverlappedDraft(
   const std::map<gggs::GridIndex, BathymetryTile> & processed_tiles)
 {
-  // Delegate per tile: map keys are unique grids, so each cleared grid appears at
-  // most once in tiles_touched — identical to clearing the whole map in one pass.
+  // Delegate per tile, then re-deduplicate: with a level-aware clear one coarse
+  // draft tile can be touched by several processed tiles, so the per-tile
+  // results can name the same grid more than once. The contract is each grid
+  // once, ascending.
   DraftClearResult result;
+  std::set<gggs::GridIndex> touched;
   for (const auto & [grid, tile] : processed_tiles) {
     (void)grid;   // the per-tile overload re-keys off tile.index()
     const DraftClearResult one = clearOverlappedDraft(tile);
     result.cells_cleared += one.cells_cleared;
-    result.tiles_touched.insert(
-      result.tiles_touched.end(), one.tiles_touched.begin(), one.tiles_touched.end());
+    result.coarse_draft_cells_retained += one.coarse_draft_cells_retained;
+    touched.insert(one.tiles_touched.begin(), one.tiles_touched.end());
   }
+  result.tiles_touched.assign(touched.begin(), touched.end());
   return result;
 }
 
