@@ -286,6 +286,9 @@ public:
   /// write-gate opt-in; `Reference`/`Chart` are never touched.
   ///
   /// @return The cells cleared and the draft tiles touched (cache-invalidation seam).
+  /// @throws std::invalid_argument if any processed tile carries an invalid
+  ///   `gggs::GridIndex`. Validation happens up front, before any `Draft` cell is
+  ///   written, so a throw from *this* overload leaves `Draft` untouched.
   DraftClearResult clearOverlappedDraft(
     const std::map<gggs::GridIndex, BathymetryTile> & processed_tiles);
 
@@ -294,7 +297,19 @@ public:
   ///        `saveTile` of a processed tile).
   ///
   /// @p processed_tile is treated as keyed by its own `index()` grid. Semantics are
-  /// identical to the tile-map overload (which delegates here per entry).
+  /// identical to the tile-map overload — both delegate to one implementation
+  /// that sees the whole set at once; a single tile is a set of one.
+  ///
+  /// @throws std::invalid_argument if @p processed_tile carries an invalid
+  ///   `gggs::GridIndex`, before any `Draft` cell is written.
+  ///
+  /// @note An incremental caller that clears after each `saveTile` gets the
+  ///   single-tile union, which is narrower than a bulk import's: a coarse draft
+  ///   cell whose remaining ground a *later* tile will cover is retained now and
+  ///   cleared when that tile arrives. That is the shoal-safe order — nothing is
+  ///   cleared before something supersedes it — but it means
+  ///   `coarse_draft_cells_retained` from an incremental sequence is a running
+  ///   view, not a final one.
   DraftClearResult clearOverlappedDraft(const BathymetryTile & processed_tile);
 
   /// @brief A layer's tiles, keyed by `gggs::GridIndex` (ascending). Empty map

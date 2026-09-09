@@ -212,15 +212,17 @@ struct ProcessedImportResult
 ///         a missing geotransform.
 ///
 /// @note **Exception safety is BASIC, not strong.** For a `Processed` import the
-///   draft clear runs *before* `importTiles`, and the clear itself validates each
-///   processed tile's `GridIndex` as it reaches it. A throw from either therefore
-///   leaves the store in a partially-mutated state: some `Draft` cells already
-///   cleared, and `Processed` not inserted. The store is not rolled back — the
-///   caller must treat a throw from this function as "the store's contents are
-///   indeterminate for this import's footprint" and rebuild from disk rather than
-///   continuing to write. In practice the importer builds every tile index itself
-///   from the raster geotransform, so the invalid-index path is a corruption
-///   signal, not an input-validation path.
+///   draft clear runs *before* `importTiles`. `clearOverlappedDraft` validates
+///   every tile index up front, so a throw from the clear itself leaves `Draft`
+///   untouched — but a throw from `importTiles` afterwards does not undo the
+///   clear, leaving `Draft` cells erased and `Processed` never inserted. The
+///   store is not rolled back: treat a throw from this function as "the store's
+///   contents are indeterminate for this import's footprint" and reload from disk
+///   rather than continuing to write. In practice the importer builds every tile
+///   index itself from the raster geotransform, so the invalid-index path is a
+///   corruption signal, not an input-validation path; the reachable case is the
+///   write-gate `std::logic_error` for a `Reference` layer, which is checked
+///   before any clear happens (a `Reference` import clears nothing).
 ProcessedImportResult importGeoTiff(
   BathymetryStore & store, SourceLayer layer,
   const std::string & path,
