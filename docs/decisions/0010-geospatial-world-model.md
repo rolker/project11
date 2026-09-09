@@ -447,9 +447,10 @@ full-data replay remain offline properties).
 
   **Amended 2026-09-09
   ([#369](https://github.com/rolker/unh_marine_autonomy/issues/369)):
-  `processed` is a depth-adaptive, mixed-level layer — one level per store tile,
-  chosen from the depth that tile covers. `draft` is unchanged and stays
-  fixed-level.** "Born at fine native levels" read as *one* fine level per
+  `processed` is *to be* a depth-adaptive, mixed-level layer — one level per
+  store tile, chosen from the depth that tile covers. `draft` is unchanged and
+  stays fixed-level.** (The policy and the store-side support are decided and
+  landed; the writer is not — see "the writer is pending" below.) "Born at fine native levels" read as *one* fine level per
   layer, and every `processed` tile written to date is level 10 (~0.906 m
   cells) regardless of whether it holds 2 m or 15 m of water. CUBE's own capture
   radius already follows depth — `capture_distance_scale · |depth|`
@@ -513,18 +514,46 @@ full-data replay remain offline properties).
   [#366](https://github.com/rolker/unh_marine_autonomy/issues/366) (import
   ledger) — this policy applies to new imports only.
 
-  *Why a mixed-level `processed` is safe.*
+  *Why a mixed-level `processed` is safe — two store changes it required.*
   [ADR-0013](0013-bounded-lod-navigation.md) D8: safety queries never consult an
-  LOD level. `shallowestReliable()` and any least-depth query read to the finest
-  available data for a region regardless of what is drawn, so a native level
-  boundary *inside* `processed` carries no operational risk — the same argument
-  the `reference` bullet below makes for its native-wins pyramid, and the same
-  one that exempts `chart` above. The D2/D3 obligations that come with a
-  mixed-level layer are already discharged generically:
-  `buildDepthOverviewPyramid` ([#331](https://github.com/rolker/unh_marine_autonomy/issues/331))
+  LOD level, and read the finest available data **for a region**. That is the
+  obligation this amendment makes binding, not a guarantee it inherited: two
+  store mechanisms assumed `processed` was single-level and had to change with
+  it (both landed with the policy, in #369).
+
+  1. **The safety query now reads the region, not a point.**
+     `shallowestReliable()` and `reliableSamples()` re-resolved *one* cell per
+     level from the query cell's centre. Under a level-10/11 costmap query, a
+     level-13/14 `processed` tile covers that cell with 64-256 native cells, so
+     the walk read one of them and a 0.2-0.5 m rock — precisely what those
+     levels exist to resolve — could fall between samples. Both queries now
+     enumerate **every** native cell a query cell covers at any finer level and
+     keep the shoalest reliable value. (`bestSource()` stays a point lookup by
+     design: it is the best-available display query, not the safety one.)
+  2. **The cross-layer anti-clobber (D8, below) is now level-aware.**
+     `clearOverlappedDraft` keyed on the processed tile's `GridIndex`, which
+     carries its level, so a finer `processed` tile matched no fixed-level
+     `draft` tile, cleared nothing and said nothing — superseded draft blunders
+     would have kept winning `shallowestReliable`. The clear now walks every
+     level `draft` holds; a `draft` cell coarser than the processed tile clears
+     only where that tile fully supersedes it, and the partly-covered ones are
+     kept and **counted**, never silently skipped.
+
+  With those in place a native level boundary *inside* `processed` carries no
+  operational risk — the same argument the `reference` bullet below makes for
+  its native-wins pyramid, and the same one that exempts `chart` above. The
+  D2/D3 obligations that come with a mixed-level layer are discharged
+  generically: `buildDepthOverviewPyramid`
+  ([#331](https://github.com/rolker/unh_marine_autonomy/issues/331))
   emits per-tile geometric error and a coverage manifest for `draft`,
   `processed` and `reference` alike, so it needs no change when `processed`
-  starts holding more than one level.
+  starts holding more than one level — **provided the writer never emits two
+  native levels over the same ground**. Native-wins suppresses a derived parent
+  as a *whole tile*, and unlike `reference`'s disjoint S-102 footprints, depth
+  bands within one contiguous survey can share a parent index; if both a shallow
+  and a deep band wrote native tiles under one parent, the shallow band's fold
+  would be dropped at that level and every level coarser. That is a writer
+  obligation (cube_bathymetry#143), not a pyramid change.
 
   *One asymmetry, for the display consumers.* `reference`'s mixed levels come
   from **disjoint** source regions (S-102 footprints); `processed`'s come from

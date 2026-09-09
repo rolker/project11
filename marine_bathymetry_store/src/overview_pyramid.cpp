@@ -295,6 +295,15 @@ LevelCounts buildLevel(
     // NATIVE-WINS. Compiled data is never overwritten and never merged into, so
     // the "what should a fold of harbour data into an approach-band tile mean?"
     // question is not answered here — it is removed.
+    //
+    // Suppression is WHOLE-TILE, which is a constraint on any mixed-level
+    // producer (uma#369's depth-adaptive `processed`): `reference`'s mixed
+    // levels come from disjoint S-102 footprints, but depth bands within one
+    // contiguous survey can share a parent index. A writer that emitted two
+    // native levels over the same ground would have the shallow band's fold
+    // dropped at that level and every level coarser. The pyramid needs no
+    // change for a mixed-level layer; the writer must not overlap native levels
+    // (cube_bathymetry#143).
     if (native.contains(group.first)) {
       ++counts.suppressed_by_native;
       continue;
