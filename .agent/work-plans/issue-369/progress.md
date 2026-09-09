@@ -123,3 +123,116 @@ The plan is well-researched and every source citation in it holds up, but its ce
 - [ ] Reword the D9 amendment so it states the decided policy with the writer pending, never as-built behavior
 - [ ] File the companion `cube_bathymetry` issue before implementation begins, describing the `GeoMapSheet` single-resolution constraint honestly
 - [ ] Add "checked, not stale" for `docs/sonar_ecosystem.md`; retarget the tests onto the transition depths and clamps
+
+---
+
+## Implementation
+**Status**: complete
+**When**: 2026-09-09 12:44 -04:00
+**By**: Claude Opus
+
+**Plan**: `.agent/work-plans/issue-369/plan.md` (revised at `0c58c2e`)
+**Branch**: feature/issue-369 at `3e90e9a` — **not pushed**, no PR (host publishes)
+**Commits**:
+- `0c58c2e` plan: revise #369 after plan review — drop the 0.5 m floor, clamp at level 14
+- `855d9a2` Add depthAdaptiveLevel: choose a store tile's GGGS level from its depth
+- `ed0e3d6` ADR-0010: amend D9 — processed is depth-adaptive and mixed-level
+- `3e90e9a` docs: document depthAdaptiveLevel in the store README
+
+### What landed
+
+**Plan revision (`0c58c2e`)** — all four must-fix findings and all four
+suggestions from `## Plan Review` addressed, plus the two operator decisions:
+
+| Plan Review finding | Resolution |
+|---|---|
+| (must-fix) storage estimate wrong — `fromCellSize` is at-or-finer | Ladder and storage recomputed from `level.h:64-70` + `core.h:70,82`; every step stated as 4×, the level-14 clamp as **256×** |
+| (must-fix) policy not adaptive in the surveyed range | The 0.5 m floor is **dropped** (operator decision); three transitions now fall inside 1–15 m (9.06 / 4.53 / 2.26 m) |
+| (must-fix) D9 amendment would be an as-built claim | Reworded as a decided policy with the writer **pending**, naming cube_bathymetry#143 |
+| (must-fix) cube_bathymetry deferral described as "wiring" | Described as the re-architecture it is, citing `import_bag_main.cpp:1030` (one `GeoMapSheet` per run) and `:1130-1133` (store cell size pinned to it) |
+| (suggestion) design question 2 unanswered | Answered: one level per store tile, from the **shallowest** depth in it; noted the signature may change when the writer lands |
+| (suggestion) `cell·√2/2 < capture radius` is near-tautological | Demoted to a regression guard; the load-bearing tests are the transition depths and both clamps |
+| (suggestion) `finest_level = 11` unreachable | Moot — the fine clamp is now 14 and **both clamps genuinely bind**; the tests exercise live bounds |
+| (suggestion) `docs/sonar_ecosystem.md` dropped silently | Recorded as **checked, not stale** (its "Store — bathy" row already says "multi-level (D3/D4)") |
+
+**Code (`855d9a2`)** — `marine_bathymetry_store::depthAdaptiveLevel(depth_m,
+policy)`: requested cell size `capture_distance_scale · |depth|` (0.05, no
+floor) → `gggs::Level::fromCellSize` → clamped to `[8, 14]`. Ladder:
+≥72.47 m → 8, ≥36.24 → 9, ≥18.12 → 10, ≥9.06 → 11, ≥4.53 → 12, ≥2.26 → 13,
+below → 14 (0.057 m). Fails loud (`std::invalid_argument`) on a non-finite
+depth, an inverted or out-of-range clamp, and a non-positive
+`capture_distance_scale`; zero depth returns the fine clamp, guarded *before*
+`fromCellSize` (whose `log2(0)` → `int` cast is UB). Eight GTest cases:
+transition depths (derived from `Level(L).cellSize()`, not transcribed),
+literal expectations, both clamps, monotonicity over a 0.05–200 m sweep, sign
+symmetry, a custom policy, the throwing cases, and the 9 m regression guard.
+
+**ADR (`ed0e3d6`)** — `uma-ADR-0010` D9 amended in the document's existing
+dated-amendment style, plus an "In flight" entry. **README (`3e90e9a`)** — new
+"Depth-adaptive level selection" section and the new test target listed.
+
+### Test results (verbatim)
+
+Built with `./core_ws/build.sh marine_interfaces marine_vertical_datum
+marine_autonomy marine_tiled_raster_store marine_bathymetry_store` (the
+worktree's `core_ws/install` was empty, so the four dependencies were built
+first). `stderr output` on `marine_autonomy`/`marine_bathymetry_store` is
+pre-existing `-Wunused-result` from GDAL `RasterIO` calls in the S-102 test
+fixtures, untouched by this work.
+
+`./core_ws/test.sh marine_bathymetry_store`, final run after every commit:
+
+```
+Starting >>> marine_bathymetry_store
+[Processing: marine_bathymetry_store]
+[Processing: marine_bathymetry_store]
+Finished <<< marine_bathymetry_store [1min 7s]
+
+Summary: 1 package finished [1min 8s]
+Summary: 355 tests, 0 errors, 0 failures, 42 skipped
+```
+
+Per-suite, from the xunit results: `test_depth_adaptive_level` 8/8 pass;
+`copyright` 42/42, `cpplint` 42/42, `uncrustify` 42/42, `lint_cmake` 1/1,
+`xmllint` 1/1 — all pass with the three new files included. The 42 skips are
+`cppcheck`, pre-existing and unrelated.
+
+One test failed on the first run and was fixed, not silenced: the 9 m
+regression guard asserted `EXPECT_LT(level, 10)` when "finer than level 10"
+means a **higher** GGGS level number. Corrected to `EXPECT_GT` (with a comment
+saying why), and the behaviour it checks — the policy returns level 12 at 9 m —
+was correct all along.
+
+### Deferred / not done
+
+- **The writer.** Nothing calls `depthAdaptiveLevel`; this PR changes no on-disk
+  behaviour. `import_bag` needs
+  [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143)
+  (one `GeoMapSheet` per run ties CUBE's estimation grid to the store tiling).
+  Per operator scope, `draft` and the live node stay fixed-level, and the policy
+  applies to new imports only — no retroactive reprocess (gated on #366).
+- **The knowledge-doc note** flagging that `capture_distance_scale` is duplicated
+  across two repos with no automated link stayed a proposal, as the plan framed
+  it (agent-instruction changes are operator-decided).
+
+### Actions
+
+- [ ] **Operator decision — coarse clamp 8 or 10?** Kept at 8 as pinned, but the
+  rationale that came with it ("a floor one level coarser than today's 10, so
+  `processed` is never coarser than today") does not hold: level 8 is *two*
+  levels coarser than 10, and the ladder already returns level 9 between ~36 m
+  and ~72 m, before the clamp binds. So level 8 **bounds** the coarse end at
+  ~3.6 m cells; it does not guarantee "never coarser than today". That is
+  acceptable in practice — both operator platforms survey far shallower — but if
+  the guarantee is what was wanted, the clamp is `10`, a one-constant change in
+  `DepthAdaptiveLevelPolicy` plus the ladder text in the ADR and README. The
+  plan, the ADR amendment and the header all state the corrected rationale
+  rather than the original claim.
+- [ ] Open question carried from the plan: whether `depthAdaptiveLevel` belongs
+  in `marine_bathymetry_store` (chosen, following the `s102/run.cpp` precedent)
+  or in `marine_autonomy`'s `gggs` module. The Plan Review raised no concern
+  about the choice.
+
+---
+**Authored-By**: `Claude Code Agent`
+**Model**: `Claude Opus`
