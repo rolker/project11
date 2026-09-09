@@ -236,3 +236,98 @@ was correct all along.
 ---
 **Authored-By**: `Claude Code Agent`
 **Model**: `Claude Opus`
+
+## Local Review (Pre-Push)
+**Status**: complete
+**When**: 2026-09-09 13:15 -04:00
+**By**: Claude Code Agent (Claude Opus)
+**Verdict**: changes-requested
+
+**Branch**: feature/issue-369 at `e6a76b7`
+**Mode**: pre-push (base `origin/jazzy`, no PR)
+**Depth**: Deep (reason: 1196 changed lines across 8 files + an ADR amendment)
+**Must-fix**: 4 | **Suggestions**: 9
+**Round**: 1 | **Ship**: continue — two of the must-fixes are substantive: the amendment's safety argument does not hold against `query.cpp`, and a mixed-level `processed` silently disables the D8 draft anti-clobber
+
+Specialists: Static Analysis (ament_cpplint + ament_uncrustify + cppcheck on the
+three new files: clean; `colcon test marine_bathymetry_store` re-run
+independently: 355 tests, 0 failures, 42 skipped, `test_depth_adaptive_level`
+8/8), Governance, Plan Drift, Claude Adversarial Lens A + Lens B. Copilot and
+local-model specialists off (not requested). No `.agents/review-context.yaml` in
+this repo — review used `.agents/README.md` only.
+
+The code itself is clean and the arithmetic is right: every cell size, tile
+extent, transition depth and 4^(L-10) multiplier in the header, README and ADR
+tables was recomputed and holds, `fromCellSize`'s at-or-finer contract is read
+correctly, and every cross-repo citation was verified on disk
+(`parameters.h:205` = 0.05, `node.cpp:154`, `import_bag_main.cpp:1030`/`:1131-1133`,
+`s102/run.cpp:185`) as were issues #366, #369 and cube_bathymetry#143. Plan
+adherence is exact — the six planned files, no scope creep, every planned test
+present. The findings are concentrated in the ADR amendment's claims about a
+mixed-level `processed`, which three store mechanisms do not currently support.
+
+Operator-pinned decisions (0.05 with no floor, fine clamp 14, coarse clamp 8,
+offline/`processed` only, new imports only, writer deferred to
+cube_bathymetry#143) were treated as settled and are not findings.
+
+### Findings
+- [ ] (must-fix) The amendment's "why a mixed-level `processed` is safe" paragraph inverts ADR-0013 D8: `shallowestReliable` re-resolves **one** cell per level from the query cell's centre, so a level-10/11 costmap query over level-13/14 tiles point-samples 1 of 64-256 native cells and can miss the shoal those levels exist to resolve. D8 requires reading the finest data *for the region* — it is the obligation this change first makes binding, not a guarantee already met — `docs/decisions/0010-geospatial-world-model.md` (safety paragraph) vs `marine_bathymetry_store/src/query.cpp:112-126`, `:38-44`
+- [ ] (must-fix) A mixed-level `processed` silently disables the ADR-0010 D8 cross-layer anti-clobber: `clearOverlappedDraft` keys on the processed tile's `GridIndex`, which carries its level, so a level-12 processed tile never matches a level-10 draft grid and clears zero cells with no diagnostic. `bathymetry_store.hpp:238-240` documents the very assumption ("draft and processed both come from CUBE at the store level") that "`draft` stays fixed-level" invalidates; uncleared draft blunders still win in `shallowestReliable` — `marine_bathymetry_store/src/bathymetry_store.cpp:131-136`
+- [ ] (must-fix) The zero guard is applied to the double but `fromCellSize` receives `static_cast<float>(...)`, so a positive double that underflows in float reaches exactly the UB path the guard and header claim to prevent; built and run, `depthAdaptiveLevel(1e-44)` returns level **8** — the coarsest end, the inversion of the documented shallow-to-finest behaviour. Finite depths above ~6.8e39 overflow to +inf the same way. Validate the narrowed float — `marine_bathymetry_store/src/depth_adaptive_level.cpp:82-90`
+- [ ] (must-fix) The storage bound is wrong at the low end: "bounded by 1× (all water ≥ 18.1 m) and 256×" contradicts the same paragraph nine lines later — the ladder returns level 9 above ~36 m and level 8 above ~72 m, i.e. 1/4× and 1/16×. True bound is 1/16×-256×; same sentence in the plan — `docs/decisions/0010-geospatial-world-model.md:482-483`, `.agent/work-plans/issue-369/plan.md:200`
+- [ ] (suggestion) "never has cells coarser than the capture radius" is stated unconditionally but the fine clamp falsifies it below ~1.13 m depth (0.057 m cells vs a 0.05·d radius) — the test quietly starts its invariant loop at the clamp; state the exception in the comment, header, README and ADR — `marine_bathymetry_store/src/depth_adaptive_level.cpp:86-88`
+- [ ] (suggestion) The decision unit is circular as specified: the chosen level *defines* the tile extent (54.4 m at 14 vs 869.7 m at 10), so "the shallowest depth in that tile" is not determinable before the level is known. Name the fixpoint / separate decision region alongside the "may change when the writer lands" caveat — `marine_bathymetry_store/include/marine_bathymetry_store/depth_adaptive_level.hpp:68-73`
+- [ ] (suggestion) "the pyramid needs no change" holds only under an unstated writer obligation: native-wins suppresses a derived parent **whole tile**, and unlike `reference`'s disjoint S-102 footprints, depth bands in one contiguous survey can share a parent index — the shallow band's fold is then dropped at that level and coarser. Say the writer must not emit two native levels over the same ground — `marine_bathymetry_store/src/overview_pyramid.cpp:296-300`
+- [ ] (suggestion) No recovery contract for the throw at the destined call site: NaN is reachable in the intended use (an all-no-data tile's "shallowest depth"), and `import_bag_main.cpp` has no top-level catch around the tile loop, so an uncaught `invalid_argument` would end a multi-hour import. One sentence on expected caller behaviour (abort vs skip tile) — `marine_bathymetry_store/include/marine_bathymetry_store/depth_adaptive_level.hpp:131-135`
+- [ ] (suggestion) (cross-confirmed by both adversarial lenses) `kMaxGggsLevel = 20` duplicates `gggs::levels.size() - 1` with nothing tying them together — derive it, or `static_assert`, so a GGGS table change is a compile error rather than a silently over-restrictive clamp — `marine_bathymetry_store/src/depth_adaptive_level.cpp:42`
+- [ ] (suggestion) `RegressionAgainstFixedLevelTen` starts its loop exactly on a level boundary that `TransitionDepths` deliberately refuses to assert on (rounding accident); start at `transitionDepth(finest_level) * 1.001` — `marine_bathymetry_store/test/test_depth_adaptive_level.cpp:191`
+- [ ] (suggestion) No test pins the default policy constants themselves (0.05 / coarsest 8 / finest 14) — the operator-pinned values the ADR and README publish. The transition and clamp tests derive their expectations from the same struct, so changing a default passes the whole suite while contradicting the published ladder — `marine_bathymetry_store/test/test_depth_adaptive_level.cpp`
+- [ ] (suggestion) The amendment's bolded lead sentence reads as as-built ("`processed` **is** a depth-adaptive, mixed-level layer") and is only qualified four paragraphs later; "is to be" matches the pending-writer framing the rest of the amendment is careful about — `docs/decisions/0010-geospatial-world-model.md:449-451`
+- [ ] (suggestion) Pre-existing, outside the diff but now load-bearing in a second place: `fromCellSize`'s `@return` line says "smallest cells that are >= cell_size", contradicting its own brief (at-or-finer, which is the true contract this policy depends on) — `marine_autonomy/include/marine_autonomy/gggs/level.h:58-63`
+
+### Governance
+
+| Principle | Verdict | Notes |
+|---|---|---|
+| Capture decisions, not just implementations | Watch | The D9 amendment lands with the change, but three of its claims overstate what the store supports today (must-fix 1, 2, suggestion on the pyramid) |
+| A change includes its consequences | Concern | The cross-repo writer consequence is filed and sized honestly (cube_bathymetry#143, verified OPEN), but two in-repo consequences of a mixed-level `processed` — the sub-sampled safety query and the disabled draft anti-clobber — are neither named nor filed |
+| Documentation accuracy | Concern | Every citation verified and correct; the storage lower bound (must-fix 4) is not |
+| Enforcement over documentation | Pass | Clamps, edge cases and the ladder are a function plus 8 tests, not prose (see the suggestion on pinning the defaults) |
+| Test what breaks | Pass | Transitions, both clamps, monotonicity, sign symmetry, fail-loud cases and the #369 regression guard; 8/8 verified independently |
+| Only what's needed / Improve incrementally | Pass | One header/source pair, one test file, CMake, README, ADR — no scope creep from the plan |
+
+| ADR | Triggered | Compliant | Notes |
+|---|---|---|---|
+| `uma-ADR-0010` D9 | Yes | Partly | Amended as required; wording and the storage bound need the corrections above |
+| `uma-ADR-0013` D2/D3 | Yes | Partly | Generic coverage-manifest machinery is real, but whole-tile native-wins suppression makes "needs no change" conditional on a writer obligation |
+| `uma-ADR-0013` D8 | Yes | No | Cited as a guarantee already met; `query.cpp`'s per-level point sample does not meet it once `processed` is finer than the query level |
+| ADR-0008 (ROS 2 conventions) | Yes | Yes | License header matches the package, `install(DIRECTORY include/)` covers the new header, library source and gtest target registered correctly |
+
+Consequence check: ADR-0010 D9 amended (done); `marine_bathymetry_store/README.md`
+updated (done); `docs/sonar_ecosystem.md` verified not stale (line 96 already says
+"multi-level (D3/D4)") — correctly recorded rather than silently dropped;
+`.agents/README.md` has no verified-parameter table in this repo, so no entry is
+owed. Instruction-update **candidate** (proposal only, operator decides): a
+`.agent/knowledge/` note that `capture_distance_scale` is duplicated across two
+repos with no automated link — as the plan framed it.
+
+### Plan Adherence
+
+Exact. All six planned files changed and nothing else; the policy struct,
+edge-case decisions, ADR bullets and test list all match the revised plan, and
+the implementation adds two validations (out-of-range clamp, non-positive scale)
+beyond it. One sync item: the plan repeats the wrong storage lower bound at
+`plan.md:200` and should be corrected with the ADR.
+
+### Next step
+
+Verdict is changes-requested, so the next phase is `address-findings` on this
+entry, then a re-dispatch of `review-code`. Must-fixes 1 and 2 are the ones to
+settle first, and both are operator-visible: they may be answered by rewording
+the amendment plus filing follow-ups (a region-aware `shallowestReliable`, and a
+level-aware `clearOverlappedDraft`) rather than by code in this PR — but they
+should not be left unstated in the record. Not pushed; no PR.
+
+---
+**Authored-By**: `Claude Code Agent`
+**Model**: `Claude Opus`
