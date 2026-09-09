@@ -60,6 +60,14 @@ struct DepthSample
 /// safety-conscious caller must treat that as not-safe (ADR-0002 §D7), not as
 /// deep water. (The per-day epoch walk of ADR-0002 §A1.3 was dropped in #221;
 /// each layer is one fused surface.)
+///
+/// @warning **This is a point query, not a safety query.** Where a layer holds
+///   data FINER than @p cell, it resolves the single native cell containing the
+///   query cell's centre — one representative value, which is what a display or
+///   best-available lookup wants. A caller that must not miss a shoal inside the
+///   query cell (a costmap over depth-adaptive `processed` tiles, uma#369) must
+///   use `shallowestReliable` or `reliableSamples`, which read **every** covered
+///   native cell (`uma-ADR-0013` D8).
 std::optional<DepthSample> bestSource(
   const BathymetryStore & store, const gggs::CellIndex & cell);
 
@@ -71,6 +79,17 @@ std::optional<DepthSample> bestSource(
 /// height, the value closest to the surface and therefore the most hazardous.
 /// `std::nullopt` means no reliable data covers the cell; the caller must treat
 /// that as not-safe.
+///
+/// **The finest data for the REGION, not a sample from its centre**
+/// (`uma-ADR-0013` D8). Levels at or coarser than @p cell contain the whole
+/// query cell, so one cell of theirs bears on it. A level FINER than @p cell
+/// covers it with many native cells — 16 at one level finer, 256 at four, which
+/// is what a level-14 depth-adaptive `processed` tile (uma#369) is under a
+/// level-10 costmap query — and **every one of them is read**, with the
+/// shoalest reliable value winning. Point-sampling the centre would read 1 of
+/// 256 and could walk past exactly the 0.2-0.5 m rock those fine levels exist to
+/// resolve. Cost is bounded by data: native cells with no tile are never
+/// visited.
 ///
 /// @note Since #221 there is one fused surface per layer, so the ADR-0002 §A1.3
 ///   safety walk (a noisy newest epoch falling through to a prior confident
@@ -87,7 +106,12 @@ std::optional<DepthSample> shallowestReliable(
 /// max_uncertainty; a NaN uncertainty is never reliable), but returns **all**
 /// passing samples rather than collapsing to the shallowest. A cell can carry
 /// more than one sample when several source layers (Processed/Draft/Reference/Chart) or
-/// several GGGS levels cover it.
+/// several GGGS levels cover it — and, since a level finer than @p cell covers it
+/// with many native cells, one per **covered native cell** (`uma-ADR-0013` D8;
+/// see `shallowestReliable`). A query cell over a level-14 `processed` tile can
+/// therefore return up to 256 samples from that layer alone; the caller costs
+/// each and takes the most hazardous, which is the point — dropping all but the
+/// centre sample would hide the hazard.
 ///
 /// @note This exists because a *shallowest-depth* pick is unsafe for cost: a
 ///   shallower but high-σ (untrusted) sample would mask a co-located trusted

@@ -41,6 +41,41 @@ using marine_bathymetry_store::reliableSamples;
 using marine_bathymetry_store::shallowestReliable;
 using marine_bathymetry_store::SourceLayer;
 
+namespace
+{
+
+/// Geographic extent of a cell: SW corner and NE corner. Mirrors query.cpp's
+/// own cellBox, deliberately re-derived here so the tests do not lean on the
+/// implementation they are checking.
+struct TestCellBox
+{
+  geographic_msgs::msg::GeoPoint min;
+  geographic_msgs::msg::GeoPoint max;
+};
+
+TestCellBox cellBoxOf(const gggs::CellIndex & cell)
+{
+  const gggs::GridIndex & grid = cell.grid();
+  const double lat_per_cell = grid.latitudinalSpan() / gggs::cell_rows_per_grid;
+  const double lon_per_cell = grid.longitudinalSpan() / gggs::cell_columns_per_grid;
+  const auto sw = cell.position();
+  return TestCellBox{
+    sw, gggs::geoPoint(sw.latitude + lat_per_cell, sw.longitude + lon_per_cell)};
+}
+
+/// The point at fractional position (@p lat_fraction, @p lon_fraction) inside
+/// @p cell — (0.5, 0.5) is its centre.
+geographic_msgs::msg::GeoPoint pointInCell(
+  const gggs::CellIndex & cell, double lat_fraction, double lon_fraction)
+{
+  const TestCellBox box = cellBoxOf(cell);
+  return gggs::geoPoint(
+    box.min.latitude + lat_fraction * (box.max.latitude - box.min.latitude),
+    box.min.longitude + lon_fraction * (box.max.longitude - box.min.longitude));
+}
+
+}  // namespace
+
 TEST(Query, BestSourcePrefersHigherPriorityLayer)
 {
   BathymetryStore store(5, /*reference_writable=*/true);
@@ -384,4 +419,151 @@ TEST(Query, BestSourceFullPriorityOrderProcessedDraftReferenceChart)
   ASSERT_TRUE(best.has_value());
   EXPECT_EQ(best->source, SourceLayer::Chart);
   EXPECT_DOUBLE_EQ(best->depth, -22.0);
+}
+
+// ---------------------------------------------------------------------------
+// uma-ADR-0013 D8: a safety query reads the finest data for the REGION.
+// A depth-adaptive `processed` layer (uma#369) writes level 12-14 tiles under a
+// level-10/11 costmap query, so the query cell covers 16-256 native cells. These
+// pin that every one of them is read: point-sampling the query cell's centre
+// reads 1 of 16 here (1 of 256 at level 14) and walks past the rock in the other
+// 15.
+// ---------------------------------------------------------------------------
+
+TEST(Query, ShallowestReliableReadsEveryCoveredFineCell)
+{
+  BathymetryStore store(10);
+  const gggs::Level query_level(10);
+  const gggs::Level fine(12);            // 4x4 = 16 native cells per query cell
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(43.0, -70.5));
+
+  // Fill all 16 covered fine cells with deep, reliable water...
+  for (int i = 0; i < 4; ++i) {
+    for (int j = 0; j < 4; ++j) {
+      const auto pt = pointInCell(query_cell, (i + 0.5) / 4.0, (j + 0.5) / 4.0);
+      store.set(SourceLayer::Processed, fine.cellIndex(pt), BathyCell{-30.0, 0.1});
+    }
+  }
+  // ...then put a rock in the SW-most one, far from the query cell's centre.
+  const auto rock_pt = pointInCell(query_cell, 0.125, 0.125);
+  const auto rock_cell = fine.cellIndex(rock_pt);
+  store.set(SourceLayer::Processed, rock_cell, BathyCell{-0.4, 0.1});
+
+  // The rock must not be in the cell the centre resolves to, or the test would
+  // pass against a centre point-sample and prove nothing.
+  ASSERT_NE(rock_cell, fine.cellIndex(pointInCell(query_cell, 0.5, 0.5)));
+
+  const auto result = shallowestReliable(store, query_cell, 1.0);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_DOUBLE_EQ(result->depth, -0.4) << "the query missed a rock it covers";
+  EXPECT_EQ(result->level, 12u);
+  EXPECT_EQ(result->source, SourceLayer::Processed);
+}
+
+TEST(Query, ShallowestReliableCoversAFourLevelStep)
+{
+  // The clamp case: a level-14 `processed` tile (uma#369's fine clamp) under a
+  // level-10 query is 256 native cells. Point-sampling reads 0.4% of them.
+  BathymetryStore store(10);
+  const gggs::Level query_level(10);
+  const gggs::Level fine(14);
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(43.0, -70.5));
+
+  // Deep water at the centre, one rock in the north-east corner cell.
+  store.set(
+    SourceLayer::Processed, fine.cellIndex(pointInCell(query_cell, 0.5, 0.5)),
+    BathyCell{-25.0, 0.1});
+  const auto rock_cell = fine.cellIndex(pointInCell(query_cell, 1.0 - 0.5 / 16.0,
+      1.0 - 0.5 / 16.0));
+  store.set(SourceLayer::Processed, rock_cell, BathyCell{-0.2, 0.1});
+
+  const auto result = shallowestReliable(store, query_cell, 1.0);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_DOUBLE_EQ(result->depth, -0.2);
+  EXPECT_EQ(result->level, 14u);
+}
+
+TEST(Query, ShallowestReliableDoesNotReadBeyondTheQueryCell)
+{
+  // The other half of "for the region": the region is the QUERY CELL, not a
+  // neighbourhood. A rock in the adjoining level-12 cell belongs to the
+  // neighbouring costmap cell and must not leak into this one — otherwise the
+  // shoal bias would smear hazards across the whole grid.
+  BathymetryStore store(10);
+  const gggs::Level query_level(10);
+  const gggs::Level fine(12);
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(43.0, -70.5));
+
+  store.set(
+    SourceLayer::Processed, fine.cellIndex(pointInCell(query_cell, 0.5, 0.5)),
+    BathyCell{-30.0, 0.1});
+
+  // Just north of, and just east of, the query cell's own extent.
+  store.set(
+    SourceLayer::Processed, fine.cellIndex(pointInCell(query_cell, 1.125, 0.5)),
+    BathyCell{-0.3, 0.1});
+  store.set(
+    SourceLayer::Processed, fine.cellIndex(pointInCell(query_cell, 0.5, 1.125)),
+    BathyCell{-0.3, 0.1});
+
+  const auto result = shallowestReliable(store, query_cell, 1.0);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_DOUBLE_EQ(result->depth, -30.0) << "a neighbouring cell's rock leaked in";
+
+  // And the neighbouring cells do report it when they are the ones queried.
+  const auto north = query_level.cellIndex(pointInCell(query_cell, 1.125, 0.5));
+  ASSERT_NE(north, query_cell);
+  const auto north_result = shallowestReliable(store, north, 1.0);
+  ASSERT_TRUE(north_result.has_value());
+  EXPECT_DOUBLE_EQ(north_result->depth, -0.3);
+}
+
+TEST(Query, ReliableSamplesReturnsEveryCoveredFineCell)
+{
+  // reliableSamples carries the same obligation: the caller costs each sample
+  // and takes the most hazardous (ADR-0010 D7), so dropping 15 of 16 covered
+  // cells would hide the hazard it exists to surface.
+  BathymetryStore store(10);
+  const gggs::Level query_level(10);
+  const gggs::Level fine(12);
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(43.0, -70.5));
+
+  for (int i = 0; i < 4; ++i) {
+    for (int j = 0; j < 4; ++j) {
+      const auto pt = pointInCell(query_cell, (i + 0.5) / 4.0, (j + 0.5) / 4.0);
+      store.set(SourceLayer::Processed, fine.cellIndex(pt), BathyCell{-30.0 + i, 0.1});
+    }
+  }
+  // A high-uncertainty cell is still gated out — region-awareness widens the
+  // set of cells read, it does not weaken the reliability gate.
+  store.set(
+    SourceLayer::Processed, fine.cellIndex(pointInCell(query_cell, 0.125, 0.125)),
+    BathyCell{-0.1, 9.0});
+
+  const auto samples = reliableSamples(store, query_cell, 1.0);
+  EXPECT_EQ(samples.size(), 15u) << "expected the 16 covered cells less the gated one";
+  for (const auto & sample : samples) {
+    EXPECT_EQ(sample.level, 12u);
+    EXPECT_LE(sample.depth, -27.0) << "the over-uncertain rock passed the gate";
+  }
+}
+
+TEST(Query, ShallowestReliableStillPointResolvesCoarserLevels)
+{
+  // A level COARSER than the query contains the whole query cell, so exactly one
+  // of its cells bears on the query — the region walk must not change that, and
+  // must not double-count.
+  BathymetryStore store(10, /*reference_writable=*/true);
+  const gggs::Level coarse(8);
+  const gggs::Level query_level(10);
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(43.0, -70.5));
+
+  store.set(
+    SourceLayer::Reference, coarse.cellIndex(pointInCell(query_cell, 0.5, 0.5)),
+    BathyCell{-18.0, 0.5});
+
+  const auto samples = reliableSamples(store, query_cell, 1.0);
+  ASSERT_EQ(samples.size(), 1u);
+  EXPECT_EQ(samples.front().level, 8u);
+  EXPECT_DOUBLE_EQ(samples.front().depth, -18.0);
 }

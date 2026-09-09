@@ -88,10 +88,21 @@ written.
 
 - `bestSource(store, cell)` — the highest-priority layer with data. Walks
   `source_layers_by_priority` in order (`Processed` → `Draft` → `Reference` →
-  `Chart`) and returns the first layer holding a value for the cell.
+  `Chart`) and returns the first layer holding a value for the cell. Where a
+  layer is finer than the query cell this **point-resolves** the native cell at
+  the query cell's centre: one representative value, for display and
+  best-available lookups — not a safety query.
 - `shallowestReliable(store, cell, max_uncertainty)` — the shallowest (greatest
   ellipsoidal height) value among layers whose uncertainty is within tolerance.
-  For navigation-safety use.
+  For navigation-safety use. Reads the finest data **for the region**
+  (uma-ADR-0013 D8): a level finer than the query cell covers it with many native
+  cells (16 one level finer, 256 four levels finer — a level-14 depth-adaptive
+  `processed` tile under a level-10 query, uma#369), and every one of them is
+  read, shoalest reliable value winning.
+- `reliableSamples(store, cell, max_uncertainty)` — every passing sample rather
+  than the shoalest pick, for callers that cost each and take the most hazardous
+  (ADR-0010 §D7). Region-aware in the same way, so one query cell over a fine
+  `processed` tile can return one sample per covered native cell.
 - `forEachCellBestSource(store, min, max, visitor)` — the region form, over a
   geographic box.
 
