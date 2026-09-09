@@ -271,19 +271,19 @@ offline/`processed` only, new imports only, writer deferred to
 cube_bathymetry#143) were treated as settled and are not findings.
 
 ### Findings
-- [ ] (must-fix) The amendment's "why a mixed-level `processed` is safe" paragraph inverts ADR-0013 D8: `shallowestReliable` re-resolves **one** cell per level from the query cell's centre, so a level-10/11 costmap query over level-13/14 tiles point-samples 1 of 64-256 native cells and can miss the shoal those levels exist to resolve. D8 requires reading the finest data *for the region* — it is the obligation this change first makes binding, not a guarantee already met — `docs/decisions/0010-geospatial-world-model.md` (safety paragraph) vs `marine_bathymetry_store/src/query.cpp:112-126`, `:38-44`
-- [ ] (must-fix) A mixed-level `processed` silently disables the ADR-0010 D8 cross-layer anti-clobber: `clearOverlappedDraft` keys on the processed tile's `GridIndex`, which carries its level, so a level-12 processed tile never matches a level-10 draft grid and clears zero cells with no diagnostic. `bathymetry_store.hpp:238-240` documents the very assumption ("draft and processed both come from CUBE at the store level") that "`draft` stays fixed-level" invalidates; uncleared draft blunders still win in `shallowestReliable` — `marine_bathymetry_store/src/bathymetry_store.cpp:131-136`
-- [ ] (must-fix) The zero guard is applied to the double but `fromCellSize` receives `static_cast<float>(...)`, so a positive double that underflows in float reaches exactly the UB path the guard and header claim to prevent; built and run, `depthAdaptiveLevel(1e-44)` returns level **8** — the coarsest end, the inversion of the documented shallow-to-finest behaviour. Finite depths above ~6.8e39 overflow to +inf the same way. Validate the narrowed float — `marine_bathymetry_store/src/depth_adaptive_level.cpp:82-90`
-- [ ] (must-fix) The storage bound is wrong at the low end: "bounded by 1× (all water ≥ 18.1 m) and 256×" contradicts the same paragraph nine lines later — the ladder returns level 9 above ~36 m and level 8 above ~72 m, i.e. 1/4× and 1/16×. True bound is 1/16×-256×; same sentence in the plan — `docs/decisions/0010-geospatial-world-model.md:482-483`, `.agent/work-plans/issue-369/plan.md:200`
-- [ ] (suggestion) "never has cells coarser than the capture radius" is stated unconditionally but the fine clamp falsifies it below ~1.13 m depth (0.057 m cells vs a 0.05·d radius) — the test quietly starts its invariant loop at the clamp; state the exception in the comment, header, README and ADR — `marine_bathymetry_store/src/depth_adaptive_level.cpp:86-88`
-- [ ] (suggestion) The decision unit is circular as specified: the chosen level *defines* the tile extent (54.4 m at 14 vs 869.7 m at 10), so "the shallowest depth in that tile" is not determinable before the level is known. Name the fixpoint / separate decision region alongside the "may change when the writer lands" caveat — `marine_bathymetry_store/include/marine_bathymetry_store/depth_adaptive_level.hpp:68-73`
-- [ ] (suggestion) "the pyramid needs no change" holds only under an unstated writer obligation: native-wins suppresses a derived parent **whole tile**, and unlike `reference`'s disjoint S-102 footprints, depth bands in one contiguous survey can share a parent index — the shallow band's fold is then dropped at that level and coarser. Say the writer must not emit two native levels over the same ground — `marine_bathymetry_store/src/overview_pyramid.cpp:296-300`
-- [ ] (suggestion) No recovery contract for the throw at the destined call site: NaN is reachable in the intended use (an all-no-data tile's "shallowest depth"), and `import_bag_main.cpp` has no top-level catch around the tile loop, so an uncaught `invalid_argument` would end a multi-hour import. One sentence on expected caller behaviour (abort vs skip tile) — `marine_bathymetry_store/include/marine_bathymetry_store/depth_adaptive_level.hpp:131-135`
-- [ ] (suggestion) (cross-confirmed by both adversarial lenses) `kMaxGggsLevel = 20` duplicates `gggs::levels.size() - 1` with nothing tying them together — derive it, or `static_assert`, so a GGGS table change is a compile error rather than a silently over-restrictive clamp — `marine_bathymetry_store/src/depth_adaptive_level.cpp:42`
-- [ ] (suggestion) `RegressionAgainstFixedLevelTen` starts its loop exactly on a level boundary that `TransitionDepths` deliberately refuses to assert on (rounding accident); start at `transitionDepth(finest_level) * 1.001` — `marine_bathymetry_store/test/test_depth_adaptive_level.cpp:191`
-- [ ] (suggestion) No test pins the default policy constants themselves (0.05 / coarsest 8 / finest 14) — the operator-pinned values the ADR and README publish. The transition and clamp tests derive their expectations from the same struct, so changing a default passes the whole suite while contradicting the published ladder — `marine_bathymetry_store/test/test_depth_adaptive_level.cpp`
-- [ ] (suggestion) The amendment's bolded lead sentence reads as as-built ("`processed` **is** a depth-adaptive, mixed-level layer") and is only qualified four paragraphs later; "is to be" matches the pending-writer framing the rest of the amendment is careful about — `docs/decisions/0010-geospatial-world-model.md:449-451`
-- [ ] (suggestion) Pre-existing, outside the diff but now load-bearing in a second place: `fromCellSize`'s `@return` line says "smallest cells that are >= cell_size", contradicting its own brief (at-or-finer, which is the true contract this policy depends on) — `marine_autonomy/include/marine_autonomy/gggs/level.h:58-63`
+- [x] (must-fix) The amendment's "why a mixed-level `processed` is safe" paragraph inverts ADR-0013 D8: `shallowestReliable` re-resolves **one** cell per level from the query cell's centre, so a level-10/11 costmap query over level-13/14 tiles point-samples 1 of 64-256 native cells and can miss the shoal those levels exist to resolve. D8 requires reading the finest data *for the region* — it is the obligation this change first makes binding, not a guarantee already met — `docs/decisions/0010-geospatial-world-model.md` (safety paragraph) vs `marine_bathymetry_store/src/query.cpp:112-126`, `:38-44`
+- [x] (must-fix) A mixed-level `processed` silently disables the ADR-0010 D8 cross-layer anti-clobber: `clearOverlappedDraft` keys on the processed tile's `GridIndex`, which carries its level, so a level-12 processed tile never matches a level-10 draft grid and clears zero cells with no diagnostic. `bathymetry_store.hpp:238-240` documents the very assumption ("draft and processed both come from CUBE at the store level") that "`draft` stays fixed-level" invalidates; uncleared draft blunders still win in `shallowestReliable` — `marine_bathymetry_store/src/bathymetry_store.cpp:131-136`
+- [x] (must-fix) The zero guard is applied to the double but `fromCellSize` receives `static_cast<float>(...)`, so a positive double that underflows in float reaches exactly the UB path the guard and header claim to prevent; built and run, `depthAdaptiveLevel(1e-44)` returns level **8** — the coarsest end, the inversion of the documented shallow-to-finest behaviour. Finite depths above ~6.8e39 overflow to +inf the same way. Validate the narrowed float — `marine_bathymetry_store/src/depth_adaptive_level.cpp:82-90`
+- [x] (must-fix) The storage bound is wrong at the low end: "bounded by 1× (all water ≥ 18.1 m) and 256×" contradicts the same paragraph nine lines later — the ladder returns level 9 above ~36 m and level 8 above ~72 m, i.e. 1/4× and 1/16×. True bound is 1/16×-256×; same sentence in the plan — `docs/decisions/0010-geospatial-world-model.md:482-483`, `.agent/work-plans/issue-369/plan.md:200`
+- [x] (suggestion) "never has cells coarser than the capture radius" is stated unconditionally but the fine clamp falsifies it below ~1.13 m depth (0.057 m cells vs a 0.05·d radius) — the test quietly starts its invariant loop at the clamp; state the exception in the comment, header, README and ADR — `marine_bathymetry_store/src/depth_adaptive_level.cpp:86-88`
+- [x] (suggestion) The decision unit is circular as specified: the chosen level *defines* the tile extent (54.4 m at 14 vs 869.7 m at 10), so "the shallowest depth in that tile" is not determinable before the level is known. Name the fixpoint / separate decision region alongside the "may change when the writer lands" caveat — `marine_bathymetry_store/include/marine_bathymetry_store/depth_adaptive_level.hpp:68-73`
+- [x] (suggestion) "the pyramid needs no change" holds only under an unstated writer obligation: native-wins suppresses a derived parent **whole tile**, and unlike `reference`'s disjoint S-102 footprints, depth bands in one contiguous survey can share a parent index — the shallow band's fold is then dropped at that level and coarser. Say the writer must not emit two native levels over the same ground — `marine_bathymetry_store/src/overview_pyramid.cpp:296-300`
+- [x] (suggestion) No recovery contract for the throw at the destined call site: NaN is reachable in the intended use (an all-no-data tile's "shallowest depth"), and `import_bag_main.cpp` has no top-level catch around the tile loop, so an uncaught `invalid_argument` would end a multi-hour import. One sentence on expected caller behaviour (abort vs skip tile) — `marine_bathymetry_store/include/marine_bathymetry_store/depth_adaptive_level.hpp:131-135`
+- [x] (suggestion) (cross-confirmed by both adversarial lenses) `kMaxGggsLevel = 20` duplicates `gggs::levels.size() - 1` with nothing tying them together — derive it, or `static_assert`, so a GGGS table change is a compile error rather than a silently over-restrictive clamp — `marine_bathymetry_store/src/depth_adaptive_level.cpp:42`
+- [x] (suggestion) `RegressionAgainstFixedLevelTen` starts its loop exactly on a level boundary that `TransitionDepths` deliberately refuses to assert on (rounding accident); start at `transitionDepth(finest_level) * 1.001` — `marine_bathymetry_store/test/test_depth_adaptive_level.cpp:191`
+- [x] (suggestion) No test pins the default policy constants themselves (0.05 / coarsest 8 / finest 14) — the operator-pinned values the ADR and README publish. The transition and clamp tests derive their expectations from the same struct, so changing a default passes the whole suite while contradicting the published ladder — `marine_bathymetry_store/test/test_depth_adaptive_level.cpp`
+- [x] (suggestion) The amendment's bolded lead sentence reads as as-built ("`processed` **is** a depth-adaptive, mixed-level layer") and is only qualified four paragraphs later; "is to be" matches the pending-writer framing the rest of the amendment is careful about — `docs/decisions/0010-geospatial-world-model.md:449-451`
+- [x] (suggestion) Pre-existing, outside the diff but now load-bearing in a second place: `fromCellSize`'s `@return` line says "smallest cells that are >= cell_size", contradicting its own brief (at-or-finer, which is the true contract this policy depends on) — `marine_autonomy/include/marine_autonomy/gggs/level.h:58-63`
 
 ### Governance
 
@@ -327,6 +327,165 @@ settle first, and both are operator-visible: they may be answered by rewording
 the amendment plus filing follow-ups (a region-aware `shallowestReliable`, and a
 level-aware `clearOverlappedDraft`) rather than by code in this PR — but they
 should not be left unstated in the record. Not pushed; no PR.
+
+---
+**Authored-By**: `Claude Code Agent`
+**Model**: `Claude Opus`
+
+## Implementation
+**Status**: complete
+**When**: 2026-09-09 13:57 -04:00
+**By**: Claude Code Agent (Claude Opus)
+
+**Branch**: feature/issue-369 at `791a740`
+**Addressed**: `## Local Review (Pre-Push)` (2026-09-09 13:15 -04:00, verdict
+changes-requested, branch at `e6a76b7`) — all 4 must-fixes and all 9 suggestions
+**Commits**: `fd5788d`, `803958f`, `753940a`, `b047a39`, `ca7b9c2`, `437b34e`,
+`de6d253`, `f3b2996`, `791a740`
+
+Both operator-pinned must-fixes (1 and 2) were fixed **in code here**, as
+directed, not by rewording the amendment. Each has regression tests that were
+**run against the unfixed code first and observed to fail**, so they are proven
+to bite; no existing test was weakened or skipped. All 13 findings are actioned —
+none deferred, none declined.
+
+### Actions
+
+- [x] (must-fix) `shallowestReliable` reads the finest data for the REGION —
+  `marine_bathymetry_store/src/query.cpp`. Levels at or coarser than the query
+  cell still point-resolve (one such cell contains the whole query cell). A
+  finer level now enumerates **every** native cell the query cell covers and
+  keeps the shoalest reliable value. `reliableSamples` got the same treatment —
+  the finding named only `shallowestReliable`, but that function's contract is
+  "the caller costs each sample and takes the most hazardous", so a centre
+  point-sample would have hidden the same hazard. `bestSource` is deliberately
+  left point-resolving (it is the best-available display lookup) and now says so
+  in its docs. Cost stays bounded by data: grids with no tile in the layer are
+  skipped without touching a cell. Verified failing first: 4 of the 5 new tests
+  (`ShallowestReliableReadsEveryCoveredFineCell` -30 vs -0.4,
+  `ShallowestReliableCoversAFourLevelStep` -25 vs -0.2,
+  `ShallowestReliableDoesNotReadBeyondTheQueryCell`,
+  `ReliableSamplesReturnsEveryCoveredFineCell` 1 sample vs 15). The fifth
+  (`ShallowestReliableStillPointResolvesCoarserLevels`) is a no-change guard and
+  passes both ways, by design.
+- [x] (must-fix) `clearOverlappedDraft` is level-aware —
+  `marine_bathymetry_store/src/bathymetry_store.cpp`. It now walks every GGGS
+  level the `draft` layer holds. Draft at or finer than the processed tile: the
+  draft cell lies inside exactly one processed cell (levels nest exactly), which
+  decides it; the gated-drop-hole rule is unchanged. Draft **coarser**: cleared
+  only where this tile fully supersedes it (the cell lies entirely inside the
+  tile and every processed cell under it has data) — otherwise kept, because
+  clearing would discard draft data over ground this tile does not speak for and
+  a wrongly-cleared draft cell is a lost hazard, and **counted** in the new
+  `DraftClearResult::coarse_draft_cells_retained`. No level combination is a
+  quiet no-op now; an invalid processed `GridIndex` throws rather than returning
+  an empty result. Both overloads deduplicate `tiles_touched` (a coarse draft
+  tile can now be reached by several processed tiles). The stale contract comment
+  at `bathymetry_store.hpp:238-240` is replaced by the level-aware contract.
+  Verified failing first: both cross-level tests cleared **0** cells against the
+  previous code.
+- [x] (must-fix) Float-narrowing hole in the zero guard —
+  `marine_bathymetry_store/src/depth_adaptive_level.cpp`. The guard now tests the
+  narrowed `float` that `fromCellSize` actually receives, at both ends:
+  underflow (a positive double that is `0.0f`, e.g. 1e-44) returns `finest_level`
+  and overflow to `+inf` returns `coarsest_level` — each the shoal-biased end for
+  that input, and both short-circuiting the undefined `log2(0)`/`log2(inf)` cast.
+  Verified failing first: `depthAdaptiveLevel(1e-44)` returned level **8**.
+- [x] (must-fix) Storage bound corrected to **1/16×–256×** in both places —
+  `docs/decisions/0010-geospatial-world-model.md` and
+  `.agent/work-plans/issue-369/plan.md`. The plan's table also gained its two
+  missing coarse rows (level 9 = 1/4×, level 8 = 1/16×).
+- [x] (suggestion) The capture-radius claim's clamp exception (below ~1.13 m the
+  fine clamp holds cells coarser than the radius) is now stated in the comment,
+  the header, the README and — via the ladder table's clamp rows — the ADR.
+- [x] (suggestion) The decision unit's circularity is named, with what the writer
+  must do about it (a level-independent decision region, or a fixpoint
+  iteration) — `depth_adaptive_level.hpp`, README.
+- [x] (suggestion) The pyramid's "needs no change" is now stated with its writer
+  obligation (whole-tile native-wins suppression means no two native levels over
+  one parent index) — in the ADR and at the suppression site,
+  `marine_bathymetry_store/src/overview_pyramid.cpp:296`.
+- [x] (suggestion) Recovery contract for the throw: a decision unit with no data
+  (shallowest depth = NaN) should be **skipped** by the caller, not allowed to end
+  a multi-hour import; configuration throws are fatal at startup —
+  `depth_adaptive_level.hpp`, README.
+- [x] (suggestion, cross-confirmed) `kMaxGggsLevel` derives from the GGGS level
+  table (`std::tuple_size` + two `static_assert`s) instead of duplicating 20 — a
+  table change is now a compile error.
+- [x] (suggestion) `RegressionAgainstFixedLevelTen` starts at
+  `transitionDepth(finest_level) * 1.001`, off the boundary `TransitionDepths`
+  deliberately declines to assert on.
+- [x] (suggestion) `DefaultPolicyIsThePublishedOne` pins 0.05 / coarsest 8 /
+  finest 14 directly, so changing a default can no longer pass a suite whose
+  other expectations derive from the same struct.
+- [x] (suggestion) The amendment's bolded lead reads "is *to be*", with a
+  parenthetical separating what landed (policy + store support) from what has
+  not (the writer).
+- [x] (suggestion) `fromCellSize`'s `@return` corrected to at-or-finer —
+  `marine_autonomy/include/marine_autonomy/gggs/level.h:58-63`.
+
+### Found while fixing (not in the review)
+
+- **Boundary-alignment bug in the new region walk.** Writing the cross-level
+  draft tests surfaced it: a box corner that coincides exactly with a cell
+  boundary — which it always does here, since GGGS levels nest exactly — can land
+  an ulp on the wrong side when the two levels' spans are computed by different
+  routes, starting a walk one cell short and reading no-data outside the box.
+  `insetForIteration` now insets **both** corners, not just the maximum. Caught
+  by `ClearOverlappedDraftClearsCoarserDraftOnlyWhereFullySuperseded` failing
+  against my own first implementation.
+- **`src/cell_geometry.hpp`** (new, internal, not installed) holds the extent and
+  inset helpers, so the query walk and the draft clear share one copy of that
+  arithmetic rather than drifting apart.
+
+### Build and test (run from the worktree root, verbatim)
+
+`./core_ws/build.sh marine_bathymetry_store` — `Finished <<< marine_bathymetry_store`.
+
+`./core_ws/test.sh marine_bathymetry_store`:
+
+```
+Summary: 369 tests, 0 errors, 0 failures, 43 skipped
+```
+
+(was 355/42 before this pass: +14 gtests — 5 query, 3 store, 2 policy, and 4 more
+lint/cppcheck entries from the new header; the 43rd "skip" is cppcheck's per-file
+entry for `cell_geometry.hpp`.) Every linter clean: copyright, cppcheck, cpplint,
+lint_cmake, uncrustify, xmllint all `failures=0`.
+
+`./core_ws/test.sh marine_autonomy` (the `level.h` doc change):
+
+```
+Summary: 516 tests, 0 errors, 0 failures, 59 skipped
+```
+
+`./core_ws/test.sh bathymetry_layer marine_tiled_raster_store marine_sidescan_mosaic`
+(the store's in-repo consumers, after a full `./core_ws/build.sh`):
+
+```
+Summary: 892 tests, 0 errors, 9 failures, 101 skipped
+```
+
+All 9 failures are **pre-existing lint failures in `marine_sidescan_mosaic`**
+(2 cpplint line-length in `src/sidescan_mosaic_bag.cpp`, 5 uncrustify diffs, and
+the two aggregate entries) — untouched by this branch, which changes no file in
+that package. `bathymetry_layer` (the safety consumer of `shallowestReliable`) and
+`marine_tiled_raster_store` are green.
+
+### Deferred / not done
+
+Nothing from the review. Still deliberately out of scope, per the operator's pins:
+the writer that will call `depthAdaptiveLevel` (cube_bathymetry#143), retroactive
+reprocessing of existing level-10 stores (gated on #366), and the proposed
+`.agent/knowledge/` note about `capture_distance_scale` being duplicated across
+two repos with no automated link — a proposal for the operator, not an action
+taken here.
+
+Not pushed; no PR opened.
+
+### Next step
+
+Lifecycle: **Implementation** → **review-code** (re-review the fixes cold).
 
 ---
 **Authored-By**: `Claude Code Agent`
