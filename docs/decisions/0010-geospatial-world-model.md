@@ -521,15 +521,30 @@ full-data replay remain offline properties).
   store mechanisms assumed `processed` was single-level and had to change with
   it (both landed with the policy, in #369).
 
-  1. **The safety query now reads the region, not a point.**
-     `shallowestReliable()` and `reliableSamples()` re-resolved *one* cell per
-     level from the query cell's centre. Under a level-10/11 costmap query, a
-     level-13/14 `processed` tile covers that cell with 64-256 native cells, so
-     the walk read one of them and a 0.2-0.5 m rock — precisely what those
-     levels exist to resolve — could fall between samples. Both queries now
-     enumerate **every** native cell a query cell covers at any finer level and
-     keep the shoalest reliable value. (`bestSource()` stays a point lookup by
-     design: it is the best-available display query, not the safety one.)
+  1. **The safety query now reads the region, not a point — including its
+     existence gate.** `shallowestReliable()` and `reliableSamples()` re-resolved
+     *one* cell per level from the query cell's centre. Under a level-10/11
+     costmap query, a level-13/14 `processed` tile covers that cell with 64-256
+     native cells, so the walk read one of them and a 0.2-0.5 m rock — precisely
+     what those levels exist to resolve — could fall between samples. Both
+     queries now enumerate **every** native cell a query cell covers at any finer
+     level and keep the shoalest reliable value.
+
+     A *third* query had to change with them, and it is the one that decides
+     whether the other two run at all. `bathymetry_layer::evaluateCell`
+     implements the ADR-0002 D7 two-query no-data policy, and its first query —
+     "is there ANY data here?" — was `bestSource()`, a point lookup. On
+     `nullopt` it returned early, so the region-aware query never ran: one
+     no-data native cell under the query cell's **centre** (a gated-drop hole, a
+     between-lines gap, an absent 54.4 m tile beside a present one) declared the
+     whole costmap cell unsurveyed and dropped a rock in any of the other 255.
+     The existence gate is now `hasAnyData()`, region-aware over the same ground
+     as the depth queries and quality-blind as D7 requires, and `evaluateCell`
+     runs `reliableSamples()` **first** — the region-aware query is never gated
+     behind a point query. `bestSource()` itself stays a point lookup by design:
+     it is the best-available *display* query. What was wrong before #369 round 2
+     was not `bestSource`'s contract but the safety path's use of it, and its
+     `@warning` now says so.
   2. **The cross-layer anti-clobber (D8, below) is now level-aware.**
      `clearOverlappedDraft` keyed on the processed tile's `GridIndex`, which
      carries its level, so a finer `processed` tile matched no fixed-level
@@ -539,6 +554,26 @@ full-data replay remain offline properties).
      only where that tile fully supersedes it, and the partly-covered ones are
      kept and **counted**, never silently skipped.
 
+  *The consequence of reading the region: per-query fan-out on the live costmap
+  thread.* Correctness here is not free, and the cost is a **config parameter**,
+  not a future condition. `bathymetry_layer` derives its query level from
+  `BathymetryStore::fromCellSize(resolution_)`, so the gap between the query
+  level and the store's native level is set by the costmap's resolution against
+  whatever the store holds: a 2 m global costmap over today's *uniform level-10*
+  `processed` already fans out 4 covered cells per costmap cell, a 4 m global
+  16 — both reachable on the boat now, without waiting for the depth-adaptive
+  writer. A 1 m global over level-14 tiles would be 256, about 2.56 M cell visits
+  (each a map find and a `push_back`) inside one 100x100 rendered tile, and
+  `generateTile` checks its time budget only *between* tiles, so a tile is
+  uninterruptible once started. This has not been measured, and no bound exists.
+  Narrowing the query back toward a point sample is not the remedy — that is the
+  defect just fixed — so the remedy is a measurement and then a bound or an
+  interruption point, tracked as
+  [#371](https://github.com/rolker/unh_marine_autonomy/issues/371). The existence
+  gate is the cheap half: `hasAnyData()` stops at the first cell holding data, so
+  over surveyed ground it costs one cell and only a genuinely empty region pays
+  the full walk.
+
   With those in place a native level boundary *inside* `processed` carries no
   operational risk — the same argument the `reference` bullet below makes for
   its native-wins pyramid, and the same one that exempts `chart` above. The
@@ -547,13 +582,29 @@ full-data replay remain offline properties).
   ([#331](https://github.com/rolker/unh_marine_autonomy/issues/331))
   emits per-tile geometric error and a coverage manifest for `draft`,
   `processed` and `reference` alike, so it needs no change when `processed`
-  starts holding more than one level — **provided the writer never emits two
-  native levels over the same ground**. Native-wins suppresses a derived parent
-  as a *whole tile*, and unlike `reference`'s disjoint S-102 footprints, depth
-  bands within one contiguous survey can share a parent index; if both a shallow
-  and a deep band wrote native tiles under one parent, the shallow band's fold
-  would be dropped at that level and every level coarser. That is a writer
-  obligation (cube_bathymetry#143), not a pyramid change.
+  starts holding more than one level. It does, however, interact with native-wins
+  in a way that is a **known coarse-tier consequence, not a dischargeable writer
+  obligation**. Native-wins suppresses a derived parent as a *whole tile*, and
+  unlike `reference`'s disjoint S-102 footprints, depth bands within one
+  contiguous survey share parent indices; where a shallow and a deep band write
+  native tiles under one parent, the shallow band's fold is dropped at that level
+  and every level coarser.
+
+  An earlier draft of this amendment stated that as an obligation on the writer —
+  "never emit two native levels over the same ground". That is **unsatisfiable**,
+  and recording it as discharged would have been false: the ladder *guarantees*
+  mixed native levels under one parent. A 217 m level-12 tile that is deep on one
+  half and shallow on the other yields native level 12 beside native 13/14 under
+  the same parent index; the only writer that could honour the obligation is one
+  that is not depth-adaptive across a tile boundary, which is the whole policy.
+
+  Safety is unaffected — it is held by the region-aware native query above, which
+  never consults an LOD level (ADR-0013 D8). What is affected is the **coarse
+  display tier**: at levels above the native boundary, the shallow band's fold
+  may be missing where the deep band's native tile wins the parent. Record it as
+  a display consequence for `camp` and a design input for the coarse-tier work,
+  alongside the level-transition asymmetry below — not as something
+  cube_bathymetry#143 can fix.
 
   *One asymmetry, for the display consumers.* `reference`'s mixed levels come
   from **disjoint** source regions (S-102 footprints); `processed`'s come from
