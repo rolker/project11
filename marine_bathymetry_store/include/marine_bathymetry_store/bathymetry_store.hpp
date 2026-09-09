@@ -72,15 +72,23 @@ struct DraftClearResult
   std::size_t cells_cleared = 0;
   /// `Draft` tiles with ≥1 cleared cell (each once, ascending). Cache-invalidation seam.
   std::vector<gggs::GridIndex> tiles_touched;
-  /// `Draft` cells **coarser** than the processed tile that overlap its data but
-  /// were deliberately kept, because this tile does not fully supersede them:
-  /// the draft cell extends past the processed tile's edge, or the processed
-  /// data has a no-data hole under it. Keeping them is the shoal-safe direction
-  /// (a retained draft blunder is a false alarm; a wrongly-cleared draft cell is
-  /// a lost hazard), but the residue is real, so it is **counted rather than
-  /// silent** — a caller clearing tile-by-tile can see that neighbouring
-  /// processed tiles still owe the rest of that draft cell's ground. Always 0
-  /// when `draft` is at or finer than `processed`, which is the deployed case.
+  /// **Distinct** `Draft` cells **coarser** than the processed data that overlap
+  /// it but were deliberately kept, because the processed data does not fully
+  /// supersede them: part of the draft cell's ground lies outside every processed
+  /// tile in this call, or a processed cell under it holds no data. Keeping them
+  /// is the shoal-safe direction (a retained draft blunder is a false alarm; a
+  /// wrongly-cleared draft cell is a lost hazard), but the residue is real, so it
+  /// is **counted rather than silent** — a caller can see that its imports still
+  /// owe the rest of that draft cell's ground.
+  ///
+  /// Counted once per draft cell, not once per processed tile that saw it: the
+  /// coverage decision is taken against every tile in the call at once (see
+  /// `clearOverlappedDraft`), so a cell reported here is one the whole call
+  /// genuinely does not supersede. 0 whenever `draft` is at or finer than every
+  /// processed level in the call — with a fixed-level `draft` and a
+  /// depth-adaptive `processed` (uma#369) that is the *deep* end of the ladder;
+  /// where `processed` goes finer than `draft` (levels 11-14, shallow water) the
+  /// coarse path is live.
   std::size_t coarse_draft_cells_retained = 0;
 };
 
@@ -254,11 +262,25 @@ public:
   /// - `draft` at or finer than `processed`: the draft cell lies inside exactly
   ///   one processed cell (levels nest exactly), which decides it.
   /// - `draft` **coarser** than `processed`: the draft cell is cleared only when
-  ///   this processed tile fully supersedes it — the cell lies entirely inside
-  ///   the tile and every processed cell under it has data. Otherwise it is kept
-  ///   (clearing would discard draft data over ground this tile does not speak
-  ///   for) and counted in `DraftClearResult::coarse_draft_cells_retained`, so
-  ///   the residue is reported rather than silent.
+  ///   the processed data fully supersedes it — every point of its ground is
+  ///   covered by a processed cell that has data. Otherwise it is kept (clearing
+  ///   would discard draft data over ground this call does not speak for) and
+  ///   counted in `DraftClearResult::coarse_draft_cells_retained`, so the residue
+  ///   is reported rather than silent.
+  ///
+  /// **The coverage decision spans the whole call, not one tile at a time.**
+  /// A coarse draft cell whose ground is split across several processed tiles —
+  /// straddling a tile seam, or split between a shallow level-13 tile and its
+  /// deeper level-12 neighbour — is superseded by their **union** and is
+  /// cleared, even though no single tile covers it. Deciding tile-by-tile would
+  /// retain it for every tile that saw part of it, which both keeps a superseded
+  /// draft blunder winning `shallowestReliable` and reports the same cell in
+  /// `coarse_draft_cells_retained` once per tile. The retained count is
+  /// therefore a count of **distinct draft cells**, and a cell counted by the
+  /// map overload is one that this whole import genuinely does not supersede.
+  /// (The single-tile overload sees a set of one, so for an incremental writer
+  /// the union is exactly that tile — a draft cell its neighbours will complete
+  /// is retained now and cleared when they arrive.)
   ///
   /// This mutates only `Draft` — an ungated, freely-writable layer — so it needs no
   /// write-gate opt-in; `Reference`/`Chart` are never touched.
@@ -305,15 +327,15 @@ private:
     const geographic_msgs::msg::GeoPoint & min_pt,
     const geographic_msgs::msg::GeoPoint & max_pt);
 
-  /// @brief Does @p processed_tile fully supersede @p draft_cell?
+  /// @brief The shared implementation of both `clearOverlappedDraft` overloads.
   ///
-  /// The per-cell decision behind `clearOverlappedDraft`, level-aware in both
-  /// directions (see that method's contract). Increments
-  /// `result.coarse_draft_cells_retained` when a coarser draft cell is kept
-  /// because this tile covers only part of it.
-  bool processedCoversDraftCell(
-    const BathymetryTile & processed_tile, const gggs::CellIndex & draft_cell,
-    DraftClearResult & result) const;
+  /// @p processed is every processed tile the call was given, as non-owning
+  /// pointers (the single-tile overload passes one). The decision for each draft
+  /// cell is taken against the **whole set at once**, never tile-by-tile — see
+  /// `clearOverlappedDraft`'s contract for why that matters for a coarse draft
+  /// cell, and for the double-count it removes.
+  DraftClearResult clearOverlappedDraftImpl(
+    const std::vector<const BathymetryTile *> & processed);
 
   /// @brief Find or create the tile for @p grid in @p layer.
   ///
