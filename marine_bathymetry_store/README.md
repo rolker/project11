@@ -284,6 +284,49 @@ ros2 run marine_bathymetry_store build_depth_overviews /path/to/store/reference 
   data (uma-ADR-0011 Consequences). `coverage.json` is not a `.tif`, so the
   flat-layout loaders already skip it silently too.
 
+### Depth-adaptive level selection (`depth_adaptive_level.hpp`, uma-ADR-0010 D9 / uma#369)
+
+`depthAdaptiveLevel(depth_m)` chooses the GGGS level a `processed` store tile
+should be written at, from the depth that tile covers. It is the depth-driven
+analogue of the level selection `s102_import` already does per dataset
+resolution (`src/s102/run.cpp` maps `record.resolution_m` through
+`gggs::Level::fromCellSize`).
+
+The requested cell size is `capture_distance_scale · |depth|` (default 0.05,
+mirroring `cube_bathymetry::Parameters::capture_distance_scale` — **no automated
+link between the two repos' constants**), mapped through `fromCellSize` (which
+returns the level at or finer than the request) and clamped to `[8, 14]`:
+
+| Level | Cell size | Tile extent | Applies when |
+|---|---|---|---|
+| 8 (coarse clamp) | 3.624 m | 3478.7 m | depth ≥ 72.47 m |
+| 9 | 1.812 m | 1739.4 m | 36.24–72.47 m |
+| 10 | 0.906 m | 869.7 m | 18.12–36.24 m |
+| 11 | 0.453 m | 434.8 m | 9.06–18.12 m |
+| 12 | 0.227 m | 217.4 m | 4.53–9.06 m |
+| 13 | 0.113 m | 108.7 m | 2.26–4.53 m |
+| 14 (fine clamp) | 0.057 m | 54.4 m | depth < 2.26 m |
+
+CUBE's 0.5 m capture *floor* is deliberately not carried over — it is a minimum
+acceptance distance, not a resolution floor, and treating it as one pins
+everything shallower than ~18 m to level 11. Level 10 is what every `processed`
+tile holds today, so each step finer is **4× the cells and tiles over the same
+ground**: 4× at 11, 16× at 12, 64× at 13, **256×** at the level-14 clamp.
+
+- **Decision unit**: one level per store tile, sized from the **shallowest**
+  depth in the tile (that sounding has the tightest capture radius). The scalar
+  signature may change when the writer lands.
+- **Fails loud**: a non-finite depth, an inverted or out-of-range clamp, and a
+  non-positive `capture_distance_scale` all throw `std::invalid_argument`. Zero
+  depth returns the fine clamp, guarded before `fromCellSize` (whose `log2(0)`
+  path is undefined).
+- **Nothing calls it yet.** `import_bag` builds one `cube::GeoMapSheet` per run
+  and pins the store cell size to it, so CUBE's estimation grid and the store
+  tiling are one resolution by construction; decoupling them is
+  [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143).
+  Existing level-10 stores are untouched — the policy applies to new imports
+  only.
+
 ## Build & test
 
 This package lives in the `unh_marine_autonomy` repo and builds in `core_ws`:
@@ -294,12 +337,15 @@ colcon test --packages-select marine_bathymetry_store
 ```
 
 Tests (`test_store`, `test_query`, `test_tile_io`, `test_geotiff_import`,
-`test_depth_overview`) are headless GTest and cover priority precedence, no-data
+`test_depth_overview`, `test_depth_adaptive_level`) are headless GTest and cover
+priority precedence, no-data
 handling, the height-aware shallowest-reliable semantics, persistence round-trip
 (depth + uncertainty), incremental (dirty-only) save, level-mismatch rejection,
 the GeoTIFF importer, the depth overview-pyramid builder (shallowest-preserving
 fold, {depth, σ} pair coherence, no-upsample invariant, malformed-filename
-skip→swap-refusal, and the loader's silent `overviews/` skip), and the coarse
+skip→swap-refusal, and the loader's silent `overviews/` skip), the
+depth-adaptive level policy (every level transition depth, both clamps,
+monotonicity in depth, and the fail-loud edge cases), and the coarse
 `StoreMetadata` round-trip.
 
 The chart suite additionally covers the write gates (`set` / `importTiles` on a
