@@ -322,6 +322,28 @@ fixed in code here rather than deferred):
 | `marine_bathymetry_store/src/overview_pyramid.cpp` | Comment: whole-tile native-wins suppression is a constraint on a mixed-level writer |
 | `marine_autonomy/include/marine_autonomy/gggs/level.h` | Doc fix: `fromCellSize` returns at-or-finer (its `@return` said the opposite) |
 
+**Added after review round 2** (the round-1 region-aware query was never reached
+on the path that steers the boat: `bathymetry_layer::evaluateCell` gated the
+whole safety evaluation on `bestSource`, a point lookup, and returned early on
+`nullopt`. The operator directed that it be fixed in code here — `bathymetry_layer`
+is in this repo, so no second PR is needed):
+
+| File | Change |
+|------|--------|
+| `marine_bathymetry_store/include/marine_bathymetry_store/query.hpp` | New `hasAnyData` — the region-aware, quality-blind existence probe; `bestSource`'s `@warning` corrected to name the safety-path misuse |
+| `marine_bathymetry_store/src/query.cpp` | `hasAnyData` implementation; the internal walk visitors gained an early-exit return so the probe stops at the first cell holding data |
+| `bathymetry_layer/src/bathymetry_layer.cpp` | `evaluateCell` runs `reliableSamples` **first** and falls back to `hasAnyData` only when it is empty — the region-aware query is never gated behind a point query; the M1 unsurveyed / surveyed-but-unusable split is preserved |
+| `bathymetry_layer/src/bathymetry_layer.hpp` | No-data-policy doc corrected; new section recording the per-query fan-out cost on the live costmap thread (#371) |
+| `bathymetry_layer/README.md` | Same, in the No-data policy section |
+| `bathymetry_layer/test/test_bathymetry_layer.cpp` | Two regression tests, both verified to fail against the `bestSource` gate |
+| `marine_bathymetry_store/test/test_query.cpp` | Four `hasAnyData` tests + one genuinely mixed-level (10/12/14 in one layer) safety-query test |
+| `marine_bathymetry_store/src/geotiff_import.cpp`, `include/.../geotiff_import.hpp` | Stale contract sentence removed; `coarse_draft_cells_retained` surfaced through `ProcessedImportResult`; `@throws` completed |
+| `marine_bathymetry_store/src/bathymetry_store.cpp` | Draft-clear inner-loop ordering; per-draft-cell dedup of the retained counter in the map overload |
+| `marine_bathymetry_store/src/depth_adaptive_level.cpp`, `depth_adaptive_level.hpp`, `README.md`, `test/test_depth_adaptive_level.cpp` | Corrected float-overflow threshold (~7.1e36, not ~6.8e39) and guarded the value that actually overflows |
+| `marine_bathymetry_store/src/cell_geometry.hpp` | Inset derived from the grid's actual latitudinal span, not the level's nominal one |
+| `marine_bathymetry_store/src/overview_pyramid.cpp` | Comment corrected: whole-tile suppression is a coarse-tier consequence, not a dischargeable writer obligation |
+| `docs/decisions/0010-geospatial-world-model.md` | D9: the corrected `bestSource` wording, the per-query fan-out consequence (#371), and the unsatisfiable writer obligation restated as a display consequence |
+
 ## Principles Self-Check
 
 | Principle | Consideration |
@@ -350,7 +372,9 @@ fixed in code here rather than deferred):
 | `processed` becomes mixed-level | `uma-ADR-0010` D9 | Yes (step 4) |
 | `processed` becomes mixed-level | `shallowestReliable` / `reliableSamples` must read the finest data for the **region** (D8) | Yes — added in round 1 (was not in the original plan) |
 | `processed` becomes mixed-level | `clearOverlappedDraft` must clear across levels | Yes — added in round 1 (was not in the original plan) |
-| `processed` becomes mixed-level | The overview pyramid's whole-tile native-wins suppression becomes a writer obligation (no two native levels over one parent) | Recorded in the ADR and at the suppression site; enforcement belongs to cube_bathymetry#143 |
+| `processed` becomes mixed-level | The overview pyramid's whole-tile native-wins suppression drops a shallow band's fold where it shares a parent with a deep band's native tile | **Restated in round 2.** Round 1 recorded this as a writer obligation ("never emit two native levels over the same ground"); that is unsatisfiable — the ladder *guarantees* mixed native levels under one parent, so the obligation would forbid depth-adaptive tiling. It is a **coarse display-tier consequence**, not something cube_bathymetry#143 can discharge. Safety is unaffected (navigation reads the region-aware native query, never an LOD level). Recorded in the ADR and at the suppression site |
+| `bathymetry_layer` reads a store finer than its costmap resolution | The safety **existence gate** must be region-aware too, not just the depth queries | Yes — added in round 2. `bestSource` gated `evaluateCell` and returned early on a no-data centre cell, so the round-1 region-aware query never ran on the path that steers the boat |
+| Safety queries read every covered native cell | **Per-query fan-out on the live Nav2 costmap thread.** The query level is `fromCellSize(resolution_)`, so the fan-out is a *config* parameter: 4× at a 2 m global over today's uniform level-10 `processed`, 16× at 4 m — both reachable now — and 256× for a 1 m global over level-14 tiles (~2.56 M cell visits per 100×100 tile). `generateTile` checks its time budget only *between* tiles, so one tile is uninterruptible | Recorded in round 2 in the ADR, `bathymetry_layer`'s header and its README. **Bounding or measuring it is [#371](https://github.com/rolker/unh_marine_autonomy/issues/371)** — deliberately not done here: point-sampling is the defect just fixed, so the remedy is a measurement then a bound, not a narrower query |
 | A depth-adaptive policy exists in `marine_bathymetry_store` | `cube_bathymetry`'s `import_bag` must be re-architected to call it — one `GeoMapSheet` per run today (`import_bag_main.cpp:1030`, `:1130-1133`) ties the estimation grid to the store tiling | **No — filed as [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143)**. Load-bearing: this PR alone changes no on-disk behaviour |
 | Tile counts rise 4×–256× in shallow water | `import_bag`'s `max_resident_tiles` budget; store disk planning | Named here; belongs to cube_bathymetry#143 |
 | Existing level-10 Shoals/Massabesic `processed` stores stay untouched | Retroactive reprocess | No — tracked separately, gated on #366 (operator scope decision 4) |
