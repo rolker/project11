@@ -664,11 +664,12 @@ CornerCells cornerCellsOf(const gggs::GridIndex & grid, const gggs::Level & leve
       const double lat_per_cell = g.latitudinalSpan() / gggs::cell_rows_per_grid;
       const double lon_per_cell = g.longitudinalSpan() / gggs::cell_columns_per_grid;
       const auto sw = cell.position();
+      const bool south_of = (sw.latitude) < (grid.southLatitude());
+      const bool west_of = (sw.longitude) < (grid.westLongitude());
+      const bool north_of = (sw.latitude + lat_per_cell) > (grid.northLatitude());
+      const bool east_of = (sw.longitude + lon_per_cell) > (grid.eastLongitude());
       out.cells.push_back(cell);
-      out.straddles.push_back(
-        sw.latitude < grid.southLatitude() || sw.longitude < grid.westLongitude() ||
-        sw.latitude + lat_per_cell > grid.northLatitude() ||
-        sw.longitude + lon_per_cell > grid.eastLongitude());
+      out.straddles.push_back(south_of || west_of || north_of || east_of);
     }
   }
   return out;
