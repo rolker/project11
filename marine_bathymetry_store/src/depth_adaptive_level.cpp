@@ -77,17 +77,30 @@ gggs::Level depthAdaptiveLevel(double depth_m, const DepthAdaptiveLevelPolicy & 
   // node.cpp:154) and store consumers, so decide on magnitude.
   const double requested_cell_size_m = policy.capture_distance_scale * std::abs(depth_m);
 
-  // Guard the zero-depth case here rather than in gggs::Level::fromCellSize,
-  // whose std::log2(0) -> inf and subsequent cast to int is undefined.
-  if (!(requested_cell_size_m > 0.0)) {
+  // fromCellSize takes a FLOAT, so guard the narrowed value, not the double: a
+  // positive double that underflows (or overflows) in float would otherwise
+  // reach exactly the std::log2(0) / log2(inf) path whose cast to int is
+  // undefined -- and did, returning the coarsest level for a near-zero depth,
+  // the inversion of the documented shallow-to-finest behaviour.
+  const float requested_cell_size = static_cast<float>(requested_cell_size_m);
+
+  // Requested finer than float can represent (including an exactly-zero depth):
+  // the request is finer than any GGGS level, so the fine clamp is the answer.
+  if (!(requested_cell_size > 0.0f)) {
     return gggs::Level(policy.finest_level);
+  }
+  // Requested coarser than float can represent (|depth| above ~6.8e39 with the
+  // default scale): coarser than any GGGS level, so the coarse clamp is the
+  // answer. Both ends stay on the shoal-biased side: a depth that cannot be
+  // represented never silently picks the opposite end of the ladder.
+  if (!std::isfinite(requested_cell_size)) {
+    return gggs::Level(policy.coarsest_level);
   }
 
   // fromCellSize returns the level whose cells are AT OR FINER than the request,
   // so a tile sized this way never has cells coarser than the capture radius
   // that produced them.
-  const uint8_t unclamped = gggs::Level::fromCellSize(
-    static_cast<float>(requested_cell_size_m)).level();
+  const uint8_t unclamped = gggs::Level::fromCellSize(requested_cell_size).level();
 
   return gggs::Level(std::clamp(unclamped, policy.coarsest_level, policy.finest_level));
 }

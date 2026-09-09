@@ -107,6 +107,45 @@ TEST(DepthAdaptiveLevel, ClampsBind)
   EXPECT_EQ(depthAdaptiveLevel(0.0).level(), policy.finest_level);
 }
 
+// The narrowing to float must not invert the ladder. `fromCellSize` takes a
+// float, so a positive DOUBLE request can underflow to 0.0f (or overflow to
+// +inf) on the way in and hit the log2(0)/log2(inf) path whose cast to int is
+// undefined. Before the guard was moved onto the narrowed value,
+// depthAdaptiveLevel(1e-44) returned the COARSEST level -- the exact inversion
+// of "shallower water gets a finer lattice" -- for the shallowest input there
+// is. Both ends must land on the shoal-biased side of the ladder.
+TEST(DepthAdaptiveLevel, FloatNarrowingCannotInvertTheLadder)
+{
+  const DepthAdaptiveLevelPolicy policy;
+
+  // Underflow end: 0.05 * 1e-44 is a positive double that is 0.0f as a float.
+  ASSERT_GT(policy.capture_distance_scale * 1.0e-44, 0.0) << "test input is not a positive double";
+  ASSERT_EQ(static_cast<float>(policy.capture_distance_scale * 1.0e-44), 0.0f) <<
+    "test input no longer underflows in float";
+  EXPECT_EQ(depthAdaptiveLevel(1.0e-44).level(), policy.finest_level);
+  EXPECT_EQ(depthAdaptiveLevel(-1.0e-44).level(), policy.finest_level);
+  // Smallest positive double at all: still the shallow end.
+  EXPECT_EQ(
+    depthAdaptiveLevel(std::numeric_limits<double>::denorm_min()).level(),
+    policy.finest_level);
+
+  // Overflow end: a finite double whose request exceeds FLT_MAX (~3.4e38).
+  ASSERT_TRUE(std::isfinite(policy.capture_distance_scale * 1.0e40)) <<
+    "test input is not a finite double";
+  ASSERT_FALSE(std::isfinite(static_cast<float>(policy.capture_distance_scale * 1.0e40))) <<
+    "test input no longer overflows in float";
+  EXPECT_EQ(depthAdaptiveLevel(1.0e40).level(), policy.coarsest_level);
+  EXPECT_EQ(depthAdaptiveLevel(std::numeric_limits<double>::max()).level(),
+    policy.coarsest_level);
+
+  // The same must hold for a custom policy: the clamps, not hard-coded levels.
+  DepthAdaptiveLevelPolicy narrow;
+  narrow.coarsest_level = 6;
+  narrow.finest_level = 12;
+  EXPECT_EQ(depthAdaptiveLevel(1.0e-44, narrow).level(), narrow.finest_level);
+  EXPECT_EQ(depthAdaptiveLevel(1.0e40, narrow).level(), narrow.coarsest_level);
+}
+
 // The level must never get finer as the water gets deeper: a regression inside
 // one band would silently reintroduce the original bug at that band only.
 TEST(DepthAdaptiveLevel, MonotonicInDepth)

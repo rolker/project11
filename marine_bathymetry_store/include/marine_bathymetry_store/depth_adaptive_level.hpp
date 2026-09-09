@@ -123,9 +123,13 @@ struct DepthAdaptiveLevelPolicy
 /// @param depth_m Depth in metres for the decision unit — by contract the
 ///        **shallowest** depth in the tile. Sign is ignored (magnitude is used),
 ///        since the sign convention differs between the CUBE node and store
-///        consumers. A depth of exactly 0 (or any depth whose requested cell
-///        size is non-positive) returns `finest_level` rather than reaching
-///        `fromCellSize`, whose `log2` path is undefined there.
+///        consumers. `fromCellSize` takes a **float**, so the requested cell
+///        size is guarded *after* narrowing: a request that is zero or
+///        underflows to zero in float (a zero depth, or a depth around 1e-44)
+///        returns `finest_level`, and one that overflows to infinity (|depth|
+///        above ~6.8e39 at the default scale) returns `coarsest_level` — both
+///        the shoal-biased end for that input, and both short-circuiting the
+///        `log2(0)` / `log2(inf)` path whose cast to `int` is undefined.
 /// @param policy Tunables; defaults to the decided uma#369 policy.
 /// @return The GGGS level to write the tile at.
 /// @throws std::invalid_argument if @p depth_m is not finite (a silently clamped
