@@ -58,5 +58,21 @@ issue: 369
 - Add a regression test for the capture-floor/lattice-spacing interaction (0.05×depth vs. 0.5 m floor vs. cell diagonal) before relying on the depth-adaptive level to close the gap the issue describes.
 
 ---
+
+## Plan Authored
+**Status**: complete
+**When**: 2026-09-09 12:06 -04:00
+**By**: Claude Code Agent (Claude Sonnet)
+
+**Plan**: `.agent/work-plans/issue-369/plan.md` at `38b720e`
+**Branch**: feature/issue-369 at `38b720e`
+**Phases**: single
+
+### Open questions
+- [ ] File the companion `cube_bathymetry` issue (wiring `import_bag` to call the new depth-level policy per grid/tile) before implementation starts, so the two PRs can be explicitly sequenced/cross-linked — no `cube_bathymetry` worktree exists in this dispatch.
+- [ ] Confirm the deliberate level-8 coarsest-floor choice against any deeper-water campaigns on the near-term roadmap.
+- [ ] Confirm `depthAdaptiveLevel` belongs in `marine_bathymetry_store` (this plan's choice) rather than `marine_autonomy`'s `gggs` module.
+
+---
 **Authored-By**: `Claude Code Agent`
 **Model**: `Claude Sonnet`
