@@ -480,9 +480,11 @@ full-data replay remain offline properties).
   increase over the same ground**, so against today's uniform level 10 the
   multiplier is `4^(L-10)`: 4× at level 11, 16× at 12, 64× at 13 and **256× at
   the level-14 clamp**. The whole-survey figure depends on the survey's
-  depth-area histogram, which has not been computed; it is bounded by 1× (all
-  water ≥ 18.1 m) and 256× (all water < 2.26 m). Tiles are dense 960×960 rasters
-  whether or not the survey fills them, and a level-14 tile spans only 54.4 m,
+  depth-area histogram, which has not been computed; it is bounded by 1/16×
+  (all water ≥ 72.5 m — the coarse clamp is level 8, two steps *coarser* than
+  today's 10, so levels 9 and 8 are 1/4× and 1/16×) and 256× (all water
+  < 2.26 m). Tiles are dense 960×960 rasters whether or not the survey fills
+  them, and a level-14 tile spans only 54.4 m,
   so shallow water also pays a partial-tile overhead — and `import_bag`'s
   `max_resident_tiles` budget means something different at 16–256× the tile
   count. The **coarse clamp is a bound, not a floor at today's resolution**:

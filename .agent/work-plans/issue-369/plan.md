@@ -187,7 +187,9 @@ uniform level 10 the multiplier is `4^(L-10)`:
 
 | Depth band | Level | Cells/tiles per unit area vs today |
 |---|---|---|
-| ≥ 18.12 m | 10 | 1× (unchanged) |
+| ≥ 72.47 m | 8 (clamp) | 1/16× |
+| 36.24–72.47 m | 9 | 1/4× |
+| 18.12–36.24 m | 10 | 1× (unchanged) |
 | 9.06–18.12 m | 11 | 4× |
 | 4.53–9.06 m | 12 | 16× |
 | 2.26–4.53 m | 13 | 64× |
@@ -197,7 +199,8 @@ The level-14 clamp is four steps finer than today, i.e. 256× — that must be
 said plainly, not softened. The whole-survey figure depends on the survey's
 depth-area histogram, which has **not** been computed here (no such histogram
 was derived for this plan, and inventing one would be fabrication); it is
-bounded below by 1× (all water ≥ 18.1 m) and above by 256× (all water < 2.26 m).
+bounded below by 1/16× (all water ≥ 72.5 m, at the level-8 coarse clamp) and
+above by 256× (all water < 2.26 m).
 For a Shoals-like box that is mostly 9–18 m with shallow fringes, the bulk lands
 at 4× with small fractions at 16–256×.
 
