@@ -26,38 +26,13 @@
 #include <set>
 #include <vector>
 
+#include "cell_geometry.hpp"
+
 namespace marine_bathymetry_store
 {
 
 namespace
 {
-
-/// The geographic extent of one cell: SW corner (`min`) and NE corner (`max`).
-struct CellBox
-{
-  geographic_msgs::msg::GeoPoint min;
-  geographic_msgs::msg::GeoPoint max;
-};
-
-/// Geographic extent of @p cell, from its SW corner plus one cell each way.
-CellBox cellBox(const gggs::CellIndex & cell)
-{
-  const gggs::GridIndex & grid = cell.grid();
-  const double lat_per_cell = grid.latitudinalSpan() / gggs::cell_rows_per_grid;
-  const double lon_per_cell = grid.longitudinalSpan() / gggs::cell_columns_per_grid;
-  const auto sw = cell.position();   // SW corner of the cell
-  return CellBox{sw, gggs::geoPoint(sw.latitude + lat_per_cell, sw.longitude + lon_per_cell)};
-}
-
-/// Geographic center of a cell (its SW corner plus half a cell each way). Used
-/// to re-resolve the query position at other GGGS levels (multi-level store).
-geographic_msgs::msg::GeoPoint cellCenter(const gggs::CellIndex & cell)
-{
-  const CellBox box = cellBox(cell);
-  return gggs::geoPoint(
-    0.5 * (box.min.latitude + box.max.latitude),
-    0.5 * (box.min.longitude + box.max.longitude));
-}
 
 /// The distinct GGGS levels present in one layer's tile map, **finest first**
 /// (largest level number = finest resolution). Empty if the layer has no tiles.
@@ -109,21 +84,20 @@ void forEachCoveredCell(
   const gggs::CellIndex & query_cell, uint8_t level, const Visitor & visit)
 {
   const gggs::Level fine(level);
-  const CellBox box = cellBox(query_cell);
-  // The GGGS area iterators are INCLUSIVE of the cell containing the maximum
-  // corner, and a cell's NE corner is the SW corner of its neighbour. Pull the
-  // maximum a quarter of a fine cell back inside the query cell so the walk
-  // covers exactly the query cell's own ground — never a neighbouring cell's.
-  const double inset = 0.25 * fine.cellAngularSpan();
-  const auto max = gggs::geoPoint(box.max.latitude - inset, box.max.longitude - inset);
-  for (gggs::GridAreaIterator grid_it(fine.gridIndex(box.min), fine.gridIndex(max));
+  // Inset the maximum corner: the GGGS area iterators are inclusive, so the
+  // unmodified NE corner would also visit the neighbouring cells that merely
+  // touch the query cell's edge (see cell_geometry.hpp).
+  const GeoBox box = insetForIteration(cellBox(query_cell), level);
+  for (gggs::GridAreaIterator grid_it(fine.gridIndex(box.min), fine.gridIndex(box.max));
     grid_it.valid(); grid_it.next())
   {
     const auto tile_it = tiles.find(*grid_it);
     if (tile_it == tiles.end()) {
       continue;   // this layer holds no tile at this level here
     }
-    for (gggs::CellAreaIterator cell_it(*grid_it, box.min, max); cell_it.valid(); cell_it.next()) {
+    for (gggs::CellAreaIterator cell_it(*grid_it, box.min, box.max);
+      cell_it.valid(); cell_it.next())
+    {
       visit(*cell_it, tile_it->second.get(cell_it->row(), cell_it->column()));
     }
   }
