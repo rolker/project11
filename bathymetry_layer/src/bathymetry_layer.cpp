@@ -24,9 +24,9 @@
 namespace bathymetry_layer
 {
 
-using marine_bathymetry_store::bestSource;
 using marine_bathymetry_store::BathymetryStore;
 using marine_bathymetry_store::DepthSample;
+using marine_bathymetry_store::hasAnyData;
 using marine_bathymetry_store::reliableSamples;
 
 // Expand a leading "~" or "~/" in a path to $HOME so one portable store_path
@@ -892,34 +892,48 @@ std::optional<unsigned char> BathymetryLayer::evaluateCell(
     return std::nullopt;
   }
 
-  // Two-query no-data policy (review M1, ADR-0002 §D7):
-  //   1. bestSource — quality-blind "is there ANY data here?"
-  const std::optional<DepthSample> any = bestSource(*store_, cell);
-  if (!any) {
-    // Truly unsurveyed. By default leave the master cost untouched
-    // (NO_INFORMATION) so another prior (e.g. s57_layer) can contribute. When
-    // unsurveyed_is_lethal_ is set, treat no-data as an obstacle instead — for a
-    // closed basin whose prior fills the whole interior, the only no-data cells
-    // are land (see the class doc). This still sits behind the MF1 tide gate
-    // above, so no lethal-land is written before a valid tide arrives.
-    if (unsurveyed_is_lethal_) {
-      return nav2_costmap_2d::LETHAL_OBSTACLE;
-    }
-    return std::nullopt;
-  }
-
-  //   2. reliableSamples(∞) — EVERY sample WITHOUT a finite-σ reject filter
+  // Two-query no-data policy (review M1, ADR-0002 §D7), BOTH queries
+  // region-aware (uma#369).
+  //
+  //   1. reliableSamples(∞) — EVERY sample WITHOUT a finite-σ reject filter
   //   (ADR-0010 D7). Passing infinity keeps every finite-σ sample eligible so σ
   //   drives *cost*, not rejection; only NaN-σ samples are dropped (∞ > ∞ is
   //   false, so a literal σ=∞ sample IS returned and the isfinite branch below
-  //   folds it into the same conservative path as NaN). An EMPTY result means
-  //   data exists (bestSource above) but every sample has a NaN σ → the
-  //   pre-existing "data but no reliable sample" → conservative LETHAL path. A
-  //   surveyed-but-unusable cell must NOT be treated as unsurveyed (review M1).
+  //   folds it into the same conservative path as NaN).
   //   (The pre-#248 per-cell staleness gate was retired — ADR-0002 A2.4.)
+  //
+  //   This runs FIRST, and it is the whole point of uma#369. `processed` is
+  //   depth-adaptive, so a level-14 store tile sits under a level-10 costmap
+  //   query cell: 256 native cells to one costmap cell, and a 0.2-0.5 m rock can
+  //   be in any of them. `reliableSamples` reads every one (uma-ADR-0013 D8);
+  //   the previous order gated it behind `bestSource`, a POINT lookup at the
+  //   query cell's centre, so one no-data native cell there — a gated-drop hole,
+  //   a between-lines gap, an absent fine tile beside a present one — returned
+  //   early and dropped the rock in the other 255. Never gate the region-aware
+  //   query behind a point query.
   const std::vector<DepthSample> samples =
     reliableSamples(*store_, cell, std::numeric_limits<double>::infinity());
+
   if (samples.empty()) {
+    //   2. hasAnyData — quality-blind, region-aware "is there ANY data here?".
+    //   Only reached when nothing usable covers the cell, and it is what
+    //   separates the two very different no-sample causes (review M1):
+    //     - NO data anywhere under the cell ⇒ truly UNSURVEYED. By default leave
+    //       the master cost untouched (NO_INFORMATION) so another prior (e.g.
+    //       s57_layer) can contribute. When unsurveyed_is_lethal_ is set, treat
+    //       no-data as an obstacle instead — for a closed basin whose prior fills
+    //       the whole interior, the only no-data cells are land (see the class
+    //       doc). This still sits behind the MF1 tide gate above, so no
+    //       lethal-land is written before a valid tide arrives.
+    //     - Data exists but every sample has a NaN σ ⇒ SURVEYED BUT UNUSABLE ⇒
+    //       conservative LETHAL. A surveyed-but-unusable cell must NOT be
+    //       treated as unsurveyed.
+    if (!hasAnyData(*store_, cell)) {
+      if (unsurveyed_is_lethal_) {
+        return nav2_costmap_2d::LETHAL_OBSTACLE;
+      }
+      return std::nullopt;
+    }
     return nav2_costmap_2d::LETHAL_OBSTACLE;
   }
 

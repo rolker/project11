@@ -30,7 +30,7 @@ namespace bathymetry_layer
 /// Reads the store's persisted layers (`processed/` + `draft/` and the read-only
 /// `reference/` prior — ADR-0010 D8 split the pre-D8 `survey/` into processed/draft)
 /// from disk — transparently, via the store's best-source query overlay
-/// (`bestSource`/`shallowestReliable`, data-driven over `source_layers_by_priority`),
+/// (`hasAnyData`/`reliableSamples`, data-driven over `source_layers_by_priority`),
 /// so this layer needs no per-layer knowledge — and turns *clearance*
 /// — the water-surface ellipsoidal height minus the seafloor ellipsoidal height —
 /// into occupancy cost so the planner routes around shoals. This is the D1
@@ -38,7 +38,8 @@ namespace bathymetry_layer
 /// (deferred to D2, which depends on the atomic-tile-write work in #189).
 ///
 /// **No-data policy (ADR-0002 §D7, two-query safety pattern):** per cell,
-/// `bestSource` first answers "is there ANY data here?" (quality-blind). If not,
+/// `reliableSamples` collects every usable sample first; if none, `hasAnyData`
+/// answers "is there ANY data here?" (quality-blind). If not,
 /// the cell is truly unsurveyed and this layer leaves the master cost untouched
 /// (NO_INFORMATION) so another prior — e.g. `s57_layer` — can fill it in. The
 /// opt-in `unsurveyed_is_lethal` parameter (default false) overrides this: when
@@ -54,6 +55,27 @@ namespace bathymetry_layer
 /// reserved for **trusted** data (σ ≤ `confidence_gate`) whose worst-case
 /// clearance is below `minimum_depth`; a high-σ (chart-grade) cell is *costed*
 /// (caution ramp, capped at `MAX_NON_OBSTACLE`), never hard-forbidden on its own.
+/// **Both** queries are REGION-aware (uma#369, `uma-ADR-0013` D8): where the store
+/// holds data finer than the costmap's query level, every covered native cell is
+/// read, not one sample from the query cell's centre. A point-sampled gate walks
+/// past a rock sitting anywhere but the centre — see `query.hpp`'s `hasAnyData`.
+///
+/// **Runtime consequence — the fan-out is a config parameter (uma#369).** The
+/// query level is `BathymetryStore::fromCellSize(resolution_)`, so the gap
+/// between it and the store's native level is set by the costmap's resolution
+/// against whatever the store holds: a 2 m or 4 m global costmap over today's
+/// uniform level-10 `processed` is already a 4x or 16x fan-out per cell, and a
+/// 1 m global over level-14 depth-adaptive tiles would be 256 covered cells per
+/// costmap cell — ~2.56 M cell visits for one 100x100 tile, each a map find and
+/// a `push_back`. `generateTile`'s time budget is checked only *between* tiles,
+/// so one tile is uninterruptible once started. Reducing the work by
+/// point-sampling is exactly the defect uma#369 fixed, so the remedy is a bound
+/// or an interruption point, not a narrower query; tracked in
+/// [#371](https://github.com/rolker/unh_marine_autonomy/issues/371).
+/// `hasAnyData` short-circuits at the first cell holding data, so the existence
+/// gate itself costs one cell over surveyed ground and only an empty region pays
+/// its full walk.
+///
 /// A cell whose only data carries σ = ∞ / NaN (genuinely unknown quality) has no
 /// usable magnitude of uncertainty and stays conservatively `LETHAL_OBSTACLE`
 /// (the "data exists but no reliable sample" path) — same as before. This

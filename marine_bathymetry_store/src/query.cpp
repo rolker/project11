@@ -78,8 +78,14 @@ std::optional<BathyCell> cellIn(
 /// exist. A survey covering the query cell at level 14 under a level-10 query
 /// genuinely is 256 cells of finest data, and reading fewer of them is the
 /// defect this exists to prevent.
+///
+/// @p visit returns `true` to continue and `false` to stop the walk; this
+/// function returns `false` when a visitor stopped it. An existence probe
+/// (`hasAnyData`) stops at the first hit, so it costs one cell in the common
+/// case instead of the full fan-out — the ordinary safety queries, which must
+/// see every cell, always return `true` and walk it all.
 template<typename Visitor>
-void forEachCoveredCell(
+bool forEachCoveredCell(
   const std::map<gggs::GridIndex, BathymetryTile> & tiles,
   const gggs::CellIndex & query_cell, uint8_t level, const Visitor & visit)
 {
@@ -99,9 +105,12 @@ void forEachCoveredCell(
     for (gggs::CellAreaIterator cell_it(*grid_it, box.min, box.max);
       cell_it.valid(); cell_it.next())
     {
-      visit(*cell_it, tile_it->second.get(cell_it->row(), cell_it->column()));
+      if (!visit(*cell_it, tile_it->second.get(cell_it->row(), cell_it->column()))) {
+        return false;
+      }
     }
   }
+  return true;
 }
 
 /// The reliability gate shared by `shallowestReliable` and `reliableSamples`:
@@ -115,8 +124,11 @@ bool reliable(const BathyCell & c, double max_uncertainty)
 /// @p query_cell: the single containing cell when the level is at or coarser
 /// than the query, every covered cell when it is finer (see
 /// `forEachCoveredCell`). @p center is the query cell's centre.
+///
+/// @p visit returns `true` to continue, `false` to stop; this function returns
+/// `false` when a visitor stopped the walk.
 template<typename Visitor>
-void forEachBearingCell(
+bool forEachBearingCell(
   const std::map<gggs::GridIndex, BathymetryTile> & tiles,
   const gggs::CellIndex & query_cell, uint8_t level,
   const geographic_msgs::msg::GeoPoint & center, const Visitor & visit)
@@ -125,11 +137,11 @@ void forEachBearingCell(
     const gggs::CellIndex lvl_cell =
       (level == query_cell.level()) ? query_cell : gggs::Level(level).cellIndex(center);
     if (const auto c = cellIn(tiles, lvl_cell)) {
-      visit(lvl_cell, *c);
+      return visit(lvl_cell, *c);
     }
-    return;
+    return true;
   }
-  forEachCoveredCell(tiles, query_cell, level, visit);
+  return forEachCoveredCell(tiles, query_cell, level, visit);
 }
 
 /// Resolve a single layer's best-available sample at a cell across the levels it
@@ -203,15 +215,47 @@ std::optional<DepthSample> shallowestReliable(
         tiles, cell, lvl, center,
         [&](const gggs::CellIndex &, const BathyCell & c) {
           if (!reliable(c, max_uncertainty)) {
-            return;
+            return true;
           }
           if (!shallowest || c.depth > shallowest->depth) {
             shallowest = DepthSample{c.depth, c.uncertainty, layer, lvl};
           }
+          return true;   // every covered cell is read: no early exit
         });
     }
   }
   return shallowest;
+}
+
+bool hasAnyData(const BathymetryStore & store, const gggs::CellIndex & cell)
+{
+  const auto center = cellCenter(cell);
+  // Region-aware existence probe (uma#369). This is the SAFETY gate in
+  // bathymetry_layer::evaluateCell — it decides unsurveyed (NO_INFORMATION, or
+  // LETHAL under unsurveyed_is_lethal) versus surveyed-but-unusable (LETHAL) —
+  // so it must cover the query cell's whole ground, not one sample from its
+  // centre. Point-sampling here would let a single no-data native cell under the
+  // centre (a gated-drop hole, a between-lines gap, an absent fine tile beside a
+  // present one) declare the whole query cell unsurveyed and drop a rock in any
+  // of the other 255 covered cells.
+  //
+  // Quality-blind by design: `hasData()` only, no reliability gate. The caller
+  // separates "no data at all" from "data whose quality is unusable"; folding a
+  // σ test in here would collapse that distinction (review M1).
+  for (const SourceLayer layer : source_layers_by_priority) {
+    const auto & tiles = store.tiles(layer);
+    for (const uint8_t lvl : levelsPresent(tiles)) {
+      const bool completed = forEachBearingCell(
+        tiles, cell, lvl, center,
+        [](const gggs::CellIndex &, const BathyCell & c) {
+          return !c.hasData();   // false stops the walk: data found
+        });
+      if (!completed) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 std::vector<DepthSample> reliableSamples(
@@ -236,9 +280,10 @@ std::vector<DepthSample> reliableSamples(
         tiles, cell, lvl, center,
         [&](const gggs::CellIndex &, const BathyCell & c) {
           if (!reliable(c, max_uncertainty)) {
-            return;
+            return true;
           }
           samples.push_back(DepthSample{c.depth, c.uncertainty, layer, lvl});
+          return true;   // every covered cell is read: no early exit
         });
     }
   }

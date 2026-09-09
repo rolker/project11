@@ -66,8 +66,12 @@ struct DepthSample
 ///   query cell's centre — one representative value, which is what a display or
 ///   best-available lookup wants. A caller that must not miss a shoal inside the
 ///   query cell (a costmap over depth-adaptive `processed` tiles, uma#369) must
-///   use `shallowestReliable` or `reliableSamples`, which read **every** covered
-///   native cell (`uma-ADR-0013` D8).
+///   use `shallowestReliable` or `reliableSamples` for the depth, and
+///   `hasAnyData` for the "is anything surveyed here?" gate — all three read
+///   **every** covered native cell (`uma-ADR-0013` D8). `bathymetry_layer` used
+///   this function as that gate until uma#369; because it returns early on
+///   `nullopt`, one no-data native cell under the centre suppressed the
+///   region-aware depth query entirely. Do not reintroduce it on a safety path.
 std::optional<DepthSample> bestSource(
   const BathymetryStore & store, const gggs::CellIndex & cell);
 
@@ -121,6 +125,31 @@ std::optional<DepthSample> shallowestReliable(
 ///   no reliable sample covers the cell — the caller must treat that as not-safe.
 std::vector<DepthSample> reliableSamples(
   const BathymetryStore & store, const gggs::CellIndex & cell, double max_uncertainty);
+
+/// @brief Is there ANY data under @p cell, anywhere in its region? (safety gate)
+///
+/// Quality-blind existence probe: `true` when some cell of some layer that bears
+/// on @p cell holds data (a non-NaN depth), regardless of its uncertainty.
+///
+/// **Region-aware, and that is the point** (`uma-ADR-0013` D8). Where a layer
+/// holds data FINER than @p cell, every covered native cell is probed — not the
+/// single one under the query cell's centre. This is the query a costmap uses to
+/// decide *unsurveyed* (leave NO_INFORMATION, or write LETHAL under a
+/// closed-basin policy) versus *surveyed but unusable* (conservative LETHAL);
+/// deciding that from the centre alone would let one no-data native cell — a
+/// gated-drop hole, a between-lines gap, an absent fine tile beside a present
+/// one — declare the whole query cell unsurveyed and drop a shoal sitting in any
+/// of the other covered cells. `bestSource` must NOT be used for this: it is a
+/// point lookup (see its `@warning`).
+///
+/// Cheaper than the safety queries despite covering the same ground: the walk
+/// stops at the first cell holding data, so a covered query cell costs one cell,
+/// and only a genuinely empty one pays the full fan-out over the tiles that
+/// exist. It is deliberately kept separate from `reliableSamples` rather than
+/// folded into it, because the caller needs the two answers distinguished:
+/// "no data at all" and "data whose σ is unusable" get different costs (ADR-0002
+/// §D7 / review M1).
+bool hasAnyData(const BathymetryStore & store, const gggs::CellIndex & cell);
 
 /// @brief Visit every GGGS cell overlapping the geographic box, with its best source.
 ///

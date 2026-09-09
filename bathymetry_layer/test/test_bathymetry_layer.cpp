@@ -1045,3 +1045,106 @@ TEST(BathymetryLayer, WindowReadyTreatsStaleTileAsRendered)
   EXPECT_FALSE(layer.windowFullyRendered(0, 0, 2, 2))
     << "an absent (never-rendered) tile → not ready";
 }
+
+// ---------------------------------------------------------------------------
+// Test case 14 (uma#369 round 2, must-fix 1): the region-aware safety query
+// must reach the costmap.
+//
+// `processed` is depth-adaptive (uma#369), so a level-14 tile sits under a
+// level-10 costmap query cell: 256 native cells, one costmap cell. While
+// evaluateCell gated on `bestSource` — a point lookup at the query cell's
+// CENTRE — a single no-data native cell there (a gated-drop hole, a
+// between-lines gap, an absent fine tile beside a present one) returned
+// nullopt, `reliableSamples` was never called, and the rock in one of the other
+// 255 cells was dropped. That is the walk-past-the-rock failure the region-aware
+// query exists to prevent, in the one consumer that steers the boat.
+//
+// Both of these FAIL against the `bestSource` gate and pass against `hasAnyData`.
+// ---------------------------------------------------------------------------
+TEST(BathymetryLayer, ShoalOffCentreIsCostedWhenTheCentreCellIsNoData)
+{
+  BathymetryLayerForTest layer;
+  layer.setMinimumDepth(1.0);
+  layer.setMaximumCautionDepth(3.0);
+  layer.setConfidenceGate(0.5);
+  layer.setMapTideZ(0.0);
+  layer.setMapTideValid(true);
+
+  auto store = std::make_unique<BathymetryStore>(10);
+  const gggs::Level query_level(10);
+  const gggs::Level fine(12);              // 4x4 = 16 native cells per query cell
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(kLat, kLon));
+
+  const auto cell_box_min = query_cell.position();
+  const gggs::GridIndex & qgrid = query_cell.grid();
+  const double lat_span = qgrid.latitudinalSpan() / gggs::cell_rows_per_grid;
+  const double lon_span = qgrid.longitudinalSpan() / gggs::cell_columns_per_grid;
+  const auto point_in_query_cell = [&](double lat_f, double lon_f) {
+      return gggs::geoPoint(
+        cell_box_min.latitude + lat_f * lat_span,
+        cell_box_min.longitude + lon_f * lon_span);
+    };
+
+  // A gated-drop hole exactly under the query cell's centre: written, no data.
+  const auto centre_cell = fine.cellIndex(point_in_query_cell(0.5, 0.5));
+  store->set(SourceLayer::Processed, centre_cell, BathyCell{});
+
+  // A 0.4 m rock in the SW-most covered cell — trusted (σ 0.1 ≤ gate 0.5), so
+  // worst-case clearance 0.4 − 0.1 = 0.3 m < minimum_depth 1.0 → LETHAL.
+  const auto rock_cell = fine.cellIndex(point_in_query_cell(0.125, 0.125));
+  ASSERT_NE(rock_cell, centre_cell) << "the rock must not sit under the centre, "
+    "or a point-sampling gate would pass this test and prove nothing";
+  store->set(SourceLayer::Processed, rock_cell, BathyCell{-0.4, 0.1});
+
+  layer.setStore(std::move(store));
+
+  const auto result = layer.evaluateCell(query_cell);
+  ASSERT_TRUE(result.has_value())
+    << "the layer declared a surveyed cell unsurveyed because its CENTRE native "
+    "cell holds no data";
+  EXPECT_EQ(*result, nav2_costmap_2d::LETHAL_OBSTACLE)
+    << "a trusted 0.4 m rock inside the query cell was not costed";
+}
+
+TEST(BathymetryLayer, CentreNoDataDoesNotSuppressUnsurveyedIsLethal)
+{
+  // The same geometry under the closed-basin policy: the cell IS surveyed
+  // (a covered native cell holds data), so the unsurveyed-is-lethal "no data
+  // means land" branch must not claim it. Here the covered data is deep and
+  // reliable, so the correct answer is FREE_SPACE — the opposite verdict from
+  // the LETHAL a point-sampling gate would have written.
+  BathymetryLayerForTest layer;
+  layer.setMinimumDepth(1.0);
+  layer.setMaximumCautionDepth(3.0);
+  layer.setConfidenceGate(0.5);
+  layer.setMapTideZ(0.0);
+  layer.setMapTideValid(true);
+  layer.setUnsurveyedIsLethal(true);
+
+  auto store = std::make_unique<BathymetryStore>(10);
+  const gggs::Level query_level(10);
+  const gggs::Level fine(12);
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(kLat, kLon));
+  const auto sw = query_cell.position();
+  const gggs::GridIndex & qgrid = query_cell.grid();
+  const double lat_span = qgrid.latitudinalSpan() / gggs::cell_rows_per_grid;
+  const double lon_span = qgrid.longitudinalSpan() / gggs::cell_columns_per_grid;
+
+  store->set(
+    SourceLayer::Processed,
+    fine.cellIndex(gggs::geoPoint(sw.latitude + 0.5 * lat_span, sw.longitude + 0.5 * lon_span)),
+    BathyCell{});
+  store->set(
+    SourceLayer::Processed,
+    fine.cellIndex(
+      gggs::geoPoint(sw.latitude + 0.875 * lat_span, sw.longitude + 0.875 * lon_span)),
+    BathyCell{-20.0, 0.1});
+
+  layer.setStore(std::move(store));
+
+  const auto result = layer.evaluateCell(query_cell);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(*result, nav2_costmap_2d::FREE_SPACE)
+    << "a surveyed, deep, reliable cell was written LETHAL as if it were land, "
+    "because its centre native cell holds no data";
+}

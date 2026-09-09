@@ -37,6 +37,7 @@ using marine_bathymetry_store::BathymetryStore;
 using marine_bathymetry_store::bestSource;
 using marine_bathymetry_store::DepthSample;
 using marine_bathymetry_store::forEachCellBestSource;
+using marine_bathymetry_store::hasAnyData;
 using marine_bathymetry_store::reliableSamples;
 using marine_bathymetry_store::shallowestReliable;
 using marine_bathymetry_store::SourceLayer;
@@ -566,4 +567,148 @@ TEST(Query, ShallowestReliableStillPointResolvesCoarserLevels)
   ASSERT_EQ(samples.size(), 1u);
   EXPECT_EQ(samples.front().level, 8u);
   EXPECT_DOUBLE_EQ(samples.front().depth, -18.0);
+}
+
+// ---------------------------------------------------------------------------
+// uma#369 round 2, must-fix 1: the region-aware EXISTENCE probe.
+// `bathymetry_layer::evaluateCell` gates its whole safety evaluation on "is
+// there any data here?". While that gate was `bestSource` — a point lookup —
+// one no-data native cell under the query cell's CENTRE suppressed the
+// region-aware depth query entirely, and a rock in any other covered cell was
+// dropped. These pin the region-awareness of the gate itself.
+// ---------------------------------------------------------------------------
+
+TEST(Query, HasAnyDataSeesDataWhenTheCentreCellIsNoData)
+{
+  BathymetryStore store(10);
+  const gggs::Level query_level(10);
+  const gggs::Level fine(12);            // 4x4 = 16 native cells per query cell
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(43.0, -70.5));
+
+  // A gated-drop hole exactly under the centre: written, but no-data.
+  const auto centre_cell = fine.cellIndex(pointInCell(query_cell, 0.5, 0.5));
+  store.set(SourceLayer::Processed, centre_cell, BathyCell{});
+
+  // A rock in the SW-most covered cell, well away from the centre.
+  const auto rock_cell = fine.cellIndex(pointInCell(query_cell, 0.125, 0.125));
+  ASSERT_NE(rock_cell, centre_cell);
+  store.set(SourceLayer::Processed, rock_cell, BathyCell{-0.4, 0.1});
+
+  // The point lookup is blind to it — that is the defect, pinned here so the
+  // distinction between the two queries cannot quietly disappear.
+  EXPECT_FALSE(bestSource(store, query_cell).has_value())
+    << "bestSource is a point query; if this ever passes, the gate's failure "
+    "mode changed and evaluateCell's contract must be re-checked";
+
+  EXPECT_TRUE(hasAnyData(store, query_cell))
+    << "the existence probe walked past a rock it covers";
+  const auto shallowest = shallowestReliable(store, query_cell, 1.0);
+  ASSERT_TRUE(shallowest.has_value());
+  EXPECT_DOUBLE_EQ(shallowest->depth, -0.4);
+}
+
+TEST(Query, HasAnyDataIsQualityBlindButRegionAware)
+{
+  BathymetryStore store(10);
+  const gggs::Level query_level(10);
+  const gggs::Level fine(12);
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(43.0, -70.5));
+
+  // Data with a NaN sigma: unusable, but SURVEYED. The probe must say so — the
+  // costmap's "surveyed but unusable => LETHAL" verdict depends on it (M1).
+  store.set(
+    SourceLayer::Processed, fine.cellIndex(pointInCell(query_cell, 0.125, 0.875)),
+    BathyCell{-3.0, std::numeric_limits<double>::quiet_NaN()});
+
+  EXPECT_TRUE(hasAnyData(store, query_cell));
+  EXPECT_TRUE(reliableSamples(store, query_cell, std::numeric_limits<double>::infinity())
+    .empty()) << "a NaN-sigma sample must not pass the reliability gate";
+}
+
+TEST(Query, HasAnyDataIsFalseForATrulyEmptyRegion)
+{
+  BathymetryStore store(10);
+  const gggs::Level query_level(10);
+  const gggs::Level fine(12);
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(43.0, -70.5));
+
+  EXPECT_FALSE(hasAnyData(store, query_cell)) << "empty store";
+
+  // A written-but-no-data cell is still no data.
+  store.set(SourceLayer::Processed, fine.cellIndex(pointInCell(query_cell, 0.5, 0.5)), BathyCell{});
+  EXPECT_FALSE(hasAnyData(store, query_cell));
+
+  // Data in the NEIGHBOURING query cell must not leak in: the region is this
+  // cell, not a neighbourhood (same boundary contract as shallowestReliable).
+  store.set(
+    SourceLayer::Processed, fine.cellIndex(pointInCell(query_cell, 1.125, 0.5)),
+    BathyCell{-5.0, 0.1});
+  EXPECT_FALSE(hasAnyData(store, query_cell)) << "a neighbouring cell's data leaked in";
+  EXPECT_TRUE(hasAnyData(store, query_level.cellIndex(pointInCell(query_cell, 1.125, 0.5))));
+}
+
+TEST(Query, HasAnyDataResolvesLevelsAtOrCoarserThanTheQuery)
+{
+  // At or coarser than the query level, exactly one cell contains the whole
+  // query cell — the probe must find it there too, not only under a finer layer.
+  BathymetryStore store(10, /*reference_writable=*/true);
+  const gggs::Level query_level(10);
+  const gggs::Level coarse(8);
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(43.0, -70.5));
+
+  EXPECT_FALSE(hasAnyData(store, query_cell));
+  store.set(
+    SourceLayer::Reference, coarse.cellIndex(pointInCell(query_cell, 0.5, 0.5)),
+    BathyCell{-18.0, 0.5});
+  EXPECT_TRUE(hasAnyData(store, query_cell));
+
+  // Same level as the query resolves too.
+  BathymetryStore same_level(10);
+  EXPECT_FALSE(hasAnyData(same_level, query_cell));
+  same_level.set(SourceLayer::Processed, query_cell, BathyCell{-9.0, 0.2});
+  EXPECT_TRUE(hasAnyData(same_level, query_cell));
+}
+
+// ---------------------------------------------------------------------------
+// uma#369 round 2, suggestion: a genuinely MIXED-LEVEL layer — the state a
+// depth-adaptive `processed` writer creates and every other test avoided by
+// holding `processed` at one level. Exercises levelsPresent + the per-level
+// dispatch in forEachBearingCell across levels finer than, equal to, and
+// coarser than the query in a single call.
+// ---------------------------------------------------------------------------
+
+TEST(Query, SafetyQueriesReadEveryLevelOfAMixedLevelLayer)
+{
+  BathymetryStore store(10);
+  const gggs::Level query_level(10);
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(43.0, -70.5));
+
+  // One `processed` layer holding THREE native levels over the same query cell:
+  // level 10 (the query level itself), level 12 (16 covered cells) and level 14
+  // (256). Depth-adaptive tiling produces exactly this across a depth gradient.
+  store.set(SourceLayer::Processed, query_cell, BathyCell{-30.0, 0.2});
+  store.set(
+    SourceLayer::Processed,
+    gggs::Level(12).cellIndex(pointInCell(query_cell, 0.375, 0.625)),
+    BathyCell{-12.0, 0.2});
+  const auto rock_cell =
+    gggs::Level(14).cellIndex(pointInCell(query_cell, 1.0 - 0.5 / 16.0, 0.5 / 16.0));
+  store.set(SourceLayer::Processed, rock_cell, BathyCell{-0.3, 0.2});
+
+  const auto samples = reliableSamples(store, query_cell, 1.0);
+  ASSERT_EQ(samples.size(), 3u) << "one level of the mixed-level layer was skipped";
+  std::set<uint8_t> levels;
+  for (const auto & sample : samples) {
+    levels.insert(sample.level);
+  }
+  EXPECT_EQ(levels, (std::set<uint8_t>{10, 12, 14}));
+
+  // The shoalest across all three levels wins, and it is the level-14 rock —
+  // not the level-10 cell the query's own index resolves to.
+  const auto shallowest = shallowestReliable(store, query_cell, 1.0);
+  ASSERT_TRUE(shallowest.has_value());
+  EXPECT_DOUBLE_EQ(shallowest->depth, -0.3);
+  EXPECT_EQ(shallowest->level, 14u);
+
+  EXPECT_TRUE(hasAnyData(store, query_cell));
 }
