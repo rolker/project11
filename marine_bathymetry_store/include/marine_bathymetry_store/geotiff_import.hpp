@@ -133,6 +133,20 @@ struct ProcessedImportResult
   /// `Draft` tiles with ≥1 cleared cell (each appears once). Cache-invalidation
   /// seam for camp#171/#172; these tiles are touched (dirtied), not removed.
   std::vector<gggs::GridIndex> draft_tiles_touched;
+  /// Distinct `Draft` cells **coarser** than this import's processed data that
+  /// overlap it but were deliberately KEPT, because the import does not fully
+  /// supersede them (part of the cell's ground lies outside every tile of this
+  /// import, or a processed cell under it holds no data). Verbatim
+  /// `DraftClearResult::coarse_draft_cells_retained` — see
+  /// `BathymetryStore::clearOverlappedDraft` for the rule and its counting.
+  ///
+  /// Carried out to the caller deliberately: keeping the cell is the shoal-safe
+  /// direction, but it means a superseded draft blunder is still in the store and
+  /// still winning `shallowestReliable` over that ground, so the operator running
+  /// the import has to be able to SEE it. `import_geotiff` prints it. 0 for
+  /// non-`Processed` imports, and 0 whenever `draft` is at or finer than every
+  /// processed level in the import.
+  std::size_t coarse_draft_cells_retained = 0;
   /// Contention **events** against data already resident in the layer, when
   /// `GeoTiffImportOptions::merge_into_resident` is set (always 0 otherwise).
   ///
@@ -174,17 +188,39 @@ struct ProcessedImportResult
 /// never deletes on-disk tiles). Draft cells in the re-run's gated-drop holes (cells
 /// this import left no-data) survive — the query overlay resolves them under
 /// `Processed > Draft` where the processed surface has data, and shows the surviving
-/// draft where it does not. Clearing operates at this import's cell/level
-/// granularity; draft data at a *different* GGGS level is not reached (in practice
-/// draft and processed both come from CUBE at the store level). Non-`Processed`
-/// imports clear nothing.
+/// draft where it does not.
+///
+/// **Level-aware (uma#369).** The clear is NOT limited to this import's own GGGS
+/// level — `processed` is depth-adaptive and mixed-level while `draft` stays
+/// fixed-level, so a level-keyed clear would match no draft tile and clear
+/// nothing, silently. `clearOverlappedDraft` walks **every** level the `Draft`
+/// layer holds. A draft cell at or finer than the processed tile is decided by
+/// the one processed cell containing it; a **coarser** draft cell is cleared only
+/// where this tile fully supersedes it (entirely inside the tile, every processed
+/// cell under it holding data) and is otherwise kept and reported in
+/// `ProcessedImportResult::coarse_draft_cells_retained`. See
+/// `BathymetryStore::clearOverlappedDraft` for the full contract.
+/// Non-`Processed` imports clear nothing.
 ///
 /// @return A `ProcessedImportResult` (cells imported + anti-clobber side effect).
-/// @throws std::invalid_argument on a bad band index;
+/// @throws std::invalid_argument on a bad band index, or if a tile built by this
+///         import carries an invalid `gggs::GridIndex` (propagated from
+///         `clearOverlappedDraft` / `importTiles`);
 ///         std::logic_error if @p layer is `Reference` and the store is not
 ///         `reference_writable` (the read-only-prior gate);
 ///         std::runtime_error on GDAL failure, a non-WGS84 / rotated raster, or
 ///         a missing geotransform.
+///
+/// @note **Exception safety is BASIC, not strong.** For a `Processed` import the
+///   draft clear runs *before* `importTiles`, and the clear itself validates each
+///   processed tile's `GridIndex` as it reaches it. A throw from either therefore
+///   leaves the store in a partially-mutated state: some `Draft` cells already
+///   cleared, and `Processed` not inserted. The store is not rolled back — the
+///   caller must treat a throw from this function as "the store's contents are
+///   indeterminate for this import's footprint" and rebuild from disk rather than
+///   continuing to write. In practice the importer builds every tile index itself
+///   from the raster geotransform, so the invalid-index path is a corruption
+///   signal, not an input-validation path.
 ProcessedImportResult importGeoTiff(
   BathymetryStore & store, SourceLayer layer,
   const std::string & path,
