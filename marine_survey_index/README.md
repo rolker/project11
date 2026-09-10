@@ -31,9 +31,15 @@ from cube#63 / the sidescan importer): georeferences every MBES
 ground-footprint bounding box, and records per-GGGS-tile **pass intervals** in
 a SQLite sidecar. Indexing is from **ping geometry, not store acceptance** —
 pings CUBE rejected still index. Unchanged already-indexed bags are skipped
-(size+mtime ledger); changed bags are re-indexed atomically. A **decimated nav
-track** (one point per ≥ `--nav-stride-m` metres, default 10) is recorded per
-bag so the explorer map can draw the survey track from the index alone.
+(size+mtime ledger); changed bags are re-indexed atomically. A bag the indexer
+could not fully read — no readable timestamp anywhere beneath it, or an
+incomplete walk (an unreadable subdirectory, an entry of undeterminable type,
+an unrepresentable timestamp) — is never skipped: it is treated as changed,
+warned about on stderr, counted in the run summary, and makes the run exit
+non-zero, because a partial reading is stable and would otherwise skip a
+changed bag indefinitely. A **decimated nav track** (one point per ≥
+`--nav-stride-m` metres, default 10) is recorded per bag so the explorer map
+can draw the survey track from the index alone.
 
 The default level is **L14 (~54 m tiles)** for both sensors — a
 target-inspection neighbourhood, finer than the stores' native tiling (bathy
@@ -65,8 +71,12 @@ see [`docs/survey_index_schema.md`](../docs/survey_index_schema.md).
 
 Bag-I/O-free unit tests cover the DB-open contract, the interval
 merge/split logic, footprint→tile enumeration (boundary straddling), the
-query tile-join (sensor filters, level separation), and the nav-track
-decimation gate and accessors:
+query tile-join (sensor filters, level separation), the nav-track
+decimation gate and accessors, and the bag fingerprint the incremental
+skip decides on (mtime accuracy against `::stat`, a same-size in-place
+rewrite, the ledger round-trip, and every route by which the fingerprint
+must refuse to call a bag unchanged — unreadable timestamp, partial walk,
+unrepresentable mtime, legacy `mtime_ns = 0` row):
 
 ```bash
 colcon test --packages-select marine_survey_index
