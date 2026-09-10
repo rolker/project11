@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 
+#include <sqlite3.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -31,6 +32,7 @@
 #include <string>
 #include <system_error>
 
+#include "marine_survey_index/schema.hpp"
 #include "rosbag2_cpp/writer.hpp"
 #include "rosbag2_storage/storage_options.hpp"
 
@@ -166,6 +168,37 @@ protected:
     writer.open(so);
     writer.close();
     return bag;
+  }
+
+  // Direct SQL against the index, for the states only a *previous* indexer
+  // could have left behind (a ledger row keyed through a symlink) and for the
+  // assertions the summary line cannot make (how many rows there are).
+  static void execSql(const std::string & db_path, const std::string & sql)
+  {
+    sqlite3 * db = marine_survey_index::openIndexDb(db_path);
+    char * err = nullptr;
+    const int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &err);
+    if (rc != SQLITE_OK) {
+      ADD_FAILURE() << "sql failed: " << sql << ": " << (err ? err : "?");
+    }
+    sqlite3_free(err);
+    sqlite3_close(db);
+  }
+
+  static std::string queryScalar(const std::string & db_path, const std::string & sql)
+  {
+    sqlite3 * db = marine_survey_index::openIndexDb(db_path);
+    sqlite3_stmt * stmt = nullptr;
+    std::string out;
+    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+      ADD_FAILURE() << "prepare failed: " << sql << ": " << sqlite3_errmsg(db);
+    } else if (sqlite3_step(stmt) == SQLITE_ROW) {
+      const unsigned char * text = sqlite3_column_text(stmt, 0);
+      out = text != nullptr ? reinterpret_cast<const char *>(text) : "";
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return out;
   }
 
   std::filesystem::path dir_;
@@ -393,6 +426,77 @@ TEST_F(IndexerExitStatusTest, ABagReachedThroughASymlinkIsNotASecondBag)
   EXPECT_EQ(run.status, 0) << run.output;
   EXPECT_NE(run.output.find("1 bag(s) indexed, 1 unchanged skipped"), std::string::npos)
     << "the same bag under two paths must index once: " << run.output;
+}
+
+// The migration half of the resolved ledger key, and the one with reach beyond
+// this machine: a row a PRE-FIX indexer wrote through a symlinked path can
+// never be matched again, so the lookup misses, a second row is inserted, and
+// the stale row's passes double-report that bag through the query join
+// forever. The row must be re-keyed, not orphaned.
+TEST_F(IndexerExitStatusTest, APreFixRowKeyedThroughASymlinkIsRekeyedNotOrphaned)
+{
+  const auto bag = makeEmptyBag("bag_ok");
+  const auto link = dir_ / "link_to_bag";
+  std::error_code link_ec;
+  std::filesystem::create_directory_symlink(bag, link, link_ec);
+  ASSERT_FALSE(link_ec) << "this filesystem refuses directory symlinks: " << link_ec.message();
+  const auto db = (dir_ / "index.db").string();
+
+  // Exactly what a pre-#375 indexer left: the ledger keyed by the path it was
+  // given, plus the passes that key owns.
+  execSql(
+    db,
+    "INSERT INTO bags (path, size_bytes, mtime_ns, indexed_at_ns) VALUES ('" +
+    link.string() + "', 1, 0, 0);"
+    "INSERT INTO passes (bag_id, level, tile_row, tile_col, sensor_type, topic,"
+    " t_start_ns, t_end_ns, ping_count)"
+    " SELECT id, 14, 1, 1, 'mbes-bathy', '/t', 0, 1, 1 FROM bags;");
+
+  const auto run = runIndexerWithDb(db, quote(bag.string()));
+  EXPECT_EQ(run.status, 0) << run.output;
+  EXPECT_NE(run.output.find("re-keyed the ledger row"), std::string::npos)
+    << "a row that can never be matched again must be migrated, not orphaned: " << run.output;
+  EXPECT_EQ(queryScalar(db, "SELECT COUNT(*) FROM bags"), "1")
+    << "one bag is one row: the pre-fix row was re-keyed, not inserted beside";
+  EXPECT_EQ(queryScalar(db, "SELECT path FROM bags"), bag.string());
+  // The re-key hands the bag its old row, so re-indexing it clears the stale
+  // passes -- nothing is left to double-report.
+  EXPECT_EQ(queryScalar(db, "SELECT COUNT(*) FROM passes"), "0");
+}
+
+// The same migration where the resolved key is already taken: that pair IS the
+// double report. The canonical row is the one every future run uses, so the
+// stale duplicate goes, and its passes with it.
+TEST_F(IndexerExitStatusTest, APreFixDuplicateRowIsRemovedRatherThanLeftDoubleReporting)
+{
+  const auto bag = makeEmptyBag("bag_ok");
+  const auto link = dir_ / "link_to_bag";
+  std::error_code link_ec;
+  std::filesystem::create_directory_symlink(bag, link, link_ec);
+  ASSERT_FALSE(link_ec) << "this filesystem refuses directory symlinks: " << link_ec.message();
+  const auto db = (dir_ / "index.db").string();
+
+  // Index the bag properly first, then add the pre-fix symlink-keyed row
+  // beside it -- the state a pre-fix index plus one post-fix run leaves.
+  ASSERT_EQ(runIndexerWithDb(db, quote(bag.string())).status, 0);
+  execSql(
+    db,
+    "INSERT INTO bags (path, size_bytes, mtime_ns, indexed_at_ns) VALUES ('" +
+    link.string() + "', 1, 0, 0);"
+    "INSERT INTO passes (bag_id, level, tile_row, tile_col, sensor_type, topic,"
+    " t_start_ns, t_end_ns, ping_count)"
+    " SELECT id, 14, 1, 1, 'mbes-bathy', '/t', 0, 1, 1 FROM bags WHERE path = '" +
+    link.string() + "';");
+  ASSERT_EQ(queryScalar(db, "SELECT COUNT(*) FROM bags"), "2");
+
+  const auto run = runIndexerWithDb(db, quote(bag.string()));
+  EXPECT_EQ(run.status, 0) << run.output;
+  EXPECT_NE(run.output.find("removed the stale duplicate row"), std::string::npos) << run.output;
+  EXPECT_EQ(queryScalar(db, "SELECT COUNT(*) FROM bags"), "1")
+    << "the duplicate keyed through the symlink must not survive the run";
+  EXPECT_EQ(queryScalar(db, "SELECT path FROM bags"), bag.string());
+  EXPECT_EQ(queryScalar(db, "SELECT COUNT(*) FROM passes"), "0")
+    << "CASCADE must take the stale row's passes: they are the double report";
 }
 
 // The mid-index failure handler: a bag that opened fine and then failed part

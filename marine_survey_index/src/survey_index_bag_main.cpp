@@ -235,6 +235,26 @@ bool resolvesToNothing(const std::error_code & ec)
   return ec == std::errc::no_such_file_or_directory || ec == std::errc::not_a_directory;
 }
 
+// The ledger key for a bag: absolute, symlinks resolved, lexically normalised
+// -- so one bag is one row however it was reached. `lexically_normal()` alone
+// does not resolve links while `is_directory()` does, so a bag reached through
+// a symlinked path used to become a SECOND bag under a second `bag_id`, with
+// every pass interval and nav point inserted twice.
+//
+// A failure to resolve is reported to the caller rather than papered over: the
+// old fallback to the unresolved absolute path minted a second key for the
+// same bag, which is exactly the double insert this key exists to prevent, and
+// a transient EIO/ESTALE on a network mount is enough to trigger it.
+std::string ledgerKey(const std::filesystem::path & bag, std::error_code & ec)
+{
+  ec.clear();
+  const std::filesystem::path resolved = std::filesystem::weakly_canonical(bag, ec);
+  if (ec) {
+    return std::string();
+  }
+  return resolved.lexically_normal().string();
+}
+
 // Recursively find rosbag2 bags (directories containing metadata.yaml) under a
 // scan root. A bag directory itself is not descended into further.
 //
@@ -409,6 +429,105 @@ std::int64_t ledgerState(
   return result;
 }
 
+// Reconcile ledger rows written before the key resolved symlinks (#375).
+//
+// Such a row can never be matched again: the lookup now computes the resolved
+// key, misses, and INSERTs a second row beside it -- leaving the stale row's
+// passes and nav track in the DB to double-report that bag through
+// `query.cpp`'s undeduplicated join, permanently, since no future run can
+// match the old key either. So the rows are reconciled once, up front, before
+// any bag is looked up:
+//
+//   * a stale row whose resolved key is free is re-keyed in place. The bag did
+//     not move, so its fingerprint, passes and nav track stay valid.
+//   * a stale row whose resolved key is already taken IS the double report:
+//     the canonical row is the one every future run uses, so the stale
+//     duplicate is deleted and `ON DELETE CASCADE` takes its passes and nav
+//     track with it.
+//
+// Both are reported. A row whose path cannot be resolved at all is left alone
+// and warned about -- it is not evidence of a symlinked key, and this must not
+// delete a row because a mount blinked. A failure of the reconciliation itself
+// throws: the caller refuses to index, because inserting beside rows we know
+// may be stale is the condition this exists to end.
+std::size_t reconcileLedgerKeys(sqlite3 * db)
+{
+  struct LedgerRow
+  {
+    std::int64_t id;
+    std::string path;
+  };
+  std::vector<LedgerRow> rows;
+  {
+    StmtGuard sel(prepareOrThrow(db, "SELECT id, path FROM bags"));
+    int step = SQLITE_OK;
+    while ((step = sqlite3_step(sel.get())) == SQLITE_ROW) {
+      const unsigned char * text = sqlite3_column_text(sel.get(), 1);
+      rows.push_back(
+        LedgerRow{sqlite3_column_int64(sel.get(), 0),
+          text != nullptr ? reinterpret_cast<const char *>(text) : ""});
+    }
+    if (step != SQLITE_DONE) {
+      throw SqliteError(std::string("reading the ledger: ") + sqlite3_errmsg(db));
+    }
+  }
+
+  std::size_t reconciled = 0;
+  bool in_transaction = false;
+  for (const LedgerRow & row : rows) {
+    std::error_code key_ec;
+    const std::string key = ledgerKey(row.path, key_ec);
+    if (key_ec) {
+      std::cerr << "warning: could not check whether the ledger row for '" << row.path
+                << "' predates the symlink-resolved key: " << key_ec.message()
+                << " - if it was recorded through a symlink, that bag will be indexed"
+                << " a second time and reported twice\n";
+      continue;
+    }
+    if (key == row.path) {
+      continue;
+    }
+    if (!in_transaction) {
+      execOrThrow(db, "BEGIN TRANSACTION;");
+      in_transaction = true;
+    }
+    std::int64_t canonical_id = 0;
+    {
+      StmtGuard sel(prepareOrThrow(db, "SELECT id FROM bags WHERE path = ?"));
+      sqlite3_bind_text(sel.get(), 1, key.c_str(), -1, SQLITE_TRANSIENT);
+      const int step = sqlite3_step(sel.get());
+      if (step == SQLITE_ROW) {
+        canonical_id = sqlite3_column_int64(sel.get(), 0);
+      } else if (step != SQLITE_DONE) {
+        throw SqliteError(std::string("looking up the resolved key: ") + sqlite3_errmsg(db));
+      }
+    }
+    if (canonical_id != 0) {
+      StmtGuard del(prepareOrThrow(db, "DELETE FROM bags WHERE id = ?"));
+      sqlite3_bind_int64(del.get(), 1, row.id);
+      stepDoneOrThrow(db, del.get());
+      std::cerr << "warning: '" << row.path
+                << "' was recorded through a symlink and '" << key
+                << "' is already indexed: removed the stale duplicate row, whose passes"
+                << " and nav track were double-reporting that bag\n";
+    } else {
+      StmtGuard upd(prepareOrThrow(db, "UPDATE bags SET path = ? WHERE id = ?"));
+      sqlite3_bind_text(upd.get(), 1, key.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int64(upd.get(), 2, row.id);
+      stepDoneOrThrow(db, upd.get());
+      std::cerr << "note: re-keyed the ledger row for '" << row.path
+                << "' to its symlink-resolved path '" << key
+                << "' (recorded before #375; it would otherwise have been indexed"
+                << " a second time)\n";
+    }
+    ++reconciled;
+  }
+  if (in_transaction) {
+    execOrThrow(db, "COMMIT;");
+  }
+  return reconciled;
+}
+
 geographic_msgs::msg::GeoPoint groundOrigin(const marine_sidescan_mosaic::GeoBeam & gb)
 {
   geographic_msgs::msg::GeoPoint origin;
@@ -549,6 +668,22 @@ int main(int argc, char ** argv)
     return 1;
   }
 
+  // Migrate any pre-#375 row keyed through a symlink before a single bag is
+  // looked up. Refusing to proceed is the alternative, not proceeding quietly:
+  // a stale row we could not reconcile double-reports its bag forever.
+  try {
+    reconcileLedgerKeys(db);
+  } catch (const std::exception & e) {
+    sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+    sqlite3_close(db);
+    std::cerr << "error: could not reconcile pre-#375 ledger keys in '" << db_path
+              << "': " << e.what()
+              << " - refusing to index, because a row keyed through a symlink would be"
+              << " double-reported beside the new one; delete the index and re-run to"
+              << " regenerate it (the bags are the data of record)\n";
+    return 1;
+  }
+
   // Same bounded-TF-window constants as the proven importers (#251 / cube#63).
   constexpr double kCacheWindowSec = 60.0;
   constexpr double kGuardSec = 3.0;
@@ -564,18 +699,17 @@ int main(int argc, char ** argv)
 
   for (const auto & bag : bags) {
     try {
-      // Symlinks are resolved out of the ledger key: `lexically_normal()`
-      // alone does not, while `is_directory()` does, so a bag reached through
-      // a symlinked path used to become a SECOND bag under a second `bag_id`
-      // -- every pass interval and nav point inserted twice. With the link
-      // resolved, the second nomination finds the first bag's ledger row and
-      // skips it. `weakly_canonical` falls back to the plain absolute path if
-      // the resolution fails (the fingerprint reports the same cause).
+      // One bag is one ledger row, however it was reached (see `ledgerKey()`).
+      // A key that cannot be resolved fails the bag: falling back to the
+      // unresolved path would mint a second key for it, which is the double
+      // insert the resolved key exists to prevent.
       std::error_code key_ec;
-      const std::filesystem::path resolved = std::filesystem::weakly_canonical(bag, key_ec);
-      const std::string bag_key = key_ec ?
-        std::filesystem::absolute(bag).lexically_normal().string() :
-        resolved.lexically_normal().string();
+      const std::string bag_key = ledgerKey(bag, key_ec);
+      if (key_ec) {
+        throw std::runtime_error(
+          "could not resolve '" + bag.string() + "' to a ledger key: " + key_ec.message() +
+          " - refusing to index it under a second key");
+      }
       std::string fingerprint_problem;
       const marine_survey_index::BagFingerprint fp =
         marine_survey_index::bagFingerprint(bag, &fingerprint_problem);

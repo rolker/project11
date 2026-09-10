@@ -167,8 +167,35 @@ additive, no schema change.
   predating the fix carries `mtime_ns = 0`, so it compares unequal to its bag's
   real fingerprint and each such bag is re-indexed **once** on the next run
   (177 rows on the dev host at the time of the fix). This is expected
-  derived-cache rebuild cost, not a regression, and needs no migration: the
-  index is regenerable by design and self-heals on that run.
+  derived-cache rebuild cost, not a regression: the index is regenerable by
+  design and self-heals on that run.
+- **One row *is* migrated at the #375 fix: a `path` recorded through a
+  symlink.** The same fix resolves symlinks out of the key, so a row an older
+  indexer wrote under a symlinked path can no longer be matched by any run —
+  the lookup computes the resolved key, misses, inserts a **second** row, and
+  the stale row's `passes` and `nav_track` keep double-reporting that bag
+  through the undeduplicated join, permanently. The indexer therefore
+  reconciles the ledger once, before it looks up any bag: a stale row whose
+  resolved key is free is **re-keyed in place** (reported as `note: re-keyed
+  the ledger row for …`), and a stale row whose resolved key is already taken
+  is the double report itself, so the duplicate is **deleted** and `ON DELETE
+  CASCADE` takes its passes and nav track (`warning: … removed the stale
+  duplicate row`). If the reconciliation cannot be completed the indexer
+  **refuses to index at all** and says so, rather than inserting beside rows it
+  knows may be stale; the remedy it names is to delete `survey_index.db` and
+  re-run. A row whose path cannot be resolved at all (an unreadable path
+  component, a network mount erroring rather than answering ENOENT) is left
+  alone and warned about — that is not evidence of a symlinked key, and a
+  blinking mount must not delete ledger rows. On the dev host at the time of
+  the fix this was a verified no-op (0 of 177 rows re-key); hosts whose index
+  was built through a symlinked path (e.g. a scan root of links, or a bag tree
+  reached through a linked mount point) are the ones the migration is for.
+- **Consumers that match `bags.path` exactly must canonicalise too.** The
+  writer now stores the resolved path, so a consumer comparing a
+  user-supplied path (a file dialog's output, a config value) against
+  `bags.path` by string equality will miss the row whenever the user's path
+  runs through a symlink. Resolve it (`std::filesystem::weakly_canonical`,
+  `os.path.realpath`) before the comparison, or join on a resolved key.
 - **What size + mtime cannot see.** The fingerprint is a cheap change detector,
   not a content hash. It misses an mtime-preserving rewrite (`cp -p`,
   `rsync --times`, `tar -p`, or a restore from backup) at an identical byte
