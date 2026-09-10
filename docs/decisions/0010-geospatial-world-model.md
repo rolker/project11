@@ -594,7 +594,14 @@ full-data replay remain offline properties).
   partial no-data still counts as surveyed (unfilled cells within one fused fine
   surface are routine), while **across** the query cells of a costmap cell, an
   unsurveyed one is land under `unsurveyed_is_lethal`. That asymmetry is the
-  operator's decision, taken with both alternatives on the table.
+  operator's decision, taken with both alternatives on the table. Its cost is
+  measurable and belongs beside it: the lethal boundary now advances past the
+  true unsurveyed edge by one costmap cell plus one query cell — 1.90 m in
+  latitude, 1.66 m in longitude at 1 m and 43.5 degrees north, against about
+  0.5 m under the old centre test — so a surveyed gap between two unsurveyed
+  shoals loses roughly 2.5 m of usable width, silently. Shoal-safe in direction,
+  but an operational input for anyone running the flag on a lake where the boat
+  threads a narrow gap.
 
   *Residency, not just fan-out.* The fan-out above is CPU. The same lever moves
   memory, and harder: a tile is ~14.7 MB at **every** level, so what a finer

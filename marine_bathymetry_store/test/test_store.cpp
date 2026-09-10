@@ -752,50 +752,56 @@ TEST(Store, ClearOverlappedDraftCountsARetainedCoarseCellOnce)
   EXPECT_TRUE(draft->hasData()) << "cleared a draft cell the union does not cover";
 }
 
-TEST(Store, ClearOverlappedDraftIsUnchangedByAFineTileElsewhereInTheImport)
+TEST(Store, ADistantFineTileDoesNotSetTheWalkGranularityForTheWholeImport)
 {
-  // Round 3: the coverage walk runs at the finest level with a tile over THIS
-  // draft cell, not the finest anywhere in the import. A depth-adaptive run
-  // writes a shallow band far finer than the rest, so a single distant level-14
-  // tile used to set the walk granularity for every draft cell in the import.
-  // The verdict must not depend on it: the same import with and without the
-  // distant fine tile clears the same draft cells and retains the same ones.
-  const gggs::GridIndex pgrid = gggs::Level(11).gridIndex(43.0, -70.5);
-  const gggs::Level draft_level(4);
+  // Round 3, verified in round 4: the coverage walk must run at the finest level
+  // with a tile over THIS draft cell, not the finest anywhere in the call. A
+  // depth-adaptive run writes its shallow band far finer than the rest, so one
+  // distant level-14 tile used to set the granularity for every draft cell in
+  // the import.
+  //
+  // The observable difference is the RESIDUE COUNT, not the cleared cells. With
+  // draft at the same level as the processed tile over it, walking at the
+  // covering level takes the exact centre branch — a gated-drop hole under the
+  // draft cell is an ordinary hole, not coarse residue, and is not counted. The
+  // old code, dragged to level 14 by a tile 4 grids away, took the walk branch
+  // and counted it. So this FAILS against `index.finest()`: 1 retained, not 0.
+  const gggs::GridIndex pgrid = gggs::Level(10).gridIndex(43.0, -70.5);
+  const gggs::Level draft_level(10);
 
-  // A level-14 tile several level-11 grids away — nowhere near the draft cells.
   const gggs::GridIndex distant = gggs::Level(14).gridIndex(
     gggs::geoPoint(
       0.5 * (pgrid.southLatitude() + pgrid.northLatitude()) + 4.0 * pgrid.latitudinalSpan(),
       0.5 * (pgrid.westLongitude() + pgrid.eastLongitude()) + 4.0 * pgrid.longitudinalSpan()));
   ASSERT_TRUE(distant.valid());
+  ASSERT_NE(distant, pgrid);
 
   const auto run = [&](bool with_distant_fine_tile) {
       BathymetryStore store(10);
-      const CornerCells corners = cornerCellsOf(pgrid, draft_level);
-      for (const auto & cell : corners.cells) {
-        store.set(SourceLayer::Draft, cell, BathyCell{-5.0, 0.4});
-      }
+      // One draft cell, at the same level as the processed tile that covers it.
+      const auto draft_cell = draft_level.cellIndex(
+        gggs::geoPoint(
+          0.5 * (pgrid.southLatitude() + pgrid.northLatitude()),
+          0.5 * (pgrid.westLongitude() + pgrid.eastLongitude())));
+      store.set(SourceLayer::Draft, draft_cell, BathyCell{-5.0, 0.4});
+
+      // Processed over it, with a gated-drop hole exactly at that cell.
+      auto processed_tile = filledProcessedTile(pgrid, -30.0);
+      processed_tile.set(draft_cell.row(), draft_cell.column(), BathyCell{});
+
       std::map<gggs::GridIndex, marine_bathymetry_store::BathymetryTile> processed;
-      processed.emplace(pgrid, filledProcessedTile(pgrid, -30.0));
+      processed.emplace(pgrid, std::move(processed_tile));
       if (with_distant_fine_tile) {
         processed.emplace(distant, filledProcessedTile(distant, -1.0));
       }
-      const auto result = store.clearOverlappedDraft(processed);
-      std::vector<bool> still_has_data;
-      for (const auto & cell : corners.cells) {
-        const auto draft = store.get(SourceLayer::Draft, cell);
-        still_has_data.push_back(draft.has_value() && draft->hasData());
-      }
-      return std::make_pair(result.coarse_draft_cells_retained, still_has_data);
+      return store.clearOverlappedDraft(processed).coarse_draft_cells_retained;
     };
 
-  const auto without = run(false);
-  const auto with = run(true);
-  EXPECT_EQ(with.first, without.first)
-    << "a distant fine tile changed the retained-residue count";
-  EXPECT_EQ(with.second, without.second)
-    << "a distant fine tile changed which draft cells were cleared";
+  EXPECT_EQ(run(false), 0u)
+    << "a same-level gated-drop hole is an ordinary hole, not coarse residue";
+  EXPECT_EQ(run(true), 0u)
+    << "a level-14 tile four grids away dragged an unrelated draft cell into a "
+    "level-14 walk and reported its hole as coarse residue";
 }
 
 TEST(Store, ClearOverlappedDraftSupersedesACoarseCellAcrossMIXEDProcessedLevels)

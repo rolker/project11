@@ -228,6 +228,11 @@ bool processedSupersedesDraftCell(
   // grid over this ground contributes nothing to the decision either way, and
   // processedHasDataAt still consults every level at each walked cell.
   const uint8_t finest = finestLevelOver(index, draft_box);
+  // Note the reporting consequence, verified in round 4: with draft at or finer
+  // than the level covering it, this takes the centre branch, so a gated-drop
+  // hole under a draft cell is counted as the ordinary hole it is rather than as
+  // coarse residue. The old whole-import granularity reported such holes as
+  // residue whenever any finer tile rode along in the same call.
 
   if (finest <= draft_cell.level()) {
     // Nothing finer than the draft cell: one containing processed cell per

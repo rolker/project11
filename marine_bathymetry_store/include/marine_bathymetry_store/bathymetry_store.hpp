@@ -101,6 +101,11 @@ struct DraftClearResult
   /// large residue as a malfunction, and a draft blunder over ground the re-run
   /// does speak for can keep winning `shallowestReliable` until the draft cell is
   /// fully covered.
+  ///
+  /// It can also read *lower* than a naive expectation, and that is correct: a
+  /// draft cell at or finer than the processed level covering it is decided by a
+  /// single containing cell, so a gated-drop hole there is an ordinary hole, not
+  /// coarse residue, and is not counted.
   std::size_t coarse_draft_cells_retained = 0;
 };
 
