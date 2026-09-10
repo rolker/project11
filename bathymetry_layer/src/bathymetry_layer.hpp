@@ -30,7 +30,7 @@ namespace bathymetry_layer
 /// Reads the store's persisted layers (`processed/` + `draft/` and the read-only
 /// `reference/` prior — ADR-0010 D8 split the pre-D8 `survey/` into processed/draft)
 /// from disk — transparently, via the store's best-source query overlay
-/// (`bestSource`/`shallowestReliable`, data-driven over `source_layers_by_priority`),
+/// (`hasAnyData`/`reliableSamples`, data-driven over `source_layers_by_priority`),
 /// so this layer needs no per-layer knowledge — and turns *clearance*
 /// — the water-surface ellipsoidal height minus the seafloor ellipsoidal height —
 /// into occupancy cost so the planner routes around shoals. This is the D1
@@ -38,7 +38,8 @@ namespace bathymetry_layer
 /// (deferred to D2, which depends on the atomic-tile-write work in #189).
 ///
 /// **No-data policy (ADR-0002 §D7, two-query safety pattern):** per cell,
-/// `bestSource` first answers "is there ANY data here?" (quality-blind). If not,
+/// `reliableSamples` collects every usable sample first; if none, `hasAnyData`
+/// answers "is there ANY data here?" (quality-blind). If not,
 /// the cell is truly unsurveyed and this layer leaves the master cost untouched
 /// (NO_INFORMATION) so another prior — e.g. `s57_layer` — can fill it in. The
 /// opt-in `unsurveyed_is_lethal` parameter (default false) overrides this: when
@@ -54,6 +55,65 @@ namespace bathymetry_layer
 /// reserved for **trusted** data (σ ≤ `confidence_gate`) whose worst-case
 /// clearance is below `minimum_depth`; a high-σ (chart-grade) cell is *costed*
 /// (caution ramp, capped at `MAX_NON_OBSTACLE`), never hard-forbidden on its own.
+/// **Both** queries are REGION-aware (uma#369, `uma-ADR-0013` D8): where the store
+/// holds data finer than the costmap's query level, every covered native cell is
+/// read, not one sample from the query cell's centre. A point-sampled gate walks
+/// past a rock sitting anywhere but the centre — see `query.hpp`'s `hasAnyData`.
+/// And the region is the whole COSTMAP cell, not one GGGS cell inside it: a query
+/// cell is smaller than the costmap cell it costs (0.60 m² of 1.00 m² at 1 m and
+/// 43.5°N, and as little as 18% of it just under a level boundary), so
+/// `evaluateCostmapCell` reads every query cell the costmap cell overlaps and
+/// keeps the most hazardous verdict. Reading one of them left 40-82% of the
+/// cell's ground unqueried at every store resolution.
+///
+/// **Runtime consequence — the fan-out is a config parameter (uma#369).** The
+/// query level is `BathymetryStore::fromCellSize(resolution_)`, so the gap
+/// between it and the store's native level is set by the costmap's resolution
+/// against whatever the store holds: a 2 m or 4 m global costmap over today's
+/// uniform level-10 `processed` is already a 4x or 16x fan-out per cell, and a
+/// 1 m global over level-14 depth-adaptive tiles would be 256 covered cells per
+/// costmap cell — ~2.56 M cell visits for one 100x100 tile, each a map find and
+/// a `push_back` — multiplied again by the query cells each costmap cell
+/// overlaps (`evaluateCostmapCell`): 4 to 9, mean 5.48, measured over 1,600
+/// placements. Neighbouring costmap cells share most of those, so the render
+/// carries a per-tile memo and pays for ~16.8k distinct query cells per 100x100
+/// tile at 1 m rather than ~54.8k evaluations.
+///
+/// Measured store-query time for one 100x100 tile at 1 m on a fast laptop, with
+/// the single-cell (pre-round-3) cost beside it: level-10 store 2 -> ~3 ms,
+/// level-12 7 -> ~12 ms, level-13 13 -> ~22 ms, level-14 36 -> ~61 ms. (The
+/// before column and the 3.26x redundancy were measured; the after column
+/// applies the memo's ratio to them.) The shape to keep in mind is that a
+/// present-but-EMPTY fine tile costs the same as a full one — the inner walk is
+/// geometric, not data-gated — so the shoreline pays the worst case.
+/// `generateTile`'s time budget is checked only *between* tiles,
+/// so one tile is uninterruptible once started. Reducing the work by
+/// point-sampling is exactly the defect uma#369 fixed, so a narrower query is
+/// not on the list of remedies. Removing REDUNDANT work is — the per-tile memo
+/// above is the first instance, and it took 3.26x off this path without
+/// narrowing anything. What remains is a bound or an interruption point, tracked
+/// in [#371](https://github.com/rolker/unh_marine_autonomy/issues/371).
+/// `hasAnyData` short-circuits at the first cell holding data, so the existence
+/// gate itself costs one cell over surveyed ground and only an empty region pays
+/// its full walk.
+///
+/// **Runtime consequence — store RESIDENCY, the other half of the same lever
+/// (uma#369, round 3).** A `BathymetryTile` is a 960x960 pair of `double` bands
+/// — about 14.7 MB — at EVERY level; what shrinks with level is the ground it
+/// covers. A level-10 tile spans 869.7 m (~19 MB per km² of survey), a level-13
+/// tile 108.7 m (~1.2 GB/km²), a level-14 tile 54.4 m (~4.9 GB/km²).
+/// `refreshWindow` loads the whole buffered costmap window with no tile or byte
+/// cap, synchronously, and it runs BEFORE and OUTSIDE the per-cycle budget that
+/// guards the `generateTile` loop. A 1 km global costmap over a shallow store
+/// whose `processed` tiles are level 13/14 is therefore a multi-gigabyte
+/// synchronous load on the costmap thread: an OOM kill, or a stall the planner
+/// sees as a non-current costmap, with no parameter bounding either. It is
+/// reachable only once a depth-adaptive WRITER exists
+/// ([cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143)),
+/// which is why it is recorded here rather than bounded in this change; bounding
+/// it is an eviction-policy design, tracked in
+/// [#376](https://github.com/rolker/unh_marine_autonomy/issues/376).
+///
 /// A cell whose only data carries σ = ∞ / NaN (genuinely unknown quality) has no
 /// usable magnitude of uncertainty and stays conservatively `LETHAL_OBSTACLE`
 /// (the "data exists but no reliable sample" path) — same as before. This
@@ -120,6 +180,21 @@ protected:
   // Returns std::nullopt when the cell is truly unsurveyed (the layer leaves the
   // master cost untouched); otherwise the cost to combine into the master grid.
   std::optional<unsigned char> evaluateCell(const gggs::CellIndex & cell) const;
+
+  // The cost of one COSTMAP cell, given the geographic bounding box of its
+  // ground. Reads every GGGS query cell the box overlaps and keeps the most
+  // hazardous verdict; std::nullopt when none of them has a verdict (all
+  // unsurveyed, and unsurveyed_is_lethal_ is not set). A query cell is smaller
+  // than a costmap cell, so costing from the single cell under the centre left
+  // 40-82% of the ground unread (round 3, uma#369) — see the implementation for
+  // the geometry and for the two deliberate asymmetries it carries.
+  // Exposed for unit testing.
+  // @p memo, when given, caches one verdict per GGGS query cell for the duration
+  // of a single rendered tile: neighbouring costmap cells share query cells, so
+  // a 100x100 tile at 1 m asks ~54.8k times for ~16.8k distinct answers.
+  std::optional<unsigned char> evaluateCostmapCell(
+    double min_lat, double min_lon, double max_lat, double max_lon,
+    std::map<gggs::CellIndex, std::optional<unsigned char>> * memo = nullptr) const;
 
   // Expand a leading "~"/"~/" in @p path to $HOME (so one portable store_path
   // resolves on both the boat and dev/sim). Absolute, empty, and "~user" paths

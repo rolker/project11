@@ -21,14 +21,18 @@
 
 #include "marine_bathymetry_store/bathymetry_store.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <utility>
 #include <vector>
+
+#include "cell_geometry.hpp"
 
 namespace marine_bathymetry_store
 {
@@ -123,55 +127,253 @@ std::size_t BathymetryStore::importTiles(
   return inserted;
 }
 
+namespace
+{
+
+/// The distinct GGGS levels present in a layer's tile map, coarsest first.
+std::set<uint8_t> levelsPresent(const std::map<gggs::GridIndex, BathymetryTile> & tiles)
+{
+  std::set<uint8_t> levels;
+  for (const auto & [grid, tile] : tiles) {
+    (void)tile;
+    levels.insert(grid.level());
+  }
+  return levels;
+}
+
+/// Every processed tile one `clearOverlappedDraft` call was given, indexed for
+/// point lookup: tiles by grid, plus the distinct levels present (finest first).
+///
+/// `processed` is depth-adaptive and mixed-level (uma#369), so a coverage
+/// question ("does the processed data have anything at this point?") has to be
+/// asked once per level present, each answered by one map lookup — never by a
+/// scan over the tiles.
+struct ProcessedIndex
+{
+  std::map<gggs::GridIndex, const BathymetryTile *> by_grid;
+  std::set<uint8_t, std::greater<uint8_t>> levels;   ///< finest first
+
+  uint8_t finest() const {return *levels.begin();}
+};
+
+/// Does ANY processed tile in @p index hold data at @p point?
+bool processedHasDataAt(
+  const ProcessedIndex & index, const geographic_msgs::msg::GeoPoint & point)
+{
+  for (const uint8_t level : index.levels) {
+    const gggs::CellIndex cell = gggs::Level(level).cellIndex(point);
+    const auto it = index.by_grid.find(cell.grid());
+    if (it != index.by_grid.end() && it->second->get(cell.row(), cell.column()).hasData()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// The finest level in @p index holding a tile whose grid overlaps @p box, or
+/// the coarsest level present when none does.
+///
+/// Grid-level, not cell-level: a grid spans 960 cells, so this asks the cheap
+/// question ("could a tile at this level bear on this ground at all?") and errs
+/// toward the finer answer, which is the conservative one — it can only make the
+/// caller walk at a finer granularity than strictly needed, never a coarser one.
+uint8_t finestLevelOver(const ProcessedIndex & index, const GeoBox & box)
+{
+  for (const uint8_t level : index.levels) {   // finest first
+    const gggs::Level lvl(level);
+    for (gggs::GridAreaIterator grid_it(lvl.gridIndex(box.min), lvl.gridIndex(box.max));
+      grid_it.valid(); grid_it.next())
+    {
+      if (index.by_grid.count(*grid_it) != 0) {
+        return level;
+      }
+    }
+  }
+  return *index.levels.rbegin();   // coarsest present; levels is never empty here
+}
+
+/// Does the processed data in @p index fully supersede @p draft_cell — is every
+/// point of the draft cell's ground covered by a processed cell that has data?
+///
+/// Level-aware in both directions, and decided against the WHOLE index rather
+/// than one tile:
+/// - Every processed level at or coarser than the draft cell: the draft cell
+///   lies inside exactly one cell of each (GGGS levels nest exactly), so its
+///   centre resolves them all.
+/// - Some processed level FINER than the draft cell: the draft cell covers many
+///   processed cells, possibly spread across several tiles and several levels.
+///   Walk it at the finest level present — the finest partition, and every
+///   coarser level's boundaries fall on its cell boundaries — and require every
+///   one of those cells to be covered. A processed no-data cell (a gated-drop
+///   hole) or ground outside every tile leaves the draft cell intact: strictly
+///   more coverage than clearing by footprint, so stale gap-striping never
+///   accumulates under the authoritative surface.
+///
+/// A kept cell is recorded in @p retained (a set, so it is one cell of residue
+/// however many tiles' walks reach it) rather than counted.
+bool processedSupersedesDraftCell(
+  const ProcessedIndex & index, const gggs::CellIndex & draft_cell,
+  std::set<gggs::CellIndex> & retained)
+{
+  const GeoBox draft_box = cellBox(draft_cell);
+  // The walk granularity is the finest level with a tile over THIS draft cell,
+  // not the finest in the whole import (round 3). The two differ exactly when a
+  // depth-adaptive run writes a shallow band finer than the rest, which is the
+  // normal shape under the ladder: one level-14 tile anywhere would otherwise
+  // set the granularity for every draft cell in the import, including the ones
+  // that sit under level-10 processed alone. A level-14 tile covers 60x60
+  // level-10 draft cells and each would walk 256 cells x every level present,
+  // so a few thousand such tiles reach 10^9 point resolutions in one import.
+  // Dropping to the covering level is not an approximation: a level with no
+  // grid over this ground contributes nothing to the decision either way, and
+  // processedHasDataAt still consults every level at each walked cell.
+  const uint8_t finest = finestLevelOver(index, draft_box);
+  // Note the reporting consequence, verified in round 4: with draft at or finer
+  // than the level covering it, this takes the centre branch, so a gated-drop
+  // hole under a draft cell is counted as the ordinary hole it is rather than as
+  // coarse residue. The old whole-import granularity reported such holes as
+  // residue whenever any finer tile rode along in the same call.
+
+  if (finest <= draft_cell.level()) {
+    // Nothing finer than the draft cell: one containing processed cell per
+    // level decides it, and a kept cell here is NOT coarse-retained residue —
+    // it is an ordinary gated-drop hole, which the counter has never counted.
+    return processedHasDataAt(index, boxCenter(draft_box));
+  }
+
+  const GeoBox walk = insetForIteration(draft_box, finest);
+  const gggs::Level fine(finest);
+  for (gggs::GridAreaIterator grid_it(fine.gridIndex(walk.min), fine.gridIndex(walk.max));
+    grid_it.valid(); grid_it.next())
+  {
+    for (gggs::CellAreaIterator cell_it(*grid_it, walk.min, walk.max);
+      cell_it.valid(); cell_it.next())
+    {
+      if (!processedHasDataAt(index, cellCenter(*cell_it))) {
+        retained.insert(draft_cell);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+}  // namespace
+
 DraftClearResult BathymetryStore::clearOverlappedDraft(
   const BathymetryTile & processed_tile)
 {
-  constexpr uint16_t edge = BathymetryTile::edge;
-  DraftClearResult result;
-  const gggs::GridIndex & grid = processed_tile.index();
-  // Never create a draft tile where none exists: nothing to clear there, and an
-  // all-NaN draft tile would be a spurious on-disk artifact.
-  if (layerMap(SourceLayer::Draft).count(grid) == 0) {
-    return result;
-  }
-  const std::vector<double> & depth = processed_tile.depthBand();
-  bool touched = false;
-  for (uint32_t i = 0; i < depth.size(); ++i) {
-    if (std::isnan(depth[i])) {
-      continue;   // processed no-data (gated-drop hole): leave the draft cell
-    }
-    const uint16_t row = static_cast<uint16_t>(i / edge);
-    const uint16_t col = static_cast<uint16_t>(i % edge);
-    const gggs::CellIndex cell(grid, row, col);
-    const std::optional<BathyCell> draft = get(SourceLayer::Draft, cell);
-    if (!draft.has_value() || !draft->hasData()) {
-      continue;   // draft has nothing here — nothing to clear
-    }
-    // Write no-data in place: reads as no-data thereafter, tile marked dirty so
-    // the clear persists on the next save.
-    set(SourceLayer::Draft, cell, BathyCell{});
-    ++result.cells_cleared;
-    touched = true;
-  }
-  if (touched) {
-    result.tiles_touched.push_back(grid);
-  }
-  return result;
+  return clearOverlappedDraftImpl({&processed_tile});
 }
 
 DraftClearResult BathymetryStore::clearOverlappedDraft(
   const std::map<gggs::GridIndex, BathymetryTile> & processed_tiles)
 {
-  // Delegate per tile: map keys are unique grids, so each cleared grid appears at
-  // most once in tiles_touched — identical to clearing the whole map in one pass.
-  DraftClearResult result;
+  // Pass every tile to one decision pass rather than delegating per tile: a
+  // coarse draft cell split across two processed tiles is superseded by their
+  // UNION, and a per-tile delegation would retain it for each tile that saw part
+  // of it — keeping a superseded blunder alive and counting the same cell twice.
+  std::vector<const BathymetryTile *> processed;
+  processed.reserve(processed_tiles.size());
   for (const auto & [grid, tile] : processed_tiles) {
-    (void)grid;   // the per-tile overload re-keys off tile.index()
-    const DraftClearResult one = clearOverlappedDraft(tile);
-    result.cells_cleared += one.cells_cleared;
-    result.tiles_touched.insert(
-      result.tiles_touched.end(), one.tiles_touched.begin(), one.tiles_touched.end());
+    (void)grid;   // the tiles are re-keyed off tile.index()
+    processed.push_back(&tile);
   }
+  return clearOverlappedDraftImpl(processed);
+}
+
+DraftClearResult BathymetryStore::clearOverlappedDraftImpl(
+  const std::vector<const BathymetryTile *> & processed)
+{
+  DraftClearResult result;
+  // Index the processed tiles by grid, and record the distinct levels present.
+  // `processed` is depth-adaptive and mixed-level (uma#369), so a single call
+  // can carry several native levels; every coverage question below is answered
+  // by a map lookup per level rather than a scan over the tiles.
+  ProcessedIndex index;
+  for (const BathymetryTile * tile : processed) {
+    const gggs::GridIndex & grid = tile->index();
+    if (!grid.valid()) {
+      throw std::invalid_argument(
+              "BathymetryStore::clearOverlappedDraft: processed tile has an invalid GridIndex");
+    }
+    index.by_grid.emplace(grid, tile);
+    index.levels.insert(grid.level());
+  }
+  if (index.by_grid.empty()) {
+    return result;   // nothing to clear with
+  }
+
+  const auto & draft_tiles = layerMap(SourceLayer::Draft);
+  if (draft_tiles.empty()) {
+    return result;   // nothing to clear anywhere
+  }
+
+  // Draft tiles touched, deduplicated: a coarse draft tile can be reached by
+  // several processed tiles, and one processed tile can reach several fine ones.
+  std::set<gggs::GridIndex> touched;
+  // Coarse draft cells KEPT, deduplicated: the same cell can be visited from
+  // more than one processed tile, and it is one cell of residue however many
+  // tiles saw part of it. The decision is identical each time (it is taken
+  // against the whole index), so this is a set, not a counter.
+  std::set<gggs::CellIndex> retained;
+
+  for (const BathymetryTile * processed_tile : processed) {
+    const gggs::GridIndex & processed_grid = processed_tile->index();
+    const uint8_t processed_level = processed_grid.level();
+    const GeoBox processed_box = gridBox(processed_grid);
+
+    // Level-aware (uma#369): `processed` is depth-adaptive and mixed-level while
+    // `draft` stays fixed-level, so keying the clear on the processed tile's own
+    // GridIndex — which carries its level — would match no draft tile at all and
+    // clear nothing, silently, leaving superseded draft blunders to keep winning
+    // shallowestReliable. Walk EVERY level the draft layer actually holds.
+    for (const uint8_t draft_level : levelsPresent(draft_tiles)) {
+      const gggs::Level level(draft_level);
+      // Inset by the finer of the two levels so the inclusive area iterators never
+      // step onto ground outside the processed tile.
+      const uint8_t finest = std::max(draft_level, processed_level);
+      const GeoBox walk = insetForIteration(processed_box, finest);
+
+      for (gggs::GridAreaIterator grid_it(level.gridIndex(walk.min), level.gridIndex(walk.max));
+        grid_it.valid(); grid_it.next())
+      {
+        // Never create a draft tile where none exists: nothing to clear there, and
+        // an all-NaN draft tile would be a spurious on-disk artifact.
+        const auto draft_tile_it = draft_tiles.find(*grid_it);
+        if (draft_tile_it == draft_tiles.end()) {
+          continue;
+        }
+        // Hoist the draft tile out of the cell loop: the grid is already
+        // resolved, so the per-cell read is a direct raster access instead of a
+        // map find plus an optional<BathyCell> copy — 921,600 of those per
+        // same-level tile otherwise. It is now the CHEAPEST test available, so
+        // it stays first: the processed-side coverage decision (which for a
+        // coarse draft cell walks the cells under it) runs only for draft cells
+        // that actually hold something to clear.
+        const BathymetryTile & draft_tile = draft_tile_it->second;
+        for (gggs::CellAreaIterator cell_it(*grid_it, walk.min, walk.max);
+          cell_it.valid(); cell_it.next())
+        {
+          const gggs::CellIndex draft_cell = *cell_it;
+          if (!draft_tile.get(draft_cell.row(), draft_cell.column()).hasData()) {
+            continue;   // draft has nothing here — nothing to clear
+          }
+          if (!processedSupersedesDraftCell(index, draft_cell, retained)) {
+            continue;
+          }
+          // Write no-data in place: reads as no-data thereafter, tile marked dirty
+          // so the clear persists on the next save.
+          set(SourceLayer::Draft, draft_cell, BathyCell{});
+          ++result.cells_cleared;
+          touched.insert(draft_cell.grid());
+        }
+      }
+    }
+  }
+
+  result.tiles_touched.assign(touched.begin(), touched.end());
+  result.coarse_draft_cells_retained = retained.size();
   return result;
 }
 

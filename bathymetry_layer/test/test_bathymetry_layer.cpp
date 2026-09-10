@@ -75,6 +75,7 @@ public:
 
   using BathymetryLayer::computeCost;
   using BathymetryLayer::evaluateCell;
+  using BathymetryLayer::evaluateCostmapCell;
   using BathymetryLayer::expandUserPath;
   using BathymetryLayer::injectTile;
   using BathymetryLayer::tileSize;
@@ -1044,4 +1045,347 @@ TEST(BathymetryLayer, WindowReadyTreatsStaleTileAsRendered)
   // A window region with a never-rendered (absent) tile is not ready.
   EXPECT_FALSE(layer.windowFullyRendered(0, 0, 2, 2))
     << "an absent (never-rendered) tile → not ready";
+}
+
+// ---------------------------------------------------------------------------
+// Test case 14 (uma#369 round 2, must-fix 1): the region-aware safety query
+// must reach the costmap.
+//
+// `processed` is depth-adaptive (uma#369), so a level-14 tile sits under a
+// level-10 costmap query cell: 256 native cells, one costmap cell. While
+// evaluateCell gated on `bestSource` — a point lookup at the query cell's
+// CENTRE — a single no-data native cell there (a gated-drop hole, a
+// between-lines gap, an absent fine tile beside a present one) returned
+// nullopt, `reliableSamples` was never called, and the rock in one of the other
+// 255 cells was dropped. That is the walk-past-the-rock failure the region-aware
+// query exists to prevent, in the one consumer that steers the boat.
+//
+// Both of these FAIL against the `bestSource` gate and pass against `hasAnyData`.
+// ---------------------------------------------------------------------------
+TEST(BathymetryLayer, ShoalOffCentreIsCostedWhenTheCentreCellIsNoData)
+{
+  BathymetryLayerForTest layer;
+  layer.setMinimumDepth(1.0);
+  layer.setMaximumCautionDepth(3.0);
+  layer.setConfidenceGate(0.5);
+  layer.setMapTideZ(0.0);
+  layer.setMapTideValid(true);
+
+  auto store = std::make_unique<BathymetryStore>(10);
+  const gggs::Level query_level(10);
+  const gggs::Level fine(12);              // 4x4 = 16 native cells per query cell
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(kLat, kLon));
+
+  const auto cell_box_min = query_cell.position();
+  const gggs::GridIndex & qgrid = query_cell.grid();
+  const double lat_span = qgrid.latitudinalSpan() / gggs::cell_rows_per_grid;
+  const double lon_span = qgrid.longitudinalSpan() / gggs::cell_columns_per_grid;
+  const auto point_in_query_cell = [&](double lat_f, double lon_f) {
+      return gggs::geoPoint(
+        cell_box_min.latitude + lat_f * lat_span,
+        cell_box_min.longitude + lon_f * lon_span);
+    };
+
+  // A gated-drop hole exactly under the query cell's centre: written, no data.
+  const auto centre_cell = fine.cellIndex(point_in_query_cell(0.5, 0.5));
+  store->set(SourceLayer::Processed, centre_cell, BathyCell{});
+
+  // A 0.4 m rock in the SW-most covered cell — trusted (σ 0.1 ≤ gate 0.5), so
+  // worst-case clearance 0.4 − 0.1 = 0.3 m < minimum_depth 1.0 → LETHAL.
+  const auto rock_cell = fine.cellIndex(point_in_query_cell(0.125, 0.125));
+  ASSERT_NE(rock_cell, centre_cell) << "the rock must not sit under the centre, "
+    "or a point-sampling gate would pass this test and prove nothing";
+  store->set(SourceLayer::Processed, rock_cell, BathyCell{-0.4, 0.1});
+
+  layer.setStore(std::move(store));
+
+  const auto result = layer.evaluateCell(query_cell);
+  ASSERT_TRUE(result.has_value())
+    << "the layer declared a surveyed cell unsurveyed because its CENTRE native "
+    "cell holds no data";
+  EXPECT_EQ(*result, nav2_costmap_2d::LETHAL_OBSTACLE)
+    << "a trusted 0.4 m rock inside the query cell was not costed";
+}
+
+TEST(BathymetryLayer, CentreNoDataDoesNotSuppressUnsurveyedIsLethal)
+{
+  // The same geometry under the closed-basin policy: the cell IS surveyed
+  // (a covered native cell holds data), so the unsurveyed-is-lethal "no data
+  // means land" branch must not claim it. Here the covered data is deep and
+  // reliable, so the correct answer is FREE_SPACE — the opposite verdict from
+  // the LETHAL a point-sampling gate would have written.
+  BathymetryLayerForTest layer;
+  layer.setMinimumDepth(1.0);
+  layer.setMaximumCautionDepth(3.0);
+  layer.setConfidenceGate(0.5);
+  layer.setMapTideZ(0.0);
+  layer.setMapTideValid(true);
+  layer.setUnsurveyedIsLethal(true);
+
+  auto store = std::make_unique<BathymetryStore>(10);
+  const gggs::Level query_level(10);
+  const gggs::Level fine(12);
+  const auto query_cell = query_level.cellIndex(gggs::geoPoint(kLat, kLon));
+  const auto sw = query_cell.position();
+  const gggs::GridIndex & qgrid = query_cell.grid();
+  const double lat_span = qgrid.latitudinalSpan() / gggs::cell_rows_per_grid;
+  const double lon_span = qgrid.longitudinalSpan() / gggs::cell_columns_per_grid;
+
+  store->set(
+    SourceLayer::Processed,
+    fine.cellIndex(gggs::geoPoint(sw.latitude + 0.5 * lat_span, sw.longitude + 0.5 * lon_span)),
+    BathyCell{});
+  store->set(
+    SourceLayer::Processed,
+    fine.cellIndex(
+      gggs::geoPoint(sw.latitude + 0.875 * lat_span, sw.longitude + 0.875 * lon_span)),
+    BathyCell{-20.0, 0.1});
+
+  layer.setStore(std::move(store));
+
+  const auto result = layer.evaluateCell(query_cell);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(*result, nav2_costmap_2d::FREE_SPACE)
+    << "a surveyed, deep, reliable cell was written LETHAL as if it were land, "
+    "because its centre native cell holds no data";
+}
+
+// ---------------------------------------------------------------------------
+// Test case 15 (uma#369 round 3, must-fix 1): a costmap cell is costed over its
+// WHOLE ground, not over the one GGGS cell under its centre.
+//
+// `BathymetryStore::fromCellSize(resolution)` returns the coarsest level whose
+// cells are at or finer than the costmap resolution, so a query cell is always
+// SMALLER than the costmap cell it costs — 0.60 m² of 1.00 m² at 1 m and
+// 43.5°N, and as little as 18% of it just under a level boundary. Costing from
+// the centre query cell alone therefore left 40-82% of every costmap cell
+// unread at every store resolution, which is the same walk-past-the-rock
+// failure as test case 14, one level up.
+//
+// All three build a box spanning 2x2 query cells whose CENTRE lies in the
+// south-west one, so a centre-sampling implementation reads only that cell.
+// ---------------------------------------------------------------------------
+namespace
+{
+
+// The lat/lon box of a 2x2 block of query cells whose south-west cell contains
+// (kLat, kLon), plus the block's cell spans. The box stops at 1.5 spans so its
+// centre (0.75 of a span) stays inside the south-west cell.
+struct QueryCellBlock
+{
+  gggs::CellIndex south_west;
+  double lat_span;
+  double lon_span;
+  double min_lat;
+  double min_lon;
+  double max_lat;
+  double max_lon;
+};
+
+QueryCellBlock queryCellBlock(const gggs::Level & level)
+{
+  const auto south_west = level.cellIndex(gggs::geoPoint(kLat, kLon));
+  const gggs::GridIndex & grid = south_west.grid();
+  const double lat_span = grid.latitudinalSpan() / gggs::cell_rows_per_grid;
+  const double lon_span = grid.longitudinalSpan() / gggs::cell_columns_per_grid;
+  const auto corner = south_west.position();
+  return QueryCellBlock{
+    south_west, lat_span, lon_span,
+    corner.latitude, corner.longitude,
+    corner.latitude + 1.5 * lat_span, corner.longitude + 1.5 * lon_span};
+}
+
+}  // namespace
+
+TEST(BathymetryLayer, ShoalOutsideTheCentreQueryCellIsCosted)
+{
+  BathymetryLayerForTest layer;
+  layer.setMinimumDepth(1.0);
+  layer.setMaximumCautionDepth(3.0);
+  layer.setConfidenceGate(0.5);
+  layer.setMapTideZ(0.0);
+  layer.setMapTideValid(true);
+
+  auto store = std::make_unique<BathymetryStore>(10);
+  const gggs::Level query_level(10);
+  const auto block = queryCellBlock(query_level);
+
+  // A trusted 0.4 m rock in the block's NORTH-EAST query cell: inside the
+  // costmap cell, outside the query cell holding the costmap cell's centre.
+  const auto rock_cell = query_level.cellIndex(
+    gggs::geoPoint(
+      block.min_lat + 1.25 * block.lat_span, block.min_lon + 1.25 * block.lon_span));
+  ASSERT_NE(rock_cell, block.south_west)
+    << "the rock must not sit in the centre query cell, or centre-sampling "
+    "would pass this test and prove nothing";
+  store->set(SourceLayer::Processed, rock_cell, BathyCell{-0.4, 0.1});
+
+  layer.setStore(std::move(store));
+
+  const auto result = layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon);
+  ASSERT_TRUE(result.has_value())
+    << "a rock inside the costmap cell was not read at all";
+  EXPECT_EQ(*result, nav2_costmap_2d::LETHAL_OBSTACLE)
+    << "a 0.4 m rock inside the costmap cell but outside its centre query cell "
+    "was not costed";
+}
+
+TEST(BathymetryLayer, TheMostHazardousQueryCellInTheCostmapCellWins)
+{
+  BathymetryLayerForTest layer;
+  layer.setMinimumDepth(1.0);
+  layer.setMaximumCautionDepth(3.0);
+  layer.setConfidenceGate(0.5);
+  layer.setMapTideZ(0.0);
+  layer.setMapTideValid(true);
+
+  auto store = std::make_unique<BathymetryStore>(10);
+  const gggs::Level query_level(10);
+  const auto block = queryCellBlock(query_level);
+
+  // Deep, reliable water in the centre query cell — FREE_SPACE on its own.
+  store->set(SourceLayer::Processed, block.south_west, BathyCell{-20.0, 0.1});
+  // A rock in a cell the costmap cell also covers.
+  store->set(
+    SourceLayer::Processed,
+    query_level.cellIndex(
+      gggs::geoPoint(
+        block.min_lat + 1.25 * block.lat_span, block.min_lon + 1.25 * block.lon_span)),
+    BathyCell{-0.4, 0.1});
+
+  layer.setStore(std::move(store));
+
+  const auto result = layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(*result, nav2_costmap_2d::LETHAL_OBSTACLE)
+    << "deep water under the costmap cell's centre masked a rock elsewhere in "
+    "the same costmap cell";
+}
+
+TEST(BathymetryLayer, AnUnsurveyedQueryCellMakesTheCostmapCellLandUnderTheBasinFlag)
+{
+  // The deliberate asymmetry (round 3): INSIDE a query cell, partial no-data
+  // still counts as surveyed — those are routine gaps in one fused surface.
+  // ACROSS the query cells of a costmap cell, an unsurveyed one is a whole cell
+  // of the basin's prior with nothing in it, which is what unsurveyed_is_lethal
+  // calls land, so the costmap cell goes LETHAL even though its centre is deep
+  // open water.
+  BathymetryLayerForTest layer;
+  layer.setMinimumDepth(1.0);
+  layer.setMaximumCautionDepth(3.0);
+  layer.setConfidenceGate(0.5);
+  layer.setMapTideZ(0.0);
+  layer.setMapTideValid(true);
+  layer.setUnsurveyedIsLethal(true);
+
+  auto store = std::make_unique<BathymetryStore>(10);
+  const gggs::Level query_level(10);
+  const auto block = queryCellBlock(query_level);
+  store->set(SourceLayer::Processed, block.south_west, BathyCell{-20.0, 0.1});
+
+  layer.setStore(std::move(store));
+
+  const auto centre_only = layer.evaluateCell(block.south_west);
+  ASSERT_TRUE(centre_only.has_value());
+  ASSERT_EQ(*centre_only, nav2_costmap_2d::FREE_SPACE)
+    << "the centre query cell must be free water, or this test proves nothing "
+    "about the cells around it";
+
+  const auto result = layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(*result, nav2_costmap_2d::LETHAL_OBSTACLE)
+    << "an unsurveyed query cell inside the costmap cell was not treated as "
+    "land under unsurveyed_is_lethal";
+}
+
+TEST(BathymetryLayer, TheQueryCellMemoDoesNotChangeAnyVerdict)
+{
+  // Round 4: neighbouring costmap cells share query cells, so generateTile
+  // carries a per-tile memo. It must be a pure cache — same verdicts, whether it
+  // is present, absent, or already warm.
+  BathymetryLayerForTest layer;
+  layer.setMinimumDepth(1.0);
+  layer.setMaximumCautionDepth(3.0);
+  layer.setConfidenceGate(0.5);
+  layer.setMapTideZ(0.0);
+  layer.setMapTideValid(true);
+
+  auto store = std::make_unique<BathymetryStore>(10);
+  const gggs::Level query_level(10);
+  const auto block = queryCellBlock(query_level);
+  store->set(SourceLayer::Processed, block.south_west, BathyCell{-20.0, 0.1});
+  store->set(
+    SourceLayer::Processed,
+    query_level.cellIndex(
+      gggs::geoPoint(
+        block.min_lat + 1.25 * block.lat_span, block.min_lon + 1.25 * block.lon_span)),
+    BathyCell{-0.4, 0.1});
+  layer.setStore(std::move(store));
+
+  const auto without = layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon);
+
+  std::map<gggs::CellIndex, std::optional<unsigned char>> memo;
+  const auto cold = layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon, &memo);
+  ASSERT_FALSE(memo.empty()) << "the memo was never populated";
+  const auto warm = layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon, &memo);
+
+  EXPECT_EQ(cold, without) << "the memo changed a verdict on its first pass";
+  EXPECT_EQ(warm, without) << "a warm memo changed a verdict";
+
+  // An unsurveyed query cell caches its std::nullopt too, and a cached nullopt
+  // must stay "leave it to another prior", not become a cost.
+  BathymetryLayerForTest empty_layer;
+  empty_layer.setMapTideZ(0.0);
+  empty_layer.setMapTideValid(true);
+  empty_layer.setStore(std::make_unique<BathymetryStore>(10));
+  std::map<gggs::CellIndex, std::optional<unsigned char>> empty_memo;
+  const auto first = empty_layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon, &empty_memo);
+  const auto second = empty_layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon, &empty_memo);
+  EXPECT_FALSE(first.has_value());
+  EXPECT_EQ(first, second);
+}
+
+TEST(BathymetryLayer, AnAntimeridianStraddleFallsBackToTheCentreCell)
+{
+  // Round 4: a costmap cell whose corners fall on both sides of 180 folds into a
+  // box spanning ~360°, because the callers take min/max over the four corner
+  // longitudes. That box is not a wide cell and must never be iterated — at
+  // level 10 it is ~46,000 grid columns of walking on the costmap thread. The
+  // span test catches it; the earlier `max_lon < min_lon` test could not, since
+  // min/max over the same four values never invert.
+  //
+  // A regression here does not fail this test, it hangs it: that is what the
+  // ctest timeout is for.
+  BathymetryLayerForTest layer;
+  layer.setMinimumDepth(1.0);
+  layer.setMaximumCautionDepth(3.0);
+  layer.setConfidenceGate(0.5);
+  layer.setMapTideZ(0.0);
+  layer.setMapTideValid(true);
+
+  auto store = std::make_unique<BathymetryStore>(10);
+  const gggs::Level query_level(10);
+  // A rock at the seam, in the cell the folded box's true centre lands in.
+  const auto seam_cell = query_level.cellIndex(gggs::geoPoint(kLat, -180.0));
+  store->set(SourceLayer::Processed, seam_cell, BathyCell{-0.4, 0.1});
+  layer.setStore(std::move(store));
+
+  const double lat_span =
+    seam_cell.grid().latitudinalSpan() / gggs::cell_rows_per_grid;
+  const auto result = layer.evaluateCostmapCell(
+    kLat - 0.25 * lat_span, -179.9995, kLat + 0.25 * lat_span, 179.9995);
+
+  ASSERT_TRUE(result.has_value())
+    << "the straddling cell was not evaluated at all";
+  EXPECT_EQ(*result, layer.evaluateCell(seam_cell))
+    << "the straddle fallback did not land on the cell containing the true "
+    "centre of the box";
 }

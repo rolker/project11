@@ -279,6 +279,11 @@ ProcessedImportResult importGeoTiff(
     const DraftClearResult cleared = store.clearOverlappedDraft(tiles);
     result.draft_cells_cleared = cleared.cells_cleared;
     result.draft_tiles_touched = std::move(cleared.tiles_touched);
+    // Carry the retained-residue count out to the caller. Counting it in the
+    // store and dropping it here would make "counted rather than silent" true
+    // only inside the store — the operator running the import is who needs to
+    // see that a superseded draft blunder is still in there.
+    result.coarse_draft_cells_retained = cleared.coarse_draft_cells_retained;
   }
 
   // Bulk-insert into the layer's single fused surface (#221). The Reference

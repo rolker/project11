@@ -514,6 +514,51 @@ TEST_F(GeoTiffImportTest, AntiClobberCellWiseClearsOnlyCoveredDraftCells)
   EXPECT_DOUBLE_EQ(draft_b->depth, -8.0);
 }
 
+TEST_F(GeoTiffImportTest, AntiClobberSurfacesTheRetainedCoarseResidue)
+{
+  // uma#369 round 2: `coarse_draft_cells_retained` is counted in the store; it
+  // has to REACH the caller, or "counted rather than silent" stops at the API
+  // boundary and the first depth-adaptive import — exactly when someone needs to
+  // see the residue — reports nothing. A coarse draft cell partly covered by a
+  // finer processed import must appear in ProcessedImportResult.
+  BathymetryStore store(11);
+  // Draft one level COARSER than the import: the level-10 draft cell covers four
+  // level-11 processed cells, and the 1x1 raster fills only one of them, so the
+  // import does not fully supersede it — kept, and reported.
+  const gggs::Level draft_level(10);
+  const auto nw = nwCell(store, store.level());
+  const auto draft_cell = draft_level.cellIndex(nw.position());
+  store.set(SourceLayer::Draft, draft_cell, BathyCell{-9.0, 0.4});
+
+  const auto tif = writeTestTiff(dir_ / "partial.tif", store.level(), 1, 1, {-30.0f}, {0.1f});
+  const auto result = importGeoTiff(store, SourceLayer::Processed, tif);
+
+  EXPECT_EQ(result.cells_imported, 1u);
+  EXPECT_EQ(result.draft_cells_cleared, 0u) << "a partly-covered coarse cell must not clear";
+  EXPECT_EQ(result.coarse_draft_cells_retained, 1u)
+    << "the retained-residue count was dropped at the importer's API boundary";
+
+  const auto draft = store.get(SourceLayer::Draft, draft_cell);
+  ASSERT_TRUE(draft.has_value());
+  EXPECT_TRUE(draft->hasData()) << "cleared a draft cell this import only partly covers";
+}
+
+TEST_F(GeoTiffImportTest, AntiClobberReportsNoResidueForANonProcessedImport)
+{
+  // Only a Processed import clears Draft, so the residue count stays 0 — pinned
+  // so the new field cannot pick up a value on a path that clears nothing.
+  BathymetryStore store(11);
+  const gggs::Level draft_level(10);
+  const auto draft_cell = draft_level.cellIndex(nwCell(store, store.level()).position());
+  store.set(SourceLayer::Draft, draft_cell, BathyCell{-9.0, 0.4});
+
+  const auto tif = writeTestTiff(dir_ / "draft.tif", store.level(), 1, 1, {-30.0f}, {0.1f});
+  const auto result = importGeoTiff(store, SourceLayer::Draft, tif);
+
+  EXPECT_EQ(result.draft_cells_cleared, 0u);
+  EXPECT_EQ(result.coarse_draft_cells_retained, 0u);
+}
+
 TEST_F(GeoTiffImportTest, AntiClobberGatedDropHolePreservesDraft)
 {
   // The invariant that mandates CELL-WISE (not tile-wise) clearing: a processed

@@ -59,8 +59,12 @@ public:
   ///
   /// The result is clamped to [0, 20].
   /// @param cell_size Desired maximum cell size in meters.
-  /// @return Level with the smallest cells that are >= cell_size, or 20 if
-  ///         even the finest level is too coarse.
+  /// @return The coarsest Level whose cells are AT OR FINER than @p cell_size,
+  ///         or 20 if even the finest level's cells are coarser than the
+  ///         request. (The previous wording, "smallest cells that are >=
+  ///         cell_size", said the opposite of what this returns; consumers
+  ///         depend on the at-or-finer direction — marine_bathymetry_store's
+  ///         depth-adaptive level policy and s102_import both do.)
   static Level fromCellSize(float cell_size)
   {
     auto grid_size = cell_size * cell_rows_per_grid;

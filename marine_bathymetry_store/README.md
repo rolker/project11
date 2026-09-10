@@ -48,7 +48,12 @@ map per layer, so source is the map, not a per-cell field. Priority is a
 read-only `reference` prior (ADR-0002 §D3), and never outranks a `processed`
 re-run cell. **Anti-clobber (D8):** a `processed` import clears overlapped `draft`
 cells **cell-wise** (only where it has data, so the re-run's gated-drop holes leave
-draft intact).
+draft intact) and **across GGGS levels** — `processed` is depth-adaptive and
+mixed-level (uma#369) while `draft` stays fixed-level, so the clear walks every
+level `draft` holds rather than keying on the processed tile's own level. A
+`draft` cell coarser than the processed tile clears only where that tile fully
+supersedes it; the ones it only partly covers are kept (the shoal-safe direction)
+and reported in `DraftClearResult::coarse_draft_cells_retained`.
 
 #### Write gates
 
@@ -88,16 +93,36 @@ written.
 
 - `bestSource(store, cell)` — the highest-priority layer with data. Walks
   `source_layers_by_priority` in order (`Processed` → `Draft` → `Reference` →
-  `Chart`) and returns the first layer holding a value for the cell.
+  `Chart`) and returns the first layer holding a value for the cell. Where a
+  layer is finer than the query cell this **point-resolves** the native cell at
+  the query cell's centre: one representative value, for display and
+  best-available lookups — not a safety query.
 - `shallowestReliable(store, cell, max_uncertainty)` — the shallowest (greatest
   ellipsoidal height) value among layers whose uncertainty is within tolerance.
-  For navigation-safety use.
+  For navigation-safety use. Reads the finest data **for the region**
+  (uma-ADR-0013 D8): a level finer than the query cell covers it with many native
+  cells (16 one level finer, 256 four levels finer — a level-14 depth-adaptive
+  `processed` tile under a level-10 query, uma#369), and every one of them is
+  read, shoalest reliable value winning.
+- `reliableSamples(store, cell, max_uncertainty)` — every passing sample rather
+  than the shoalest pick, for callers that cost each and take the most hazardous
+  (ADR-0010 §D7). Region-aware in the same way, so one query cell over a fine
+  `processed` tile can return one sample per covered native cell.
+- `hasAnyData(store, cell)` — quality-blind existence probe: does **any** layer
+  hold data anywhere under this cell? Region-aware in the same way, and it
+  short-circuits at the first cell holding data, so it costs one cell over
+  surveyed ground and pays the full walk only over an empty region. This is the
+  gate that separates *unsurveyed* from *surveyed but unusable* in
+  `bathymetry_layer` (uma#369); it deliberately applies no reliability test,
+  because folding one in would collapse that distinction.
 - `forEachCellBestSource(store, min, max, visitor)` — the region form, over a
   geographic box.
 
-Every query returns `std::optional`: **`std::nullopt` means *unknown*** — no
-(reliable) layer covers the cell. A safety-conscious consumer must treat unknown
-as not-safe, never as deep water (ADR-0002 §D7).
+Every query that returns a value returns `std::optional`: **`std::nullopt` means
+*unknown*** — no (reliable) layer covers the cell. A safety-conscious consumer
+must treat unknown as not-safe, never as deep water (ADR-0002 §D7).
+`hasAnyData` is the exception by design: it answers a yes/no existence question,
+so it returns `bool` and has no unknown state.
 
 ### Persistence (`tile_io.hpp`)
 
@@ -284,6 +309,62 @@ ros2 run marine_bathymetry_store build_depth_overviews /path/to/store/reference 
   data (uma-ADR-0011 Consequences). `coverage.json` is not a `.tif`, so the
   flat-layout loaders already skip it silently too.
 
+### Depth-adaptive level selection (`depth_adaptive_level.hpp`, uma-ADR-0010 D9 / uma#369)
+
+`depthAdaptiveLevel(depth_m)` chooses the GGGS level a `processed` store tile
+should be written at, from the depth that tile covers. It is the depth-driven
+analogue of the level selection `s102_import` already does per dataset
+resolution (`src/s102/run.cpp` maps `record.resolution_m` through
+`gggs::Level::fromCellSize`).
+
+The requested cell size is `capture_distance_scale · |depth|` (default 0.05,
+mirroring `cube_bathymetry::Parameters::capture_distance_scale` — **no automated
+link between the two repos' constants**), mapped through `fromCellSize` (which
+returns the level at or finer than the request) and clamped to `[8, 14]`:
+
+| Level | Cell size | Tile extent | Applies when |
+|---|---|---|---|
+| 8 (coarse clamp) | 3.624 m | 3478.7 m | depth ≥ 72.47 m |
+| 9 | 1.812 m | 1739.4 m | 36.24–72.47 m |
+| 10 | 0.906 m | 869.7 m | 18.12–36.24 m |
+| 11 | 0.453 m | 434.8 m | 9.06–18.12 m |
+| 12 | 0.227 m | 217.4 m | 4.53–9.06 m |
+| 13 | 0.113 m | 108.7 m | 2.26–4.53 m |
+| 14 (fine clamp) | 0.057 m | 54.4 m | depth < 2.26 m |
+
+CUBE's 0.5 m capture *floor* is deliberately not carried over — it is a minimum
+acceptance distance, not a resolution floor, and treating it as one pins
+everything shallower than ~18 m to level 11. Level 10 is what every `processed`
+tile holds today, so each step finer is **4× the cells and tiles over the same
+ground**: 4× at 11, 16× at 12, 64× at 13, **256×** at the level-14 clamp.
+
+- **Decision unit**: one level per store tile, sized from the **shallowest**
+  depth in the tile (that sounding has the tightest capture radius). This is
+  circular as stated — the level chosen *defines* the tile extent — so the writer
+  (cube_bathymetry#143) must break the circle with a level-independent decision
+  region or a fixpoint iteration. The scalar signature may change when it lands.
+- **The clamps are the exception** to "cells are never coarser than the capture
+  radius": below ~1.13 m of water the request is finer than a level-14 cell and
+  the fine clamp holds the lattice there.
+- **Fails loud**: a non-finite depth, an inverted or out-of-range clamp, and a
+  non-positive `capture_distance_scale` all throw `std::invalid_argument`. A
+  caller whose decision unit has no data (shallowest depth = NaN) should skip
+  that unit rather than let the throw end a multi-hour import. A zero depth —
+  and any request that underflows or overflows the float `fromCellSize` takes —
+  returns a clamp rather than reaching its undefined `log2(0)`/`log2(inf)` path:
+  the fine clamp at the underflow end, the coarse clamp at the overflow end. The
+  overflow end is set by the **grid** size: `fromCellSize` multiplies the cell
+  size by 960 in float before the `log2`, so the break-down point is a cell size
+  above ~3.5e35 — **|depth| above ~7.1e36** at the default scale, three decades
+  below `FLT_MAX` itself. Physically unreachable; the guard is on the value that
+  actually overflows.
+- **Nothing calls it yet.** `import_bag` builds one `cube::GeoMapSheet` per run
+  and pins the store cell size to it, so CUBE's estimation grid and the store
+  tiling are one resolution by construction; decoupling them is
+  [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143).
+  Existing level-10 stores are untouched — the policy applies to new imports
+  only.
+
 ## Build & test
 
 This package lives in the `unh_marine_autonomy` repo and builds in `core_ws`:
@@ -294,12 +375,15 @@ colcon test --packages-select marine_bathymetry_store
 ```
 
 Tests (`test_store`, `test_query`, `test_tile_io`, `test_geotiff_import`,
-`test_depth_overview`) are headless GTest and cover priority precedence, no-data
+`test_depth_overview`, `test_depth_adaptive_level`) are headless GTest and cover
+priority precedence, no-data
 handling, the height-aware shallowest-reliable semantics, persistence round-trip
 (depth + uncertainty), incremental (dirty-only) save, level-mismatch rejection,
 the GeoTIFF importer, the depth overview-pyramid builder (shallowest-preserving
 fold, {depth, σ} pair coherence, no-upsample invariant, malformed-filename
-skip→swap-refusal, and the loader's silent `overviews/` skip), and the coarse
+skip→swap-refusal, and the loader's silent `overviews/` skip), the
+depth-adaptive level policy (every level transition depth, both clamps,
+monotonicity in depth, and the fail-loud edge cases), and the coarse
 `StoreMetadata` round-trip.
 
 The chart suite additionally covers the write gates (`set` / `importTiles` on a

@@ -25,6 +25,7 @@
 #include <map>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include "marine_autonomy/gggs.h"
 #include "marine_bathymetry_store/bathymetry_store.hpp"
@@ -38,6 +39,26 @@ using marine_bathymetry_store::SourceLayer;
 static std::size_t tilesIn(const BathymetryStore & store, SourceLayer layer)
 {
   return store.tiles(layer).size();
+}
+
+// The point at fractional position (@p lat_fraction, @p lon_fraction) of a cell
+// — (0.5, 0.5) is its centre. Re-derived here rather than reusing the
+// implementation's own helper, so the cross-level tests do not lean on the code
+// they check.
+//
+// Fractions OUTSIDE [0, 1] are deliberate and used by several tests here: they
+// name a point in a neighbouring cell in the same units (3.5 is the centre of
+// the cell three along), which is how the cross-level tests reach the cells
+// around a coarse draft cell without hand-computing spans.
+static geographic_msgs::msg::GeoPoint pointInCell(
+  const gggs::CellIndex & cell, double lat_fraction, double lon_fraction)
+{
+  const gggs::GridIndex & grid = cell.grid();
+  const double lat_per_cell = grid.latitudinalSpan() / gggs::cell_rows_per_grid;
+  const double lon_per_cell = grid.longitudinalSpan() / gggs::cell_columns_per_grid;
+  const auto sw = cell.position();
+  return gggs::geoPoint(
+    sw.latitude + lat_fraction * lat_per_cell, sw.longitude + lon_fraction * lon_per_cell);
 }
 
 TEST(Store, SetGetRoundTrip)
@@ -399,4 +420,442 @@ TEST(Store, ClearOverlappedDraftTileMapAggregatesAcrossTiles)
   EXPECT_EQ(result.tiles_touched.size(), 2u);
   EXPECT_FALSE(store.get(SourceLayer::Draft, c1)->hasData());
   EXPECT_FALSE(store.get(SourceLayer::Draft, c2)->hasData());
+}
+
+// --- clearOverlappedDraft ACROSS GGGS LEVELS (uma#369) ---
+// `processed` became depth-adaptive and mixed-level while `draft` stays
+// fixed-level, so the two layers no longer share a level. Keyed on the processed
+// tile's own GridIndex — which carries its level — the clear matched no draft
+// tile, cleared zero cells and reported nothing, leaving superseded draft
+// blunders to keep winning shallowestReliable. These pin the level-aware
+// behaviour in both directions.
+
+TEST(Store, ClearOverlappedDraftClearsFinerDraftUnderACoarserProcessedTile)
+{
+  // draft FINER than processed: each processed cell covers 16 level-12 draft
+  // cells. Every draft cell under a processed data cell clears; those under a
+  // processed no-data hole survive, exactly as at equal levels.
+  BathymetryStore store(10);
+  const gggs::GridIndex pgrid = gggs::Level(10).gridIndex(43.0, -70.5);
+  const gggs::Level fine(12);
+
+  const gggs::CellIndex covered(pgrid, 5, 7);    // processed has data here
+  const gggs::CellIndex hole(pgrid, 5, 8);       // processed no-data hole
+
+  std::vector<gggs::CellIndex> covered_draft;
+  std::vector<gggs::CellIndex> hole_draft;
+  for (int i = 0; i < 4; ++i) {
+    for (int j = 0; j < 4; ++j) {
+      const double lat_f = (i + 0.5) / 4.0;
+      const double lon_f = (j + 0.5) / 4.0;
+      covered_draft.push_back(fine.cellIndex(pointInCell(covered, lat_f, lon_f)));
+      hole_draft.push_back(fine.cellIndex(pointInCell(hole, lat_f, lon_f)));
+      store.set(SourceLayer::Draft, covered_draft.back(), BathyCell{-9.0, 0.4});
+      store.set(SourceLayer::Draft, hole_draft.back(), BathyCell{-8.0, 0.4});
+    }
+  }
+
+  marine_bathymetry_store::BathymetryTile processed(pgrid);
+  processed.set(covered.row(), covered.column(), BathyCell{-30.0, 0.1});
+  // `hole` deliberately left no-data.
+
+  const auto result = store.clearOverlappedDraft(processed);
+
+  EXPECT_EQ(result.cells_cleared, 16u) << "a finer draft tile was not reached";
+  EXPECT_EQ(result.coarse_draft_cells_retained, 0u);
+  EXPECT_FALSE(result.tiles_touched.empty());
+  for (const auto & cell : covered_draft) {
+    EXPECT_FALSE(store.get(SourceLayer::Draft, cell)->hasData()) << "not cleared";
+  }
+  for (const auto & cell : hole_draft) {
+    EXPECT_TRUE(store.get(SourceLayer::Draft, cell)->hasData()) <<
+      "cleared under a processed no-data hole";
+  }
+}
+
+TEST(Store, ClearOverlappedDraftClearsCoarserDraftOnlyWhereFullySuperseded)
+{
+  // draft COARSER than processed: one level-10 draft cell covers 2x2 level-11
+  // processed cells. Clearing it when only part of it is superseded would
+  // discard draft data over ground this tile does not speak for, so it clears
+  // only under full coverage — and the retained ones are COUNTED, not silent.
+  BathymetryStore store(10);
+  const gggs::GridIndex pgrid = gggs::Level(11).gridIndex(43.0, -70.5);
+  const gggs::Level draft_level(10);
+  marine_bathymetry_store::BathymetryTile processed(pgrid);
+
+  // Two draft cells well inside the processed tile: one fully covered, one with
+  // a single processed no-data cell under it.
+  const auto inside = pointInCell(gggs::CellIndex(pgrid, 400, 400), 0.5, 0.5);
+  const gggs::CellIndex full = draft_level.cellIndex(inside);
+  const gggs::CellIndex partial =
+    draft_level.cellIndex(pointInCell(full, 3.5, 0.5));    // three draft cells north
+  ASSERT_FALSE(full == partial);
+  store.set(SourceLayer::Draft, full, BathyCell{-9.0, 0.4});
+  store.set(SourceLayer::Draft, partial, BathyCell{-8.0, 0.4});
+
+  int full_cells = 0;
+  int partial_cells = 0;
+  for (int i = 0; i < 2; ++i) {
+    for (int j = 0; j < 2; ++j) {
+      const double lat_f = (i + 0.5) / 2.0;
+      const double lon_f = (j + 0.5) / 2.0;
+      const auto pf = gggs::Level(11).cellIndex(pointInCell(full, lat_f, lon_f));
+      ASSERT_TRUE(pf.grid() == pgrid);
+      processed.set(pf.row(), pf.column(), BathyCell{-30.0, 0.1});
+      ++full_cells;
+      // Leave ONE of the four cells under `partial` no-data.
+      if (i == 0 && j == 0) {
+        continue;
+      }
+      const auto pp = gggs::Level(11).cellIndex(pointInCell(partial, lat_f, lon_f));
+      ASSERT_TRUE(pp.grid() == pgrid);
+      processed.set(pp.row(), pp.column(), BathyCell{-31.0, 0.1});
+      ++partial_cells;
+    }
+  }
+  ASSERT_EQ(full_cells, 4);
+  ASSERT_EQ(partial_cells, 3);
+
+  const auto result = store.clearOverlappedDraft(processed);
+
+  EXPECT_EQ(result.cells_cleared, 1u) << "the fully superseded coarse draft cell";
+  EXPECT_EQ(result.coarse_draft_cells_retained, 1u) <<
+    "the partially covered one must be reported, not silently skipped";
+  EXPECT_FALSE(store.get(SourceLayer::Draft, full)->hasData());
+  ASSERT_TRUE(store.get(SourceLayer::Draft, partial)->hasData());
+  EXPECT_DOUBLE_EQ(store.get(SourceLayer::Draft, partial)->depth, -8.0);
+}
+
+TEST(Store, ClearOverlappedDraftKeepsCoarseDraftStraddlingTheTileEdge)
+{
+  // A draft cell that extends PAST the processed tile's edge is kept and
+  // counted: this tile does not speak for the rest of its ground, and a
+  // wrongly-cleared draft cell is a lost hazard. Tile edges land mid-cell only
+  // once the level gap exceeds 6 (960 cells per grid; 960/2^7 = 7.5), so this
+  // is not a configuration the depth-adaptive ladder produces — it is here so
+  // the rule is enforced rather than assumed away.
+  BathymetryStore store(10);
+  const gggs::GridIndex pgrid = gggs::Level(11).gridIndex(43.0, -70.5);
+  const gggs::Level draft_level(4);     // 7 levels coarser: 7.5 cells per tile
+  marine_bathymetry_store::BathymetryTile processed(pgrid);
+
+  // Fill the whole processed tile with data — coverage is then limited only by
+  // the tile's own extent.
+  for (uint16_t r = 0; r < marine_bathymetry_store::BathymetryTile::edge; ++r) {
+    for (uint16_t c = 0; c < marine_bathymetry_store::BathymetryTile::edge; ++c) {
+      processed.set(r, c, BathyCell{-30.0, 0.1});
+    }
+  }
+
+  // Does this coarse draft cell reach outside the processed tile?
+  const auto straddles = [&pgrid](const gggs::CellIndex & cell) {
+      const gggs::GridIndex & g = cell.grid();
+      const double lat_per_cell = g.latitudinalSpan() / gggs::cell_rows_per_grid;
+      const double lon_per_cell = g.longitudinalSpan() / gggs::cell_columns_per_grid;
+      const auto sw = cell.position();
+      return sw.latitude < pgrid.southLatitude() ||
+             sw.longitude < pgrid.westLongitude() ||
+             sw.latitude + lat_per_cell > pgrid.northLatitude() ||
+             sw.longitude + lon_per_cell > pgrid.eastLongitude();
+    };
+
+  // The draft cells at the processed tile's four corners. With a 7.5-cell tile
+  // at least one corner cell must overhang, whichever way the grid aligns.
+  const double lat_nudge = 1e-9;
+  const double lon_nudge = 1e-9;
+  std::vector<gggs::CellIndex> corners;
+  for (const double lat :
+    {pgrid.southLatitude() + lat_nudge, pgrid.northLatitude() - lat_nudge})
+  {
+    for (const double lon :
+      {pgrid.westLongitude() + lon_nudge, pgrid.eastLongitude() - lon_nudge})
+    {
+      corners.push_back(draft_level.cellIndex(gggs::geoPoint(lat, lon)));
+    }
+  }
+
+  std::size_t expected_retained = 0;
+  for (const auto & cell : corners) {
+    store.set(SourceLayer::Draft, cell, BathyCell{-5.0, 0.4});
+    if (straddles(cell)) {
+      ++expected_retained;
+    }
+  }
+  ASSERT_GT(expected_retained, 0u) << "no corner cell overhangs — test proves nothing";
+
+  const auto result = store.clearOverlappedDraft(processed);
+
+  EXPECT_EQ(result.coarse_draft_cells_retained, expected_retained) <<
+    "a straddling coarse draft cell must be reported, not silently skipped";
+  for (const auto & cell : corners) {
+    const auto draft = store.get(SourceLayer::Draft, cell);
+    ASSERT_TRUE(draft.has_value());
+    if (straddles(cell)) {
+      EXPECT_TRUE(draft->hasData()) << "cleared a draft cell this tile only partly covers";
+      EXPECT_DOUBLE_EQ(draft->depth, -5.0);
+    } else {
+      EXPECT_FALSE(draft->hasData()) << "a fully superseded draft cell survived";
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// uma#369 round 2: the coarse-draft coverage decision spans the whole call.
+//
+// The map overload used to delegate per tile, so a coarse draft cell whose
+// ground is completed by the UNION of several processed tiles was retained by
+// each of them — the superseded blunder kept winning `shallowestReliable`, and
+// the same cell was counted once per tile in `coarse_draft_cells_retained`.
+//
+// Geometry (as in ClearOverlappedDraftKeepsCoarseDraftStraddlingTheTileEdge):
+// a level-4 draft cell against level-11+ processed tiles is 7.5 draft cells per
+// processed tile, so the tile's corner draft cells overhang its edges into the
+// neighbouring tiles. Supply those neighbours and the union supersedes them.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+/// A fully-populated processed tile at @p grid.
+marine_bathymetry_store::BathymetryTile filledProcessedTile(
+  const gggs::GridIndex & grid, double depth)
+{
+  marine_bathymetry_store::BathymetryTile tile(grid);
+  for (uint16_t r = 0; r < marine_bathymetry_store::BathymetryTile::edge; ++r) {
+    for (uint16_t c = 0; c < marine_bathymetry_store::BathymetryTile::edge; ++c) {
+      tile.set(r, c, BathyCell{depth, 0.1});
+    }
+  }
+  return tile;
+}
+
+/// The 3x3 neighbourhood of @p level grids around @p center, filled with data.
+std::map<gggs::GridIndex, marine_bathymetry_store::BathymetryTile> filledNeighbourhood(
+  const gggs::GridIndex & center, uint8_t level, double depth)
+{
+  std::map<gggs::GridIndex, marine_bathymetry_store::BathymetryTile> tiles;
+  const double lat_span = center.latitudinalSpan();
+  const double lon_span = center.longitudinalSpan();
+  const double lat_mid = 0.5 * (center.southLatitude() + center.northLatitude());
+  const double lon_mid = 0.5 * (center.westLongitude() + center.eastLongitude());
+  for (int i = -1; i <= 1; ++i) {
+    for (int j = -1; j <= 1; ++j) {
+      const gggs::GridIndex grid = gggs::Level(level).gridIndex(
+        gggs::geoPoint(lat_mid + i * lat_span, lon_mid + j * lon_span));
+      if (grid.valid() && tiles.count(grid) == 0) {
+        tiles.emplace(grid, filledProcessedTile(grid, depth));
+      }
+    }
+  }
+  return tiles;
+}
+
+/// The four corner cells of @p grid at @p level, and whether each overhangs it.
+struct CornerCells
+{
+  std::vector<gggs::CellIndex> cells;
+  std::vector<bool> straddles;
+};
+
+CornerCells cornerCellsOf(const gggs::GridIndex & grid, const gggs::Level & level)
+{
+  CornerCells out;
+  const double nudge = 1e-9;
+  for (const double lat : {grid.southLatitude() + nudge, grid.northLatitude() - nudge}) {
+    for (const double lon : {grid.westLongitude() + nudge, grid.eastLongitude() - nudge}) {
+      const gggs::CellIndex cell = level.cellIndex(gggs::geoPoint(lat, lon));
+      const gggs::GridIndex & g = cell.grid();
+      const double lat_per_cell = g.latitudinalSpan() / gggs::cell_rows_per_grid;
+      const double lon_per_cell = g.longitudinalSpan() / gggs::cell_columns_per_grid;
+      const auto sw = cell.position();
+      const bool south_of = (sw.latitude) < (grid.southLatitude());
+      const bool west_of = (sw.longitude) < (grid.westLongitude());
+      const bool north_of = (sw.latitude + lat_per_cell) > (grid.northLatitude());
+      const bool east_of = (sw.longitude + lon_per_cell) > (grid.eastLongitude());
+      out.cells.push_back(cell);
+      out.straddles.push_back(south_of || west_of || north_of || east_of);
+    }
+  }
+  return out;
+}
+
+}  // namespace
+
+TEST(Store, ClearOverlappedDraftClearsCoarseDraftCoveredByTheUnionOfTiles)
+{
+  // The straddling corner cells of ClearOverlappedDraftKeepsCoarseDraftStraddling-
+  // TheTileEdge, with the NEIGHBOURING processed tiles supplied. No single tile
+  // covers them; the union does, so they must clear and none is residue.
+  BathymetryStore store(10);
+  const gggs::GridIndex pgrid = gggs::Level(11).gridIndex(43.0, -70.5);
+  const gggs::Level draft_level(4);
+
+  const CornerCells corners = cornerCellsOf(pgrid, draft_level);
+  std::size_t straddling = 0;
+  for (std::size_t k = 0; k < corners.cells.size(); ++k) {
+    store.set(SourceLayer::Draft, corners.cells[k], BathyCell{-5.0, 0.4});
+    if (corners.straddles[k]) {
+      ++straddling;
+    }
+  }
+  ASSERT_GT(straddling, 0u) << "no corner cell overhangs — the union is not exercised";
+
+  const auto processed = filledNeighbourhood(pgrid, 11, -30.0);
+  ASSERT_GT(processed.size(), 1u);
+
+  const auto result = store.clearOverlappedDraft(processed);
+
+  EXPECT_EQ(result.coarse_draft_cells_retained, 0u)
+    << "a draft cell superseded by the UNION of the tiles was reported as residue";
+  for (const auto & cell : corners.cells) {
+    const auto draft = store.get(SourceLayer::Draft, cell);
+    ASSERT_TRUE(draft.has_value());
+    EXPECT_FALSE(draft->hasData())
+      << "a coarse draft cell superseded by the union survived because no SINGLE "
+      "tile covered it — the superseded blunder keeps winning shallowestReliable";
+  }
+}
+
+TEST(Store, ClearOverlappedDraftCountsARetainedCoarseCellOnce)
+{
+  // The same neighbourhood with one processed cell punched out under a
+  // straddling draft cell: the union no longer covers it, so it is correctly
+  // retained — and counted ONCE, not once per processed tile whose walk reached
+  // it (a straddling cell is reached by two to four of them).
+  BathymetryStore store(10);
+  const gggs::GridIndex pgrid = gggs::Level(11).gridIndex(43.0, -70.5);
+  const gggs::Level draft_level(4);
+
+  const CornerCells corners = cornerCellsOf(pgrid, draft_level);
+  std::size_t victim = corners.cells.size();
+  for (std::size_t k = 0; k < corners.cells.size(); ++k) {
+    store.set(SourceLayer::Draft, corners.cells[k], BathyCell{-5.0, 0.4});
+    if (corners.straddles[k] && victim == corners.cells.size()) {
+      victim = k;
+    }
+  }
+  ASSERT_LT(victim, corners.cells.size()) << "no corner cell overhangs";
+
+  auto processed = filledNeighbourhood(pgrid, 11, -30.0);
+  // Punch a no-data hole at the straddling draft cell's own SW corner, inside
+  // whichever processed tile holds it.
+  const auto victim_sw = corners.cells[victim].position();
+  const gggs::CellIndex hole_cell = gggs::Level(11).cellIndex(
+    gggs::geoPoint(victim_sw.latitude + 1e-9, victim_sw.longitude + 1e-9));
+  const auto hole_tile = processed.find(hole_cell.grid());
+  ASSERT_NE(hole_tile, processed.end());
+  hole_tile->second.set(hole_cell.row(), hole_cell.column(), BathyCell{});
+
+  const auto result = store.clearOverlappedDraft(processed);
+
+  EXPECT_EQ(result.coarse_draft_cells_retained, 1u)
+    << "one draft cell of residue must be counted once, however many processed "
+    "tiles' walks reached it";
+  const auto draft = store.get(SourceLayer::Draft, corners.cells[victim]);
+  ASSERT_TRUE(draft.has_value());
+  EXPECT_TRUE(draft->hasData()) << "cleared a draft cell the union does not cover";
+}
+
+TEST(Store, ADistantFineTileDoesNotSetTheWalkGranularityForTheWholeImport)
+{
+  // Round 3, verified in round 4: the coverage walk must run at the finest level
+  // with a tile over THIS draft cell, not the finest anywhere in the call. A
+  // depth-adaptive run writes its shallow band far finer than the rest, so one
+  // distant level-14 tile used to set the granularity for every draft cell in
+  // the import.
+  //
+  // The observable difference is the RESIDUE COUNT, not the cleared cells. With
+  // draft at the same level as the processed tile over it, walking at the
+  // covering level takes the exact centre branch — a gated-drop hole under the
+  // draft cell is an ordinary hole, not coarse residue, and is not counted. The
+  // old code, dragged to level 14 by a tile 4 grids away, took the walk branch
+  // and counted it. So this FAILS against `index.finest()`: 1 retained, not 0.
+  const gggs::GridIndex pgrid = gggs::Level(10).gridIndex(43.0, -70.5);
+  const gggs::Level draft_level(10);
+
+  const gggs::GridIndex distant = gggs::Level(14).gridIndex(
+    gggs::geoPoint(
+      0.5 * (pgrid.southLatitude() + pgrid.northLatitude()) + 4.0 * pgrid.latitudinalSpan(),
+      0.5 * (pgrid.westLongitude() + pgrid.eastLongitude()) + 4.0 * pgrid.longitudinalSpan()));
+  ASSERT_TRUE(distant.valid());
+  ASSERT_NE(distant, pgrid);
+
+  const auto run = [&](bool with_distant_fine_tile) {
+      BathymetryStore store(10);
+      // One draft cell, at the same level as the processed tile that covers it.
+      const auto draft_cell = draft_level.cellIndex(
+        gggs::geoPoint(
+          0.5 * (pgrid.southLatitude() + pgrid.northLatitude()),
+          0.5 * (pgrid.westLongitude() + pgrid.eastLongitude())));
+      store.set(SourceLayer::Draft, draft_cell, BathyCell{-5.0, 0.4});
+
+      // Processed over it, with a gated-drop hole exactly at that cell.
+      auto processed_tile = filledProcessedTile(pgrid, -30.0);
+      processed_tile.set(draft_cell.row(), draft_cell.column(), BathyCell{});
+
+      std::map<gggs::GridIndex, marine_bathymetry_store::BathymetryTile> processed;
+      processed.emplace(pgrid, std::move(processed_tile));
+      if (with_distant_fine_tile) {
+        processed.emplace(distant, filledProcessedTile(distant, -1.0));
+      }
+      return store.clearOverlappedDraft(processed).coarse_draft_cells_retained;
+    };
+
+  EXPECT_EQ(run(false), 0u)
+    << "a same-level gated-drop hole is an ordinary hole, not coarse residue";
+  EXPECT_EQ(run(true), 0u)
+    << "a level-14 tile four grids away dragged an unrelated draft cell into a "
+    "level-14 walk and reported its hole as coarse residue";
+}
+
+TEST(Store, ClearOverlappedDraftSupersedesACoarseCellAcrossMIXEDProcessedLevels)
+{
+  // The depth-adaptive case (uma#369): the tiles completing one straddling
+  // coarse draft cell are at DIFFERENT native levels — the centre tile at 11
+  // (deeper band), its neighbours at 12 (shallow band). The coverage walk runs
+  // at the finest level present and resolves each covered point against
+  // whichever level actually holds it.
+  BathymetryStore store(10);
+  const gggs::GridIndex pgrid = gggs::Level(11).gridIndex(43.0, -70.5);
+  const gggs::Level draft_level(4);
+
+  const CornerCells corners = cornerCellsOf(pgrid, draft_level);
+  for (const auto & cell : corners.cells) {
+    store.set(SourceLayer::Draft, cell, BathyCell{-5.0, 0.4});
+  }
+
+  std::map<gggs::GridIndex, marine_bathymetry_store::BathymetryTile> processed;
+  processed.emplace(pgrid, filledProcessedTile(pgrid, -30.0));
+  // Level-12 tiles over the same neighbourhood: four per level-11 tile of
+  // ground, so cover a 3x3 level-11 area with a 6x6 sweep of level-12 grids.
+  const double lat_span = pgrid.latitudinalSpan();
+  const double lon_span = pgrid.longitudinalSpan();
+  const double lat_mid = 0.5 * (pgrid.southLatitude() + pgrid.northLatitude());
+  const double lon_mid = 0.5 * (pgrid.westLongitude() + pgrid.eastLongitude());
+  for (int i = -4; i <= 4; ++i) {
+    for (int j = -4; j <= 4; ++j) {
+      const gggs::GridIndex g = gggs::Level(12).gridIndex(
+        gggs::geoPoint(lat_mid + i * 0.5 * lat_span, lon_mid + j * 0.5 * lon_span));
+      if (g.valid() && processed.count(g) == 0) {
+        processed.emplace(g, filledProcessedTile(g, -28.0));
+      }
+    }
+  }
+  std::set<uint8_t> levels_used;
+  for (const auto & [grid, tile] : processed) {
+    (void)tile;
+    levels_used.insert(grid.level());
+  }
+  ASSERT_EQ(levels_used.size(), 2u) << "the mixed-level case is not exercised";
+
+  const auto result = store.clearOverlappedDraft(processed);
+
+  EXPECT_EQ(result.coarse_draft_cells_retained, 0u);
+  for (const auto & cell : corners.cells) {
+    const auto draft = store.get(SourceLayer::Draft, cell);
+    ASSERT_TRUE(draft.has_value());
+    EXPECT_FALSE(draft->hasData())
+      << "a coarse draft cell superseded by a MIXED-LEVEL union survived";
+  }
 }

@@ -600,6 +600,18 @@ int main(int argc, char * argv[])
               << " overlapped draft cell(s) across "
               << import_result.draft_tiles_touched.size() << " draft tile(s)\n";
   }
+  // Residue: coarse draft cells this import overlaps but does not fully
+  // supersede, so they were KEPT (uma#369). Shoal-safe, but not nothing — each
+  // is a superseded draft value still winning shallowestReliable over ground
+  // this import speaks for only in part. Report it, or "counted rather than
+  // silent" stops at the store's API boundary.
+  if (layer == marine_bathymetry_store::SourceLayer::Processed &&
+    import_result.coarse_draft_cells_retained > 0)
+  {
+    std::cout << "kept " << import_result.coarse_draft_cells_retained
+              << " coarser draft cell(s) this import only partly supersedes"
+              << " (neighbouring imports still owe the rest of their ground)\n";
+  }
 
   // Field-wise provenance merge (#315 review): CLI-supplied fields update
   // the registry, everything else carries forward from what was loaded. A
