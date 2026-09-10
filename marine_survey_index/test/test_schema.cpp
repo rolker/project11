@@ -73,13 +73,21 @@ TEST(Schema, FreshOpenCreatesTablesAndVersion)
 // A GUI holds this DB open (marine_perception_tools' survey_index_bridge), and
 // an indexer run writes to it. With sqlite's default zero busy timeout, a lock
 // held for an instant turns a bag into a *failed* bag -- an exit-1 incomplete
-// index, with no retry. So the open must arrive already willing to wait.
-TEST(Schema, OpenWaitsForAWriterInsteadOfFailingOnOne)
+// index, with no retry. So a batch writer must be able to ask the open to wait
+// -- and, because that same open serves a Qt GUI thread that must not freeze
+// for ten seconds, it must only wait when asked.
+TEST(Schema, OpenWaitsForAWriterOnlyWhenAskedTo)
 {
-  sqlite3 * db = marine_survey_index::openIndexDb(":memory:");
+  sqlite3 * db = marine_survey_index::openIndexDb(":memory:", 10000);
   ASSERT_NE(db, nullptr);
   EXPECT_GE(singleInt(db, "PRAGMA busy_timeout"), 5000)
-    << "a zero (default) busy timeout makes a concurrent reader a failed bag";
+    << "a zero busy timeout makes a moment's contention a failed bag";
+  sqlite3_close(db);
+
+  db = marine_survey_index::openIndexDb(":memory:");
+  ASSERT_NE(db, nullptr);
+  EXPECT_EQ(singleInt(db, "PRAGMA busy_timeout"), 0)
+    << "the default must not block a caller that never asked to wait";
   sqlite3_close(db);
 }
 

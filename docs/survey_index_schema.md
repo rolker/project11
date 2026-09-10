@@ -17,6 +17,21 @@ checkpoint (2026-07-13); see `.agent/work-plans/issue-259/plan.md`.
   derived cache. Deleting `survey_index.db` and re-running the indexer always
   reproduces it. There are no migrations — an incompatible schema bumps
   `schema_version` and the open fails with a regenerate hint.
+- **Opening the index takes a WRITE lock, and waiting for one is the caller's
+  choice.** `openIndexDb()` executes the schema DDL on every open, so even a
+  reader-to-be locks the file; the explorer GUI opens the same read-write
+  function through `marine_perception_tools`' `survey_index_bridge`, so two
+  write-capable handles on one file is the normal state. The handle's
+  `PRAGMA busy_timeout` is a per-consumer policy passed at open:
+  **`0` by default** — sqlite's own behaviour, fail immediately on someone
+  else's lock, which is what a GUI thread wants — and the **indexer opts into
+  10 s**, because a moment's contention would otherwise become a *failed* bag,
+  and a failed bag is an exit-1 incomplete index with no retry. So an indexer
+  open, and any later statement of its run, may block for up to ten seconds;
+  exceeding that is still a failed bag, not a retry. (`journal_mode` is left at
+  sqlite's default `delete`: WAL would remove the contention outright but is
+  unsafe on network filesystems, and this index sits beside stores that may
+  live on the NAS.)
 - **Index = "where did the sensor look."** Pass intervals are computed from
   ping geometry (nav + sonar extents), independent of what any store
   accepted. Pings rejected by CUBE or absent from store coverage still index.

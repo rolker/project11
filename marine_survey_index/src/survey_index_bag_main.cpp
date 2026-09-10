@@ -662,7 +662,12 @@ int main(int argc, char ** argv)
 
   sqlite3 * db = nullptr;
   try {
-    db = marine_survey_index::openIndexDb(db_path);
+    // Ten seconds: far longer than any read the explorer GUI makes of this
+    // index, far shorter than a survey-tree indexing run. A batch writer would
+    // rather wait than turn a moment's contention into a failed bag, which is
+    // an exit-1 incomplete index with no retry.
+    constexpr int kBusyTimeoutMs = 10000;
+    db = marine_survey_index::openIndexDb(db_path, kBusyTimeoutMs);
   } catch (const std::exception & e) {
     std::cerr << "error: " << e.what() << "\n";
     return 1;

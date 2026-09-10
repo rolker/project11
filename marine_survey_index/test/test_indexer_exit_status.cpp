@@ -26,11 +26,13 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <system_error>
+#include <thread>
 
 #include "marine_survey_index/schema.hpp"
 #include "rosbag2_cpp/writer.hpp"
@@ -579,6 +581,36 @@ TEST_F(IndexerExitStatusTest, AFlagFollowedByAnotherFlagIsAMissingValue)
   const auto run = runIndexer("--scan --level 14");
   EXPECT_EQ(run.status, 2) << run.output;
   EXPECT_NE(run.output.find("--scan requires a value"), std::string::npos) << run.output;
+}
+
+// The indexer opts into waiting for someone else's lock (`openIndexDb`'s
+// `busy_timeout_ms`), because the explorer GUI holds a write-capable handle on
+// the same file and a moment's contention would otherwise become a *failed*
+// bag -- an exit-1 incomplete index, with no retry. The default is not to
+// wait, so this asserts the opt-in from the outside: a lock held for a second
+// and a half must cost the run nothing.
+TEST_F(IndexerExitStatusTest, IndexerWaitsOutALockInsteadOfFailingTheBag)
+{
+  const auto bag = makeEmptyBag("bag_ok");
+  const auto db = (dir_ / "index.db").string();
+
+  sqlite3 * holder = marine_survey_index::openIndexDb(db);
+  ASSERT_NE(holder, nullptr);
+  ASSERT_EQ(
+    sqlite3_exec(holder, "BEGIN EXCLUSIVE;", nullptr, nullptr, nullptr), SQLITE_OK)
+    << sqlite3_errmsg(holder);
+  std::thread releaser(
+    [holder]() {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+      sqlite3_exec(holder, "COMMIT;", nullptr, nullptr, nullptr);
+      sqlite3_close(holder);
+    });
+
+  const auto run = runIndexerWithDb(db, quote(bag.string()));
+  releaser.join();
+  EXPECT_EQ(run.status, 0)
+    << "a lock held far inside the timeout must not fail a bag: " << run.output;
+  EXPECT_NE(run.output.find("1 bag(s) indexed"), std::string::npos) << run.output;
 }
 
 TEST_F(IndexerExitStatusTest, NoBagsIsAUsageError)
