@@ -374,11 +374,26 @@ int main(int argc, char ** argv)
   const std::int64_t merge_gap_ns = static_cast<std::int64_t>(merge_gap_s * 1e9);
 
   std::size_t n_bags_indexed = 0, n_bags_skipped = 0;
+  // Durable signals for the exit status: a bag that cannot be fingerprinted
+  // authoritatively re-indexes forever, and a bag that failed mid-index leaves
+  // the ledger without it. Neither may report success.
+  std::size_t n_bags_unreadable = 0, n_bags_failed = 0;
 
   for (const auto & bag : bags) {
     try {
       const std::string bag_key = std::filesystem::absolute(bag).lexically_normal().string();
-      const marine_survey_index::BagFingerprint fp = marine_survey_index::fingerprint(bag);
+      std::string fingerprint_problem;
+      const marine_survey_index::BagFingerprint fp =
+        marine_survey_index::bagFingerprint(bag, &fingerprint_problem);
+      if (!fingerprint_problem.empty()) {
+        // Loud, not silent: this bag cannot be judged unchanged, so it will
+        // re-index on every run until the cause is fixed. The library reports
+        // the fact through the fingerprint's flags (it is linked into GUI
+        // processes too); the diagnostic belongs here, at the CLI.
+        ++n_bags_unreadable;
+        std::cerr << "warning: " << fingerprint_problem
+                  << " - treating this bag as changed, so it re-indexes every run\n";
+      }
       const std::int64_t state = ledgerState(db, bag_key, fp);
       if (state > 0) {
         ++n_bags_skipped;
@@ -609,7 +624,10 @@ int main(int argc, char ** argv)
             "UPDATE bags SET size_bytes = ?, mtime_ns = ?, indexed_at_ns = ? WHERE id = ?";
           StmtGuard upd(prepareOrThrow(db, upd_sql));
           sqlite3_bind_int64(upd.get(), 1, fp.size_bytes);
-          sqlite3_bind_int64(upd.get(), 2, marine_survey_index::fingerprintStoredMtime(fp));
+          // `mtime_ns` is 0 whenever the fingerprint is not valid (struct
+          // invariant), and is never load-bearing: `fingerprintMatches()`
+          // rejects an untrustworthy fingerprint before reading it.
+          sqlite3_bind_int64(upd.get(), 2, fp.mtime_ns);
           sqlite3_bind_int64(upd.get(), 3, now_ns);
           sqlite3_bind_int64(upd.get(), 4, bag_id);
           stepDoneOrThrow(db, upd.get());
@@ -620,7 +638,7 @@ int main(int argc, char ** argv)
         StmtGuard ins(prepareOrThrow(db, ins_sql));
         sqlite3_bind_text(ins.get(), 1, bag_key.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int64(ins.get(), 2, fp.size_bytes);
-        sqlite3_bind_int64(ins.get(), 3, marine_survey_index::fingerprintStoredMtime(fp));
+        sqlite3_bind_int64(ins.get(), 3, fp.mtime_ns);
         sqlite3_bind_int64(ins.get(), 4, now_ns);
         stepDoneOrThrow(db, ins.get());
         bag_id = sqlite3_last_insert_rowid(db);
@@ -675,6 +693,7 @@ int main(int argc, char ** argv)
       // its (possibly open) transaction and move on so the remaining bags
       // still index and the db is closed cleanly at the end.
       sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+      ++n_bags_failed;
       std::cerr << "error: failed to index " << bag.string() << ": "
                 << e.what() << "; skipping\n";
     }
@@ -682,6 +701,11 @@ int main(int argc, char ** argv)
 
   sqlite3_close(db);
   std::cerr << "done: " << n_bags_indexed << " bag(s) indexed, "
-            << n_bags_skipped << " unchanged skipped -> " << db_path << "\n";
-  return 0;
+            << n_bags_skipped << " unchanged skipped, "
+            << n_bags_unreadable << " not fully readable (will re-index every run), "
+            << n_bags_failed << " failed -> " << db_path << "\n";
+  // Non-zero on either durable problem: an unreadable bag is a permanent
+  // re-index and a failed bag is missing from the index, and a run that only
+  // said so on stderr left no signal a scheduler or script could see.
+  return (n_bags_unreadable > 0 || n_bags_failed > 0) ? 1 : 0;
 }
