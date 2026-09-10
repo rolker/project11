@@ -480,7 +480,18 @@ int main(int argc, char ** argv)
 
   for (const auto & bag : bags) {
     try {
-      const std::string bag_key = std::filesystem::absolute(bag).lexically_normal().string();
+      // Symlinks are resolved out of the ledger key: `lexically_normal()`
+      // alone does not, while `is_directory()` does, so a bag reached through
+      // a symlinked path used to become a SECOND bag under a second `bag_id`
+      // -- every pass interval and nav point inserted twice. With the link
+      // resolved, the second nomination finds the first bag's ledger row and
+      // skips it. `weakly_canonical` falls back to the plain absolute path if
+      // the resolution fails (the fingerprint reports the same cause).
+      std::error_code key_ec;
+      const std::filesystem::path resolved = std::filesystem::weakly_canonical(bag, key_ec);
+      const std::string bag_key = key_ec ?
+        std::filesystem::absolute(bag).lexically_normal().string() :
+        resolved.lexically_normal().string();
       std::string fingerprint_problem;
       const marine_survey_index::BagFingerprint fp =
         marine_survey_index::bagFingerprint(bag, &fingerprint_problem);

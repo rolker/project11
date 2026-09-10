@@ -376,6 +376,25 @@ TEST_F(IndexerExitStatusTest, UnopenableIndexDbExitsOneWithNothingDone)
     << "nothing was indexed, so there is no run to summarise: " << run.output;
 }
 
+// A bag reached through a symlinked path is the SAME bag: the ledger key
+// resolves links, so the second nomination is recognised as unchanged instead
+// of inserting every pass interval and nav point a second time under a second
+// bag_id. `--scan` nominates such a link as a bag (the metadata probe follows
+// it), so this is reachable without anyone naming both paths by hand.
+TEST_F(IndexerExitStatusTest, ABagReachedThroughASymlinkIsNotASecondBag)
+{
+  const auto bag = makeEmptyBag("bag_ok");
+  std::error_code link_ec;
+  std::filesystem::create_directory_symlink(bag, dir_ / "link_to_bag", link_ec);
+  ASSERT_FALSE(link_ec) << "this filesystem refuses directory symlinks: " << link_ec.message();
+
+  const auto run =
+    runIndexer(quote(bag.string()) + " " + quote((dir_ / "link_to_bag").string()));
+  EXPECT_EQ(run.status, 0) << run.output;
+  EXPECT_NE(run.output.find("1 bag(s) indexed, 1 unchanged skipped"), std::string::npos)
+    << "the same bag under two paths must index once: " << run.output;
+}
+
 TEST_F(IndexerExitStatusTest, NoBagsIsAUsageError)
 {
   const auto run = runIndexer("");

@@ -39,7 +39,9 @@ CREATE TABLE schema_version (
 
 CREATE TABLE bags (
   id            INTEGER PRIMARY KEY,
-  path          TEXT    NOT NULL UNIQUE,  -- absolute, lexically normalized
+  path          TEXT    NOT NULL UNIQUE,  -- absolute, symlinks resolved (so
+                                          -- one bag is one row however it
+                                          -- was reached)
   size_bytes    INTEGER NOT NULL,         -- fingerprint: total regular-file bytes
   mtime_ns      INTEGER NOT NULL,         -- fingerprint: newest mtime under the
                                           -- bag, UNIX epoch nanoseconds (UTC);
