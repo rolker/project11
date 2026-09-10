@@ -270,13 +270,16 @@ executable — see the amendment under Approach step 1.)
 | `marine_survey_index/test/test_bag_fingerprint.cpp` | New. The test cases above, with a `SetUp`/`TearDown` fixture for the temp tree modelled on `test_query_join.cpp` — a failing `ASSERT_*` returns early and would otherwise leak it. |
 | `marine_survey_index/test/test_indexer_exit_status.cpp` | New (round 2). Runs the built `survey_index_bag` to police the exit-status contract, which lives in `main()`. |
 | `marine_survey_index/README.md` | The incremental-skip sentence, the exit-status table, and the `## Testing` enumeration. |
-| `docs/survey_index_schema.md` | Document the new unreadable-mtime rule in the "Incremental re-runs" contract — plan-review finding 3. |
+| `docs/survey_index_schema.md` | Document the new unreadable-mtime rule in the "Incremental re-runs" contract — plan-review finding 3. Round 3 also added the network-mount attribute-cache case to "what size + mtime cannot see", and the `bags.path` column comment now says symlinks are resolved. |
+| `marine_survey_index/package.xml` | Added at round 3. Declare the rosbag2 storage plugins: they are loaded by name at run time, so `rosbag2_cpp` does not pull one in, and without them the indexer opens no bag under a clean-room `rosdep install` — the environment `ci_local.sh` (this repo's only merge verification: there is no hosted build/test workflow) uses. |
+| `marine_survey_index/src/schema.cpp` | Added at round 3. `PRAGMA busy_timeout` on open, so a GUI holding the index DB during the one-time re-index does not turn indexer writes into failed bags. |
+| `marine_survey_index/test/test_schema.cpp` | Added at round 3. Asserts the open arrives willing to wait for a lock. |
 
 ## Principles Self-Check
 
 | Principle | Consideration |
 |---|---|
-| Test what breaks | The new tests target the exact regressions named in the issue (mtime accuracy, same-size rewrite, ledger round-trip) plus the unreadable-mtime and incomplete-walk policies this plan adds — not framework glue. Each guard was mutation-tested: removing the condition it defends fails at least one test, on a host configuration CI actually uses. |
+| Test what breaks | The new tests target the exact regressions named in the issue (mtime accuracy, same-size rewrite, ledger round-trip) plus the unreadable-mtime and incomplete-walk policies this plan adds — not framework glue. Each guard is mutation-tested: removing the condition it defends fails at least one test. Round 3 found this claim was not yet true — the CLI's exit-1 scan conjunct broke no test, and neither did the `!fp.authoritative()` condition — and it now holds for every guard on the branch bar two, both recorded in the round-3 `## Implementation` entry with the reason: `!fp.authoritative()` (provably biconditional with the string it is checked against, so no behavioural test can separate them) and the `ROLLBACK` statement in the mid-index handler. The permission-based tests skip as root, so they do not run under `ci_local.sh --clean-room`; each shares its guard with a root-observable sibling. |
 | A change includes its consequences | PR description will state the one-time full re-index of all 177 existing (`mtime_ns=0`) rows on the dev host, per the operator's note — this is expected derived-cache-rebuild cost, not a regression, and no data migration is needed. |
 | Human control and transparency | An untrustworthy fingerprint — no readable timestamp, or an incomplete walk — now fails the unchanged test **on its validity flags** (`mtime_valid` / `scan_complete`), checked before any comparison, instead of silently contributing nothing to a max. The "guaranteed-mismatching sentinel" the first draft of this plan proposed was **rejected at plan review and never shipped**: the ledger persists whatever the fingerprint carries, so an in-band sentinel compares equal to itself on the next run and restores the skip. Loudness is the caller's job: the CLI warns per bag, counts them in the run summary, and exits non-zero. |
 | Only what's needed | No ledger schema change, no new DB column, no speculative generalization beyond moving the two functions needed for testability. |
@@ -349,7 +352,11 @@ No open questions remain.
 ## Estimated Scope
 
 Single PR, single project repo (`unh_marine_autonomy`), single package
-(`marine_survey_index`). Eight files touched (three new): the new header and
-source, `survey_index_bag_main.cpp`, the two new tests
+(`marine_survey_index`). **Eleven files touched (four new)** as landed: the new
+header and source, `survey_index_bag_main.cpp`, `schema.cpp`, the two new tests
 (`test_bag_fingerprint.cpp`, `test_indexer_exit_status.cpp`),
-`CMakeLists.txt`, `docs/survey_index_schema.md`, and the package README.
+`test_schema.cpp`, `CMakeLists.txt`, `package.xml`,
+`docs/survey_index_schema.md`, and the package README. (Estimated as eight and
+three before the three review rounds; `package.xml`, `schema.cpp` and
+`test_schema.cpp` are round-3 additions, and the count of new files was wrong
+as written.)
