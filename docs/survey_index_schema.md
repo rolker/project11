@@ -125,4 +125,9 @@ additive, no schema change.
   stages do the exact math.
 - **Incremental re-runs.** A bag whose `path`, `size_bytes`, and `mtime_ns`
   all match its ledger row is skipped; a changed bag has its passes deleted
-  and re-indexed atomically (single transaction per bag).
+  and re-indexed atomically (single transaction per bag). **A bag whose
+  timestamp cannot be read at all** — every `stat` beneath it failed, or it
+  holds no regular files — never satisfies that test: it is treated as changed,
+  re-indexed, and reported on stderr, so an unreadable mtime cannot present as
+  an up-to-date bag. `mtime_ns` is then stored as `0`, which is not
+  load-bearing; the re-index decision is made before it is read.

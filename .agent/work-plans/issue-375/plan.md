@@ -167,7 +167,7 @@ split in this package.
 | `marine_survey_index/src/survey_index_bag_main.cpp` | Remove the moved struct/function; include the new header; `ledgerState()` delegates to `fingerprintMatches()`; qualify call sites; write path stores `0` for an unknown mtime. |
 | `marine_survey_index/CMakeLists.txt` | Add `bag_fingerprint.cpp` to the core lib; add the new gtest target; refresh the stale core-lib contents comment at lines 29-31 — plan-review finding 3. |
 | `marine_survey_index/test/test_bag_fingerprint.cpp` | New. The four test cases above, with a `SetUp`/`TearDown` fixture for the temp tree modelled on `test_query_join.cpp` — a failing `ASSERT_*` returns early and would otherwise leak it. |
-| `marine_survey_index/docs/survey_index_schema.md` | Document the new unreadable-mtime rule in the "Incremental re-runs" contract — plan-review finding 3. |
+| `docs/survey_index_schema.md` | Document the new unreadable-mtime rule in the "Incremental re-runs" contract — plan-review finding 3. |
 
 ## Principles Self-Check
 
@@ -199,7 +199,7 @@ split in this package.
 
 - **Stale docs** (must land in this PR), **amended after plan review
   (finding 3)**:
-  - `marine_survey_index/docs/survey_index_schema.md`, "Incremental re-runs" —
+  - `docs/survey_index_schema.md`, "Incremental re-runs" —
     the unreadable-mtime rule is genuinely **new**. The existing sentence says
     a bag whose `path`, `size_bytes` and `mtime_ns` all match its ledger row is
     skipped, and is silent on a timestamp that cannot be read; that case now
