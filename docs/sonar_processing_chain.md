@@ -50,8 +50,8 @@ the defects below survived. This table is the contract.
 
 | Quantity | Unit | Convention |
 |---|---|---|
-| `SonarDetections.tx_angles` | radians | positive forward |
-| `SonarDetections.rx_angles` | radians | positive to starboard |
+| `SonarDetections.tx_angles` | radians | transmit **steering** angle at the array; positive forward |
+| `SonarDetections.rx_angles` | radians | receive **steering** angle at the array; positive to starboard. `Sounding::beam_angle` is a copy of it |
 | `SonarDetections.two_way_travel_times` | seconds | |
 | `PingInfo.tx_beamwidths`, `rx_beamwidths` | **radians** | full −3 dB; may be empty |
 | `PingInfo.frequency`, `sound_speed` | Hz, m/s | **0 means unavailable**, not zero |
@@ -160,10 +160,18 @@ them, but the angle does not mean the same thing for every sonar:
   construction — in our chain the position is *computed from* that angle and one
   sound speed, so the two cannot disagree.
 - The **EM2040 ray-traces through a profile.** Its soundings are refracted, so
-  the angle it reports at the transducer is a **launch angle**, while the
-  position it reports has been bent on the way down. Launch angle and the
-  apparent angle from the head to the sounding are different numbers, and the
-  angle where the sound actually met the seabed is a third.
+  the angle it reports is still a **steering angle at the array**, while the
+  position it reports has been bent on the way down. The array-side angle and
+  the apparent angle from the head to the sounding are then different numbers,
+  and the angle at which the sound actually met the seabed is a third.
+
+  The message is explicit about this and always has been: `tx_angles` and
+  `rx_angles` are documented as the *steering* angles applied to the transmit
+  and receive beams, on a message whose own header says truly raw multibeam data
+  uses travel times rather than ranges. They are array-side quantities by
+  definition, before any ray tracing and before any seabed geometry. So the
+  contract is not ambiguous — what is missing is any statement of which angle a
+  derived product like an angular-response curve was built against.
 
 That matters because of what consumes the angle. The angular-response correction
 ([ADR-0007](decisions/0007-mbes-backscatter-store.md), cube#81) indexes an
@@ -174,13 +182,19 @@ angles applied to another's. For a ray-tracing sonar the launch angle is also a
 weaker proxy for the seabed incidence angle the physics actually depends on, so
 the curve should be expected to be less clean than the M3's.
 
-**`SonarInfo` does not currently declare which angle it means.** It carries the
-curve as "`|angle from nadir|` bin centres in degrees" with no statement of
-whether that is a launch angle, an apparent angle, or an incidence angle. For a
+**`SonarInfo` does not currently declare which angle its curve means.** Unlike
+`SonarDetections`, which says "steering angle", it carries the curve as
+"`|angle from nadir|` bin centres in degrees" with no statement of whether that
+is a steering angle, an apparent angle, or an incidence angle. For a
 straight-line sonar the distinction is empty, which is why it has not bitten.
 For a ray-tracing sonar it is not empty, and the curve cannot be safely reused
-without it. That declaration is owed before an EM2040 curve is trusted; not yet
-filed.
+without it. That declaration is owed before an EM2040 curve is trusted; not yet filed. A
+related note already sits on `Sounding::beam_angle` itself
+([cube#15](https://github.com/rolker/cube_bathymetry/issues/15)): the sign
+convention must be cross-checked against the producer before any grazing-angle
+reconstruction consumes it — which is the same recognition, that the stored
+angle is an array-side quantity and the seabed-side one is derived work not yet
+done.
 
 **The discrepancy is worth measuring, not just avoiding.** When a sensor
 supplies both a beam angle and an `x, y, z`, the apparent angle implied by the
