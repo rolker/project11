@@ -59,11 +59,13 @@ namespace marine_survey_index
 ///   rather than a magic `mtime_ns` value on purpose: an in-band sentinel would
 ///   be persisted by the ledger's write path and then compare equal to itself
 ///   on the next run, silently restoring the skip it was meant to prevent.
-/// - `scan_complete` — every entry beneath the bag was enumerated *and*
-///   `::stat`ed successfully. A partial walk (an unreadable subdirectory, a
-///   file that vanished mid-walk, an unrepresentable timestamp) yields a
-///   *stable* size and mtime that would otherwise present as authoritative and
-///   skip a changed bag forever — the same failure class as #375, one level up.
+/// - `scan_complete` — every entry beneath the bag was either read, or is
+///   *definitively* not a regular file and so holds no bag bytes. A partial
+///   walk (an unreadable subdirectory, a symlinked subdirectory the walk will
+///   not follow, an entry whose type cannot be resolved, a file that vanished
+///   mid-walk, an unrepresentable timestamp) yields a *stable* size and mtime
+///   that would otherwise present as authoritative and skip a changed bag
+///   forever — the same failure class as #375, one level up.
 ///
 /// Invariant: `mtime_ns == 0` whenever `mtime_valid` is false. Nothing carries
 /// an out-of-range sentinel, so the ledger can persist `mtime_ns` verbatim.
@@ -73,18 +75,33 @@ struct BagFingerprint
   std::int64_t mtime_ns = 0;
   bool mtime_valid = false;
   bool scan_complete = true;
+
+  /// @brief May this fingerprint be compared against a stored one at all?
+  ///
+  /// The one place the two flags are conjuncted. Callers ask this instead of
+  /// assembling `mtime_valid && scan_complete` themselves: getting that
+  /// conjunction wrong reads as "authoritative" — the silent-skip direction —
+  /// and a dropped conjunct is invisible at the call site.
+  bool authoritative() const {return mtime_valid && scan_complete;}
 };
 
 /// @brief Fingerprint a bag directory (recursively) or a single bag file.
 ///
 /// Size and mtime come from the same `::stat` call per file, so a file whose
 /// timestamp cannot be read contributes neither. Every way the walk can fail
-/// to see the whole bag — an unreadable directory, a failed `::stat`, an entry
-/// whose type cannot be determined, a non-regular single path, or an mtime
-/// outside the range `int64_t` nanoseconds can represent — clears
-/// `scan_complete`; reading no timestamp at all also leaves `mtime_valid`
-/// false. Either way `fingerprintMatches()` then refuses to call the bag
-/// unchanged.
+/// to see the whole bag — an unreadable directory, a symlink to a directory
+/// (not followed: a link can close a cycle a recursive walk would never
+/// leave), a failed `::stat`, a symlink whose target's existence cannot be
+/// established, an entry whose type cannot be determined, a non-regular single
+/// path, or an mtime outside the range `int64_t` nanoseconds can represent —
+/// clears `scan_complete`; reading no timestamp at all also leaves
+/// `mtime_valid` false. Either way `fingerprintMatches()` then refuses to call
+/// the bag unchanged.
+///
+/// An entry the walk knows *definitively* carries no bag bytes — a FIFO,
+/// socket or device node, or a symlink that resolves to nothing — is skipped
+/// without clearing `scan_complete`: nothing is hidden by leaving it out, and
+/// a dangling symlink is not worth a permanent re-index.
 ///
 /// This function is silent by design: it is exported from the core library and
 /// linked into GUI processes (`marine_perception_tools`) where stderr is
@@ -104,8 +121,8 @@ BagFingerprint bagFingerprint(const std::filesystem::path & bag, std::string * p
 /// @param current Freshly computed fingerprint.
 /// @param stored_size_bytes The ledger row's `size_bytes`.
 /// @param stored_mtime_ns The ledger row's `mtime_ns`.
-/// @return True only if the fingerprint is authoritative (`mtime_valid` **and**
-///   `scan_complete`) *and* both stored values match it. An untrustworthy
+/// @return True only if the fingerprint is `authoritative()` *and* both stored
+///   values match it. An untrustworthy
 ///   fingerprint is rejected **before** anything is compared, so a bag whose
 ///   timestamp or whose full contents could not be read is re-indexed rather
 ///   than skipped on a partial reading.

@@ -96,6 +96,74 @@ BagFingerprint bagFingerprint(const std::filesystem::path & bag, std::string * p
       fp.mtime_valid = true;
     };
 
+  // Classify one entry of the walk. `directory_entry::is_regular_file()` alone
+  // is not enough: it follows symlinks, so a symlink to a directory answers
+  // "not a regular file" with no error at all — and because the walk
+  // deliberately does not follow directory symlinks, every byte behind such a
+  // link used to be both invisible and *stable*, presenting as an
+  // authoritative fingerprint. That is the #375 failure class one level up,
+  // so it is reported rather than followed (a link can close a cycle a
+  // recursive walk would never leave).
+  //
+  // The dividing line is not "regular file or not" but *what the walk knows*:
+  // an entry definitively known not to be a regular file (a FIFO, socket,
+  // device node, or a symlink that resolves to nothing) carries no bag bytes,
+  // so leaving it out of the reading hides nothing and the walk is still
+  // complete. Only content the walk could not see — an unresolvable type, a
+  // directory it will not enumerate — clears `scan_complete`.
+  auto classify = [&consider, &incomplete](const fs::path & p, const fs::directory_entry & entry) {
+      std::error_code sym_ec;
+      const fs::file_status sym = entry.symlink_status(sym_ec);
+      if (sym_ec) {
+        incomplete("could not determine the type of '" + p.string() + "': " + sym_ec.message());
+        return;
+      }
+      if (fs::is_directory(sym)) {
+        // A real subdirectory: the recursive walk descends into it, and a
+        // failure to do so is reported by the increment below.
+        return;
+      }
+      if (fs::is_regular_file(sym)) {
+        consider(p);
+        return;
+      }
+      if (!fs::is_symlink(sym)) {
+        // A FIFO, socket or device node. Definitively not a regular file, so
+        // it holds no bag bytes; the single-path branch below still rejects
+        // one *nominated as* the bag, where there is nothing else to read.
+        return;
+      }
+      std::error_code target_ec;
+      const fs::file_status target = entry.status(target_ec);
+      if (target_ec) {
+        if (target_ec == std::errc::no_such_file_or_directory ||
+          target_ec == std::errc::not_a_directory)
+        {
+          // Resolves to nothing, definitively: a dangling symlink contributes
+          // no bytes and hides none, so the walk still saw the whole bag.
+          // Should its target ever appear, `::stat` would count it and the
+          // fingerprint would move — a re-index, exactly as wanted.
+          return;
+        }
+        // Anything else (a symlink loop, an unreadable path component) leaves
+        // the target's very existence unknown.
+        incomplete(
+          "could not resolve the symlink '" + p.string() + "': " + target_ec.message());
+        return;
+      }
+      if (fs::is_directory(target)) {
+        incomplete(
+          "'" + p.string() + "' is a symlink to a directory, whose contents are not walked");
+        return;
+      }
+      if (fs::is_regular_file(target)) {
+        // `::stat` follows the link, so the target's size and mtime count.
+        consider(p);
+      }
+      // Otherwise a symlink to a FIFO, socket or device: nothing to read, and
+      // nothing hidden.
+    };
+
   std::error_code ec;
   const bool is_dir = fs::is_directory(bag, ec);
   if (ec) {
@@ -117,14 +185,7 @@ BagFingerprint bagFingerprint(const std::filesystem::path & bag, std::string * p
       // reporting the bag root instead would send the operator looking in the
       // wrong place.
       const fs::path current = it->path();
-      std::error_code entry_ec;
-      const bool regular = it->is_regular_file(entry_ec);
-      if (entry_ec) {
-        incomplete(
-          "could not determine the type of '" + current.string() + "': " + entry_ec.message());
-      } else if (regular) {
-        consider(current);
-      }
+      classify(current, *it);
       it.increment(ec);
       if (ec) {
         // The walk stopped here — everything past this point is unseen.
@@ -133,7 +194,12 @@ BagFingerprint bagFingerprint(const std::filesystem::path & bag, std::string * p
     }
   } else {
     std::error_code file_ec;
-    if (!fs::is_regular_file(bag, file_ec) || file_ec) {
+    const bool regular = fs::is_regular_file(bag, file_ec);
+    if (file_ec) {
+      // Checked before the answer: `file_ec` short-circuited away used to
+      // report a failed check as a definitive "not a regular file".
+      incomplete("could not determine what '" + bag.string() + "' is: " + file_ec.message());
+    } else if (!regular) {
       // A FIFO, socket or device would otherwise fingerprint as size 0 with a
       // timestamp that moves every run.
       incomplete("'" + bag.string() + "' is not a regular file or a directory");
@@ -143,7 +209,10 @@ BagFingerprint bagFingerprint(const std::filesystem::path & bag, std::string * p
   }
 
   if (!fp.mtime_valid && first_problem.empty()) {
-    first_problem = "no readable timestamp under '" + bag.string() + "'";
+    // Nothing failed, so the walk really did see everything there is: the bag
+    // simply holds no regular file to time. Saying "no readable timestamp"
+    // here described a failure that did not happen.
+    first_problem = "'" + bag.string() + "' holds no regular files, so it has no timestamp to read";
   }
   if (problem != nullptr) {
     *problem = first_problem;
@@ -160,7 +229,7 @@ bool fingerprintMatches(
   // would compare equal to itself on the next run and skip the bag. A partial
   // walk is rejected here too — its size and mtime are stable, so they would
   // otherwise match their own stored copy for as long as the cause persists.
-  if (!current.mtime_valid || !current.scan_complete) {
+  if (!current.authoritative()) {
     return false;
   }
   return stored_size_bytes == current.size_bytes && stored_mtime_ns == current.mtime_ns;
