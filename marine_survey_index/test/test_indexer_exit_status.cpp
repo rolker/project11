@@ -395,6 +395,46 @@ TEST_F(IndexerExitStatusTest, ABagReachedThroughASymlinkIsNotASecondBag)
     << "the same bag under two paths must index once: " << run.output;
 }
 
+// The mid-index failure handler: a bag that opened fine and then failed part
+// way through must ROLL BACK (not commit a partial index and mark the bag
+// indexed), be counted, and take the run non-zero. Reached by re-indexing a
+// changed bag into a read-only index DB -- the write fails at the first
+// statement, with the transaction already open.
+//
+// Permission-based, so it skips as root; the sibling test above covers the
+// same counter root-observably through a bag that cannot be opened at all.
+TEST_F(IndexerExitStatusTest, BagThatFailsMidIndexIsRolledBackAndCounted)
+{
+  if (runningAsRoot()) {
+    GTEST_SKIP() << "root writes a read-only database, so nothing would fail";
+  }
+  const auto bag = makeEmptyBag("bag_ok");
+  const auto db = (dir_ / "index.db").string();
+  ASSERT_EQ(runIndexerWithDb(db, quote(bag.string())).status, 0);
+
+  // Change the bag so the next run re-indexes it instead of skipping it: the
+  // ledger row is what makes this the *re-index* path, and a write is what has
+  // to fail.
+  std::filesystem::path member;
+  for (const auto & entry : std::filesystem::directory_iterator(bag)) {
+    if (entry.path().extension() != ".yaml") {
+      member = entry.path();
+    }
+  }
+  ASSERT_FALSE(member.empty()) << "the empty bag has no storage member to touch";
+  {
+    std::ofstream out(member, std::ios::binary | std::ios::app);
+    out << "x";
+  }
+  ASSERT_EQ(::chmod(db.c_str(), 0444), 0);
+
+  const auto run = runIndexerWithDb(db, quote(bag.string()));
+  EXPECT_NE(run.output.find("failed to index"), std::string::npos) << run.output;
+  EXPECT_NE(run.output.find("1 failed (of 1 nominated)"), std::string::npos)
+    << "a bag that failed mid-index is neither indexed nor skipped: " << run.output;
+  EXPECT_EQ(run.status, 1) << run.output;
+}
+
 TEST_F(IndexerExitStatusTest, NoBagsIsAUsageError)
 {
   const auto run = runIndexer("");
