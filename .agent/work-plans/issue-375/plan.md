@@ -110,7 +110,9 @@ executable — see the amendment under Approach step 1.)
    **Amended after plan review (finding 1, HIGH). The sentinel design was
    wrong and is dropped.** The write path binds the fingerprint's `mtime_ns`
    into `bags` on both UPDATE and INSERT
-   (`survey_index_bag_main.cpp:651-667`), so a sentinel would be *persisted*:
+   (`survey_index_bag_main.cpp:651-667` **as the file stood before this
+   branch** — every line citation in this plan is pre-change), so a sentinel
+   would be *persisted*:
    run 1 re-indexes and stores `INT64_MIN`, then on run 2
    `stored == fp.mtime_ns` is `INT64_MIN == INT64_MIN` and the bag is
    **skipped** — the loud policy defeating itself on the second run, and the
@@ -156,10 +158,37 @@ executable — see the amendment under Approach step 1.)
    **exits non-zero** on either — a bag re-indexing forever previously left no
    signal a script or scheduler could see.
 
-   The test that matters most is the subdirectory route (mode 0000: identical
-   size and mtime across a content change behind it) plus the
-   production-reachable mode-0111 bag directory that `scanForBags` does
-   nominate.
+   The test that matters most is the subdirectory route (identical size and
+   mtime across a content change behind it) plus the production-reachable
+   unlistable bag directory that `scanForBags` does nominate.
+
+   **Amended after pre-push review round 2 (must-fixes 1-3).** Three things
+   changed here as shipped:
+
+   - **What clears `scan_complete`.** `directory_entry::is_regular_file()`
+     follows symlinks, so a symlink *to a directory* answered "not a regular
+     file" with no error and the walk (which does not follow directory
+     symlinks) never descended: the whole subtree behind it was invisible and
+     *stable*, i.e. the #375 failure class one level up, reachable through
+     `--scan`. Entries are now classified through `symlink_status()` first, and
+     the line is drawn at what the walk *knows*: content it could not see
+     clears the flag; an entry definitively carrying no bag bytes (FIFO,
+     socket, device node, a symlink resolving to nothing) does not — a
+     dangling symlink hides nothing and must not cost a permanent re-index.
+   - **The exit status gained causes**, since a `set -euo pipefail` store build
+     is the consumer: 1 = the index is incomplete (a bag failed or could not be
+     opened, or a `--scan` tree was not fully enumerated), 2 = usage,
+     3 = complete but a bag re-indexes every run. A bag whose reader could not
+     be opened at all was previously counted nowhere and exited 0.
+     `scanForBags` no longer passes `skip_permission_denied` and no longer
+     discards its `error_code`s.
+   - **Both trust flags are now guarded by tests that do not need a non-root
+     user**, because both hosted CI and `ci_local.sh` run as root and this repo
+     has no hosted build/test workflow — a permission-based test that skips
+     there defends nothing (mutation-proved: the `scan_complete` conjunct broke
+     zero tests). The symlinked-subdirectory route reaches
+     `mtime_valid && !scan_complete` directly, and the flag truth table is also
+     asserted on a directly constructed fingerprint.
 
 5. **Update `survey_index_bag_main.cpp`** to `#include
    "marine_survey_index/bag_fingerprint.hpp"`, drop the moved
@@ -170,7 +199,8 @@ executable — see the amendment under Approach step 1.)
    unchanged was false. Leaving the anonymous namespace for
    `namespace marine_survey_index` makes them `marine_survey_index::fingerprint(...)`
    and `marine_survey_index::fingerprintMatches(...)`, matching every other
-   core-lib call already in this file (lines 405, 432, 440, 494). The write
+   core-lib call already in this file (pre-change lines 405, 432, 440, 494).
+   The write
    path also changes, to persist `0` rather than an in-band sentinel when
    `mtime_valid` is false — as shipped it binds `fp.mtime_ns` directly, since
    the struct's invariant keeps that field `0` while `mtime_valid` is false.
@@ -214,6 +244,21 @@ executable — see the amendment under Approach step 1.)
      the filesystem clamps or refuses the timestamp — a test must not assert
      filesystem behaviour it cannot guarantee.
 
+     **As shipped, this grew past the outline above** (18 cases in
+     `test_bag_fingerprint`): a symlinked subdirectory, an unresolvable symlink
+     (a loop — ELOOP, which root is not exempt from), the flag truth table on a
+     constructed fingerprint, the routes that must *not* be penalised (dangling
+     symlink, FIFO, symlink to a regular file), the problem-string/flags
+     agreement invariant, and an unreadable member of a listable directory.
+     Every permission-based route now has a root-observable counterpart
+     guarding the same branch — see the round-2 amendment in step 4.
+   - **the exit-status contract**, in a separate `test_indexer_exit_status`
+     that runs the built `survey_index_bag` binary, because the contract lives
+     in `main()` where no library call reaches it (which is how the
+     unopenable-bag hole survived a full review round): an unopenable bag, a
+     real empty rosbag2 bag with a symlinked subdirectory (exit 3), a dropped
+     `--scan` subtree, and a usage error.
+
 ## Files to Change
 
 | File | Change |
@@ -222,14 +267,16 @@ executable — see the amendment under Approach step 1.)
 | `marine_survey_index/src/bag_fingerprint.cpp` | New. Moves + fixes the implementations (one range-checked `::stat()` for size and mtime, explicit `mtime_valid`/`scan_complete`, no sentinel, silent library + reason reported to the caller). |
 | `marine_survey_index/src/survey_index_bag_main.cpp` | Remove the moved struct/function; include the new header; `ledgerState()` delegates to `fingerprintMatches()`; qualify call sites; write path binds `fp.mtime_ns`; warn per bag on an untrustworthy fingerprint, count not-fully-readable and failed bags in the run summary, and exit non-zero on either. |
 | `marine_survey_index/CMakeLists.txt` | Add `bag_fingerprint.cpp` to the core lib; add the new gtest target; refresh the stale core-lib contents comment at lines 29-31 — plan-review finding 3. |
-| `marine_survey_index/test/test_bag_fingerprint.cpp` | New. The four test cases above, with a `SetUp`/`TearDown` fixture for the temp tree modelled on `test_query_join.cpp` — a failing `ASSERT_*` returns early and would otherwise leak it. |
+| `marine_survey_index/test/test_bag_fingerprint.cpp` | New. The test cases above, with a `SetUp`/`TearDown` fixture for the temp tree modelled on `test_query_join.cpp` — a failing `ASSERT_*` returns early and would otherwise leak it. |
+| `marine_survey_index/test/test_indexer_exit_status.cpp` | New (round 2). Runs the built `survey_index_bag` to police the exit-status contract, which lives in `main()`. |
+| `marine_survey_index/README.md` | The incremental-skip sentence, the exit-status table, and the `## Testing` enumeration. |
 | `docs/survey_index_schema.md` | Document the new unreadable-mtime rule in the "Incremental re-runs" contract — plan-review finding 3. |
 
 ## Principles Self-Check
 
 | Principle | Consideration |
 |---|---|
-| Test what breaks | The four new tests target the exact regressions named in the issue (mtime accuracy, same-size rewrite, ledger round-trip) plus the unreadable-mtime policy this plan adds — not framework glue. |
+| Test what breaks | The new tests target the exact regressions named in the issue (mtime accuracy, same-size rewrite, ledger round-trip) plus the unreadable-mtime and incomplete-walk policies this plan adds — not framework glue. Each guard was mutation-tested: removing the condition it defends fails at least one test, on a host configuration CI actually uses. |
 | A change includes its consequences | PR description will state the one-time full re-index of all 177 existing (`mtime_ns=0`) rows on the dev host, per the operator's note — this is expected derived-cache-rebuild cost, not a regression, and no data migration is needed. |
 | Human control and transparency | An untrustworthy fingerprint — no readable timestamp, or an incomplete walk — now fails the unchanged test **on its validity flags** (`mtime_valid` / `scan_complete`), checked before any comparison, instead of silently contributing nothing to a max. The "guaranteed-mismatching sentinel" the first draft of this plan proposed was **rejected at plan review and never shipped**: the ledger persists whatever the fingerprint carries, so an in-band sentinel compares equal to itself on the next run and restores the skip. Loudness is the caller's job: the CLI warns per bag, counts them in the run summary, and exits non-zero. |
 | Only what's needed | No ledger schema change, no new DB column, no speculative generalization beyond moving the two functions needed for testability. |
@@ -273,9 +320,10 @@ executable — see the amendment under Approach step 1.)
     changed (must-fix 4 and 5).
   - `marine_survey_index/CMakeLists.txt:29-31` — the comment enumerating the
     core library's contents goes stale when `bag_fingerprint.cpp` joins it.
-  - The `BagFingerprint` doc-comment does correctly describe the intended
-    contract already, so it moves across as-is apart from naming the new
-    validity field.
+  - The `BagFingerprint` doc-comment was **not** carried across as-is (this
+    plan's original claim): pre-push review round 1 had it rewritten into
+    house style with the epoch rationale and the struct invariant, and round 2
+    corrected its account of what clears `scan_complete`.
 - **Agent-instruction candidates** (proposals only): None in this plan. The
   general libstdc++ `file_clock` epoch pitfall was already split out by
   operator decision to
@@ -301,6 +349,7 @@ No open questions remain.
 ## Estimated Scope
 
 Single PR, single project repo (`unh_marine_autonomy`), single package
-(`marine_survey_index`). Seven files touched (two new): the new header and
-source, `survey_index_bag_main.cpp`, the new test, `CMakeLists.txt`,
-`docs/survey_index_schema.md`, and the package README.
+(`marine_survey_index`). Eight files touched (three new): the new header and
+source, `survey_index_bag_main.cpp`, the two new tests
+(`test_bag_fingerprint.cpp`, `test_indexer_exit_status.cpp`),
+`CMakeLists.txt`, `docs/survey_index_schema.md`, and the package README.
