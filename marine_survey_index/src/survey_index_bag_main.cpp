@@ -47,6 +47,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -149,9 +150,26 @@ int toLevel(const std::string & s, const std::string & flag)
   return v;
 }
 
+// True when an error_code means "this path definitively resolves to nothing"
+// (a dangling symlink, or a name under a non-directory) rather than "the
+// answer could not be obtained". The first hides nothing; the second does.
+bool resolvesToNothing(const std::error_code & ec)
+{
+  return ec == std::errc::no_such_file_or_directory || ec == std::errc::not_a_directory;
+}
+
 // Recursively find rosbag2 bags (directories containing metadata.yaml) under a
 // scan root. A bag directory itself is not descended into further.
-std::vector<std::filesystem::path> scanForBags(const std::filesystem::path & root)
+//
+// Anything that keeps the scan from seeing the whole tree is reported through
+// @p problems, and the caller exits non-zero for it. A dropped subtree is
+// strictly worse than the unreadable-bag case: those bags are absent from the
+// index entirely rather than re-indexed needlessly, and downstream
+// (cube_bathymetry's dirty-tile guard fires only when the dirty set is
+// *entirely* empty) one missing bag yields an authoritative-looking marker
+// over stale store tiles.
+std::vector<std::filesystem::path> scanForBags(
+  const std::filesystem::path & root, std::vector<std::string> & problems)
 {
   namespace fs = std::filesystem;
   std::vector<fs::path> bags;
@@ -162,14 +180,47 @@ std::vector<std::filesystem::path> scanForBags(const std::filesystem::path & roo
   }
   // error_code overloads: a broken symlink or unreadable entry sets ec and
   // ends the walk cleanly instead of throwing and aborting the whole run.
-  for (fs::recursive_directory_iterator it(
-      root, fs::directory_options::skip_permission_denied, ec), end;
-    !ec && it != end; it.increment(ec))
-  {
+  // Deliberately *not* `skip_permission_denied`, and no error_code is
+  // discarded: skipping made an unreadable directory drop every bag beneath it
+  // with no warning, no counter and exit 0.
+  fs::recursive_directory_iterator it(root, ec), end;
+  if (ec) {
+    problems.push_back("could not scan '" + root.string() + "': " + ec.message());
+    return bags;
+  }
+  while (it != end) {
+    const fs::path current = it->path();
     std::error_code entry_ec;
-    if (it->is_directory(entry_ec) && fs::exists(it->path() / "metadata.yaml", entry_ec)) {
-      bags.push_back(it->path());
-      it.disable_recursion_pending();
+    const bool dir = it->is_directory(entry_ec);
+    if (entry_ec && !resolvesToNothing(entry_ec)) {
+      problems.push_back(
+        "could not determine the type of '" + current.string() + "': " + entry_ec.message());
+    } else if (!entry_ec && dir) {
+      std::error_code meta_ec;
+      if (fs::exists(current / "metadata.yaml", meta_ec)) {
+        bags.push_back(current);
+        it.disable_recursion_pending();
+      } else if (meta_ec && !resolvesToNothing(meta_ec)) {
+        problems.push_back(
+          "could not tell whether '" + current.string() + "' is a bag: " + meta_ec.message());
+      } else {
+        std::error_code link_ec;
+        // A symlinked directory is not descended into (a link can close a
+        // cycle a recursive walk would never leave), so any bag beneath one
+        // would be missed silently. Reported, not followed — name the real
+        // path, or that bag, on the command line instead.
+        if (it->is_symlink(link_ec) && !link_ec) {
+          problems.push_back(
+            "'" + current.string() +
+            "' is a symlink to a directory, which is not scanned for bags");
+        }
+      }
+    }
+    it.increment(ec);
+    if (ec) {
+      problems.push_back(
+        "scan of '" + root.string() + "' stopped at '" + current.string() + "': " + ec.message());
+      break;
     }
   }
   std::sort(bags.begin(), bags.end());
@@ -337,11 +388,12 @@ int main(int argc, char ** argv)
 
   // Collect bag list: positional URIs + --scan roots.
   std::vector<std::filesystem::path> bags;
+  std::vector<std::string> scan_problems;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     if (arg == "--scan") {
       if (i + 1 < argc) {
-        const auto found = scanForBags(argv[i + 1]);
+        const auto found = scanForBags(argv[i + 1], scan_problems);
         bags.insert(bags.end(), found.begin(), found.end());
       }
       ++i;
@@ -352,6 +404,10 @@ int main(int argc, char ** argv)
       continue;
     }
     bags.emplace_back(arg);
+  }
+  for (const std::string & problem : scan_problems) {
+    std::cerr << "warning: " << problem
+              << " - any bag beneath it is missing from this run\n";
   }
   if (bags.empty()) {
     std::cerr << "error: no bags given (positional URIs and/or --scan DIR)\n";
@@ -385,13 +441,19 @@ int main(int argc, char ** argv)
       std::string fingerprint_problem;
       const marine_survey_index::BagFingerprint fp =
         marine_survey_index::bagFingerprint(bag, &fingerprint_problem);
-      if (!fingerprint_problem.empty()) {
+      if (!fp.authoritative()) {
         // Loud, not silent: this bag cannot be judged unchanged, so it will
-        // re-index on every run until the cause is fixed. The library reports
-        // the fact through the fingerprint's flags (it is linked into GUI
-        // processes too); the diagnostic belongs here, at the CLI.
+        // re-index on every run until the cause is fixed. The counter and the
+        // exit status key on the fingerprint's own flags — the string is the
+        // message, never the condition, so no empty-string convention has to
+        // hold across the library boundary for the exit code to be right.
         ++n_bags_unreadable;
-        std::cerr << "warning: " << fingerprint_problem
+        // The library always sets a reason here (asserted by
+        // ProblemStringAndTrustFlagsAlwaysAgree); the fallback keeps the
+        // warning meaningful rather than blank if that ever drifts.
+        const std::string why = fingerprint_problem.empty() ?
+          "'" + bag_key + "' could not be fingerprinted authoritatively" : fingerprint_problem;
+        std::cerr << "warning: " << why
                   << " - treating this bag as changed, so it re-indexes every run\n";
       }
       const std::int64_t state = ledgerState(db, bag_key, fp);
@@ -504,7 +566,12 @@ int main(int argc, char ** argv)
       try {
         reader.open(so);
       } catch (const std::exception & e) {
-        std::cerr << "error: cannot open bag " << bag_key << ": " << e.what() << "\n";
+        // Counted, not just printed: this bag is absent from the index, which
+        // is the same durable condition as a mid-index failure. Landing in no
+        // summary bucket at all used to exit 0 on a run that indexed nothing.
+        ++n_bags_failed;
+        std::cerr << "error: cannot open bag " << bag_key << ": " << e.what()
+                  << "; skipping\n";
         continue;
       }
       rosbag2_storage::StorageFilter filter;
@@ -700,12 +767,32 @@ int main(int argc, char ** argv)
   }
 
   sqlite3_close(db);
+  // `indexed + skipped + failed` partitions the nominated bags (hence the
+  // "of N" — a mismatch is a bug), while `not fully readable` cuts across
+  // them: such a bag is never skipped, so it is already counted as indexed or
+  // failed. Reported separately rather than folded in, because it is the one
+  // condition that persists across runs.
   std::cerr << "done: " << n_bags_indexed << " bag(s) indexed, "
             << n_bags_skipped << " unchanged skipped, "
-            << n_bags_unreadable << " not fully readable (will re-index every run), "
-            << n_bags_failed << " failed -> " << db_path << "\n";
-  // Non-zero on either durable problem: an unreadable bag is a permanent
-  // re-index and a failed bag is missing from the index, and a run that only
-  // said so on stderr left no signal a scheduler or script could see.
-  return (n_bags_unreadable > 0 || n_bags_failed > 0) ? 1 : 0;
+            << n_bags_failed << " failed (of " << bags.size() << " nominated); "
+            << n_bags_unreadable << " not fully readable, so re-indexing every run"
+            << " -> " << db_path << "\n";
+  // Exit status contract (also stated in the README):
+  //   0  every nominated bag is in the index, and every fingerprint is
+  //      authoritative
+  //   1  the index is INCOMPLETE: a bag failed mid-index or could not be
+  //      opened, or a --scan tree could not be fully enumerated (so bags may
+  //      be missing outright). Also returned earlier when the DB itself could
+  //      not be opened, in which case nothing was done at all.
+  //   2  usage error
+  //   3  the index is complete, but at least one bag cannot be fingerprinted
+  //      authoritatively and so re-indexes on every run until the cause is
+  //      fixed -- durable and worth a signal, but not a missing bag.
+  // A run that only said so on stderr left no signal a scheduler or script
+  // could see; conflating the two left a caller unable to tell a permanent
+  // permission wart from an index it cannot rely on.
+  if (n_bags_failed > 0 || !scan_problems.empty()) {
+    return 1;
+  }
+  return n_bags_unreadable > 0 ? 3 : 0;
 }
