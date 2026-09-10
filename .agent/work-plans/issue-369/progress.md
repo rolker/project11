@@ -865,3 +865,38 @@ None. All four Copilot comments hold against the current code.
 ---
 **Authored-By**: `Claude Code Agent`
 **Model**: `Claude Opus 5 (1M context)`
+
+## Implementation
+**Status**: complete
+**When**: 2026-09-10 14:28 -04:00
+**By**: Claude Code Agent (Claude Opus 5 (1M context))
+
+**Addressed**: `## Integrated Review` (complete, 2026-09-10 14:22 -04:00, PR #372 at `0fccc0c`) — 4 findings, all 4 actioned
+**Commits**: (this commit's parent)
+
+### Actions
+
+- [x] (cross-confirmed) **The overstated cost claim in the installed header** — corrected to say what is true: only tiles are data-gated, the walk inside a present tile is geometric, and the bound is the level gap. Then grepped the claim repo-wide rather than trusting the finding's location — no other live site carries it — `marine_bathymetry_store/include/marine_bathymetry_store/query.hpp`
+- [x] (valid, Copilot) **`std::tuple_size` without `<tuple>`** — included. It compiled only through a transitive include from the gggs headers — `marine_bathymetry_store/src/depth_adaptive_level.cpp`
+- [x] (valid, Copilot) **`pointInCell`'s contract in `test_query.cpp`** — the contract now states that fractions outside [0, 1] are deliberate and names what they mean, so the region-coverage tests' calls do not read as bugs
+- [x] (valid, Copilot) **The same helper in `test_store.cpp`** — same correction, with the cross-level tests' use of fractions up to 3.5 named
+
+### Deferred
+
+None.
+
+### Build and test
+
+`marine_bathymetry_store`: 380 tests, 0 errors, 0 failures, 43 skipped — linters included. The other two packages are untouched by this round.
+
+### Notes
+
+- Copilot's round found no correctness defect; its one substantive finding was a documentation claim that a local review round had already raised and half-fixed. Recorded because it is a fair measure of what the second-vendor read is worth on this branch.
+
+### Next step
+
+Lifecycle: **Implementation** → push → Roland's content read → merge. No open findings remain from any source.
+
+---
+**Authored-By**: `Claude Code Agent`
+**Model**: `Claude Opus 5 (1M context)`
