@@ -110,6 +110,10 @@ if(BUILD_TESTING)
   ament_target_dependencies(test_indexer_exit_status rosbag2_cpp rosbag2_storage)
   target_compile_definitions(test_indexer_exit_status PRIVATE
     SURVEY_INDEX_BAG_EXE=\"$<TARGET_FILE:survey_index_bag>\")
+  # $<TARGET_FILE:> expands to a path, not a dependency: without this the test
+  # can build and run against a stale binary (or none). Same pairing as the
+  # three existing binary-running tests in this repo.
+  add_dependencies(test_indexer_exit_status survey_index_bag)
 endif()
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
