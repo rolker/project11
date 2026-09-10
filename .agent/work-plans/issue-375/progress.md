@@ -16,9 +16,9 @@ issue: 375
 ### Actions
 - [ ] Recommendation: the root cause — `std::filesystem::last_write_time()` returning a `file_time_type` whose epoch (libstdc++'s `file_clock`, 2174-01-01) is not the Unix epoch, so a raw `time_since_epoch()` read is silently wrong-signed for any real file — is a general C++17/`<filesystem>` pitfall, not specific to this package. `grep -rl last_write_time` across this repo found only this one call site, so no other latent instance exists here today, but the gotcha is worth a `.agent/knowledge/` (or `ros2_development_patterns.md`) candidate note so a future `fs::last_write_time()` use elsewhere in the workspace converts through `file_clock::to_sys`/`::stat` instead of re-deriving the same bug. Propose only — per the consequences map, an instruction-update candidate needs the operator's approval before landing, and it's out of scope for this bug-fix PR.
 
-## Notes (not part of the review-issue schema; kept for plan-task context)
+### Notes (not part of the review-issue schema; kept for plan-task context)
 
-### Scope Assessment
+#### Scope Assessment
 **Well-scoped?** Yes. The issue pins the exact root cause (`fs::last_write_time`'s
 `file_time_type` is measured from libstdc++'s `file_clock` epoch, 2174-01-01, not
 Unix epoch), the exact fix shape (convert through the clock — `file_clock::to_sys`
@@ -42,7 +42,7 @@ expected cost, not a bug) — the issue explicitly flags this as "worth stating 
 the PR." No open issue needs to land first; #259 (stage 1, closed) is the origin
 of the code being fixed but doesn't block this.
 
-### Principle Alignment
+#### Principle Alignment
 
 | Principle | Status | Notes |
 |---|---|---|
@@ -53,14 +53,14 @@ of the code being fixed but doesn't block this.
 | Improve incrementally | OK | Single PR, single package, reviewable. |
 | Safety First / Hardware Agnosticism / Simulation-First (project PRINCIPLES.md) | N/A | This is an offline indexer bug (derived-cache correctness), not vehicle control, hardware interface, or simulation-validated behavior. |
 
-### ADR Applicability
+#### ADR Applicability
 
 | ADR | Triggered | Notes |
 |---|---|---|
 | 0008 — ROS 2 conventions | Marginal | Touches C++ source in a ROS 2 package, but the fix is a bugfix within the existing C++17 standard already set in `marine_survey_index/CMakeLists.txt` (`CMAKE_CXX_STANDARD 17`). The issue's own fix options (stat/statx path, or C++20 `to_sys` if the standard were bumped) already account for this — no standard bump is implied or needed. |
 | Others (0001–0010, 0013) | No | No new agent instructions, enforcement rule, Make target, or `progress.md`-writing skill involved. |
 
-### Consequences
+#### Consequences
 
 - `marine_survey_index/test/` gains `fingerprint()` coverage (currently absent) —
   in scope, already called out by the issue.
@@ -71,7 +71,7 @@ of the code being fixed but doesn't block this.
   epoch pitfall (see Recommendation above) — proposed as a candidate for
   operator approval, not required for this PR.
 
-### Recommendations
+#### Recommendations
 
 - Propose (not apply) a `.agent/knowledge/` candidate note on the
   `std::filesystem::last_write_time()` / `file_clock` epoch pitfall, since it's a
