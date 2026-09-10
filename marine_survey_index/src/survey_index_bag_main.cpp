@@ -131,12 +131,10 @@ constexpr FlagSpec kFlags[] = {
 
 const FlagSpec * findFlag(const std::string & arg)
 {
-  for (const FlagSpec & spec : kFlags) {
-    if (arg == spec.name) {
-      return &spec;
-    }
-  }
-  return nullptr;
+  const auto found = std::find_if(
+    std::begin(kFlags), std::end(kFlags),
+    [&arg](const FlagSpec & spec) {return arg == spec.name;});
+  return found != std::end(kFlags) ? &*found : nullptr;
 }
 
 // True when the argument list is well formed. Checked before any value is
