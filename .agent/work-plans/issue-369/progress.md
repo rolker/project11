@@ -760,3 +760,33 @@ Lifecycle: **Implementation** → **review-code** (round 4, re-review the fixes 
 ---
 **Authored-By**: `Claude Code Agent`
 **Model**: `Claude Opus 5 (1M context)`
+
+## Local Review (Pre-Push)
+**Status**: complete
+**When**: 2026-09-10 13:52 -04:00
+**By**: Claude Code Agent (Claude Opus 5 (1M context))
+**Verdict**: changes-requested (all findings addressed in the same session — see the Implementation entry below)
+
+**Branch**: feature/issue-369 at `aead3e4`
+**Mode**: pre-push
+**Depth**: Deep (reason: navigation-safety path, re-review of a substantial safety-path change)
+**Must-fix**: 2 | **Suggestions**: 3
+**Round**: 4 | **Ship**: recommended once these land — both must-fixes are precise, mechanical, and in the code round 3 added; nothing new was found in the rest of the branch
+
+### Findings
+- [x] (must-fix) The antimeridian guard tests `max_lon < min_lon`, which min/max over the same four corners can never produce; a real straddle falls through into a ~360-degree box and walks every grid column at the query level on the costmap thread — `bathymetry_layer/src/bathymetry_layer.cpp:967`
+- [x] (must-fix) Neighbouring costmap cells re-evaluate the query cells they share: ~54.8k evaluations for ~16.8k distinct answers per 100x100 tile at 1 m, each a full region walk with a heap allocation. Measured 3.26x redundancy; level-14 tile render 199 ms where 61 ms suffices — `bathymetry_layer/src/bathymetry_layer.cpp:499,928`
+- [x] (suggestion) The round-3 walk-granularity test passes against the code it guards — levels nest exactly, so both walks reach the same verdict and the same count; it can only run slower, never fail — `marine_bathymetry_store/test/test_store.cpp:755`
+- [x] (suggestion) "4-6 query cells per costmap cell" understates the worst case by 50%: measured 4 to 9, mean 5.48 over 1,600 placements — `bathymetry_layer/src/bathymetry_layer.cpp`, `.hpp`, `README.md`
+- [x] (suggestion) The channel width the closed-basin flag now costs is documented as directionally safe but never quantified: the lethal boundary advances 1.90 m in latitude, 1.66 m in longitude at 1 m and 43.5N, against ~0.5 m before — `docs/decisions/0010-geospatial-world-model.md`, `bathymetry_layer/README.md`
+
+### Notes
+
+- Both adversarial passes independently reached the antimeridian finding.
+- The systemic pass built the branch's real query path and measured it rather than estimating: store-query time for one 100x100 tile at 1 m, single-cell cost first, is 2 ms at level 10, 13 ms at level 13 and 36 ms at level 14. A present-but-empty fine tile costs the same as a full one, so the shoreline pays the worst case.
+- Verified sound and not re-litigated: the corner-lattice index arithmetic and its match to costmap cell boundaries; `mapToWorld` centre-vs-corner handling; box enumeration boundaries, degenerate boxes and grid seams; that `NO_INFORMATION` (255) provably cannot enter the max fold, so the fold really is most-hazardous-wins; the `finestLevelOver` equivalence argument and `index.levels` non-emptiness; and that the three round-3 layer tests are non-vacuous.
+- The tf fallback render path does 4x the ECEF math, not 4x the tf lookups — the transform is hoisted once per pass — and the path is effectively unreachable while a valid transform exists.
+
+---
+**Authored-By**: `Claude Code Agent`
+**Model**: `Claude Opus 5 (1M context)`
