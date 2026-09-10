@@ -121,3 +121,42 @@ of the code being fixed but doesn't block this.
 ---
 **Authored-By**: `Claude Code Agent`
 **Model**: `Claude Opus`
+
+
+## Local Review (Pre-Push)
+**Status**: complete
+**When**: 2026-09-10 10:43 -04:00
+**By**: Claude Code Agent (Claude Opus)
+**Verdict**: changes-requested
+
+**Branch**: feature/issue-375 at `3bb5a65`
+**Mode**: pre-push
+**Depth**: Deep (reason: 816 changed lines across 8 files)
+**Must-fix**: 6 | **Suggestions**: 12
+**Round**: 1 | **Ship**: continue — the fix is correct in its core, but two reachable correctness holes remain (a partial directory walk still reports `mtime_valid == true`, and the ns arithmetic overflows), both reproduced locally
+
+Verified independently, not taken on trust: clean rebuild with `-Wall -Wextra` (zero warnings), 133 tests / 0 failures / 18 skipped, the 5 new tests pass, and both rejected implementations were re-mutated and re-run — the pre-fix raw `file_time_type` read fails 3 tests (all `mtime_ns == 0`) and the in-band `INT64_MIN` sentinel fails the unreadable-timestamp test on both the round-trip and the second-run skip. cpplint / uncrustify / lint_cmake / copyright all clean.
+
+### Findings
+- [ ] (must-fix) a partially-walked bag still reports `mtime_valid == true`, so a stable partial fingerprint skips a changed bag forever — reproduced: an unreadable subdirectory yields identical `size/mtime/valid=1` across a content change inside it — `marine_survey_index/src/bag_fingerprint.cpp:65-86`
+- [ ] (must-fix) `tv_sec * kNsPerS` is signed-overflow UB for mtimes past ~2262 and the wrapped negative value is marked valid — reproduced with `touch -d 2500-01-01` — `marine_survey_index/src/bag_fingerprint.cpp:47-48`
+- [ ] (must-fix) the one-time mass re-index of every existing `mtime_ns = 0` row, and the epoch/units of the column, are documented only in the not-yet-written PR body — both belong in the doc that self-declares as the stable cross-stage contract — `docs/survey_index_schema.md:44,125-133`
+- [ ] (must-fix) the package README's incremental-skip sentence still implies an unreadable-mtime bag can be skipped — `marine_survey_index/README.md:33-34`
+- [ ] (must-fix) the README `## Testing` paragraph enumerates covered areas and omits the new bag-fingerprint / incremental-skip test — `marine_survey_index/README.md:66-69`
+- [ ] (must-fix) the plan still credits the rejected "guaranteed-mismatching sentinel" as the shipped design — a future reader would reimplement the bug plan review #1 killed — `.agent/work-plans/issue-375/plan.md:178`
+- [ ] (suggestion) `::getpid()` used with no `<unistd.h>`; compiles only transitively through gtest — `marine_survey_index/test/test_bag_fingerprint.cpp:52`
+- [ ] (suggestion) the comments justify persisting `0` by a range claim the code disproves (`touch -d @0` fingerprints as `mtime=0 valid=1`); only the validity gate makes it safe — `marine_survey_index/src/bag_fingerprint.cpp:101-103`, `include/marine_survey_index/bag_fingerprint.hpp:79-83`
+- [ ] (suggestion) move the `std::cerr` warning from the exported library to the CLI call site — the function already returns the fact as `mtime_valid`, and `marine_perception_tools` links this library into a Qt GUI where stderr is invisible — `marine_survey_index/src/bag_fingerprint.cpp:87-92`
+- [ ] (suggestion) no unreadable-timestamp bucket in the run summary and the exit code stays 0 even after a per-bag failure — a bag re-indexing every run forever has no durable signal — `marine_survey_index/src/survey_index_bag_main.cpp:684-686`
+- [ ] (suggestion) the single-path branch applies no regular-file guard (a FIFO fingerprints as `size=0`, changing every run) and `is_directory`'s `ec` is discarded — `marine_survey_index/src/bag_fingerprint.cpp:72,84-85`
+- [ ] (suggestion) `fingerprintStoredMtime()` is provably an identity given the struct's own invariant; drop it or document the invariant it guards — `include/marine_survey_index/bag_fingerprint.hpp:78-83`
+- [ ] (suggestion) missing tests: the legacy-row migration case (`fingerprintMatches(fp, fp.size_bytes, 0)`), an assertion that the warning is actually emitted, and the production-reachable unreadable route (a `chmod 0111` bag dir, which `scanForBags` does accept — verified) rather than an empty dir, which `scanForBags` never nominates — `marine_survey_index/test/test_bag_fingerprint.cpp:157-175`
+- [ ] (suggestion) record the `::stat` portability trade-off (`st_mtim` is POSIX.1-2008, not macOS `st_mtimespec`) — plan-review finding 6, still unaddressed anywhere in plan or code — `marine_survey_index/src/bag_fingerprint.cpp:22`
+- [ ] (suggestion) document the residual holes size+mtime cannot see: an mtime-preserving rewrite (`rsync --times`, `cp -p`, `tar -p`), coarse-granularity filesystems, and hardlink double-counting — `docs/survey_index_schema.md:126-133`
+- [ ] (suggestion) remaining plan-sync leftovers: test-strategy bullets 1/3/4 still describe the retracted design, three "both functions move" phrasings, and the Files row omits `fingerprintStoredMtime()` — `.agent/work-plans/issue-375/plan.md:150-159,165`
+- [ ] (suggestion) new public header diverges from the package's `@brief/@param/@return` house style, and `fingerprint()` is a very generic exported symbol name (`bagFingerprint()` reads better) — `include/marine_survey_index/bag_fingerprint.hpp:60-83`
+- [ ] (suggestion) `## Notes` parses as a top-level ADR-0013 entry, orphaning the Issue Review subsections from `progress_read.py` and the triage-reviews integrator; demote to `###` — `.agent/work-plans/issue-375/progress.md:19`
+
+### Follow-ups to file (out of scope here, by operator scope decision)
+- [ ] the identical epoch bug is live in a second repo: `marine_perception_tools/src/session_index_io.cpp:166-171` computes `BagIdentity::mtime_ns` the pre-fix way, so every `.ssvc` session cache is size-only validated and a same-size bag rewrite serves a stale session index in the survey explorer. Its header at `session_index_io.hpp:25` claims parity with the very column this PR changes. Verified by reading both files. Needs its own issue in `rolker/marine_perception_tools`.
+- [ ] `marine_survey_index` sets no sqlite `busy_timeout` / `BEGIN IMMEDIATE`, and `ledgerState()`'s SELECT is outside the transaction; the one-time mass re-index widens the concurrent-writer window considerably. Pre-existing.
