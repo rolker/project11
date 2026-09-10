@@ -663,3 +663,40 @@ Lifecycle: **Implementation** → **review-code** (re-review the fixes).
 ---
 **Authored-By**: `Claude Code Agent`
 **Model**: `Claude Opus`
+
+## Local Review (Pre-Push)
+**Status**: complete
+**When**: 2026-09-10 12:47 -04:00
+**By**: Claude Code Agent (Claude Opus 5 (1M context))
+**Verdict**: changes-requested
+
+**Branch**: feature/issue-369 at `ab272ff`
+**Mode**: pre-push
+**Depth**: Deep (reason: navigation-safety path + ADR amendment + 3,650 lines across two packages)
+**Must-fix**: 4 | **Suggestions**: 8
+**Round**: 3 | **Ship**: continue — two of the four must-fixes are policy/design questions on the boat-steering path, not mechanical fixes
+
+### Findings
+- [ ] (must-fix) The region walk covers the GGGS query cell, not the costmap cell it costs — 40-82% of each costmap cell's ground is still never read, and the new docs claim otherwise — `bathymetry_layer/src/bathymetry_layer.cpp:485`, `bathymetry_layer.hpp:58`
+- [ ] (must-fix) Under `unsurveyed_is_lethal_`, one covered sample marks the whole query cell surveyed, so a mostly-no-data shoreline cell now reads FREE_SPACE where it read LETHAL; the new test pins the less conservative reading — `bathymetry_layer/src/bathymetry_layer.cpp:915`, `test/test_bathymetry_layer.cpp:1120`
+- [ ] (must-fix) Store residency is unbounded and unanalysed: ~14.7 MB per tile at every level, so a 1 km window over level-13/14 processed is 1.2-5 GB loaded synchronously on the costmap thread, outside the per-cycle render budget — `bathymetry_layer/src/bathymetry_layer.cpp:604`
+- [ ] (must-fix) The store README's query list omits the new public `hasAnyData`, and its "every query returns std::optional" closing line is now false — `marine_bathymetry_store/README.md:92-116`
+- [ ] (suggestion) `DraftClearResult`/`ProcessedImportResult` grew a field; a core_ws-only rebuild leaves cube_bathymetry's binary on the old layout — merge note or version bump — `marine_bathymetry_store/include/marine_bathymetry_store/bathymetry_store.hpp:69`
+- [ ] (suggestion) Coarse-draft-vs-finer-processed is the normal shallow case under the ladder, not the residue the clear's docs describe; one gated-drop hole retains the whole draft cell — `marine_bathymetry_store/src/bathymetry_store.cpp:180-215`
+- [ ] (suggestion) `processedSupersedesDraftCell` walks at the finest level in the whole call, not the level covering that draft cell — quadratic bulk-import cost — `marine_bathymetry_store/src/bathymetry_store.cpp:196`
+- [ ] (suggestion) `levelsPresent` is rebuilt per query cell per layer; larger than the fan-out term the header now documents — `marine_bathymetry_store/src/query.cpp:170`
+- [ ] (suggestion) "Cost is bounded by data, not by geometry" overstates the bound — only tiles are data-gated, the walk inside a tile is purely geometric — `marine_bathymetry_store/src/query.cpp:76`
+- [ ] (suggestion) cube_bathymetry discards `coarse_draft_cells_retained` and re-scans every layer dir per persisted tile — cube_bathymetry#143 scope — `cube_bathymetry/src/store_import.cpp:537`
+- [ ] (suggestion) `boxContains` in `cell_geometry.hpp` has no caller — wire it into `insetForIteration` or drop it — `marine_bathymetry_store/src/cell_geometry.hpp:161`
+- [ ] (suggestion) `docs/sonar_ecosystem.md:96` still credits the D9 generalisation to reference/#331 and calls the clear "cell-wise"; two round-2 files never became plan table rows — `docs/sonar_ecosystem.md:96`, `.agent/work-plans/issue-369/plan.md`
+
+### Notes
+
+- Governance verified all 25 findings from rounds 1 and 2 against current code: every one is genuinely fixed, none overstated, no regression. ADR-0013 D8 is now satisfied end to end.
+- No ROS parameters change, so no verified-parameter table is owed.
+- Test diff is +1155/-0: no existing test weakened or removed. Re-ran independently — `marine_autonomy` 147/0/16, `marine_bathymetry_store` 379/0/43, `bathymetry_layer` 50/0/4, linters included.
+- Must-fixes 1 and 3 are pre-existing geometry and residency behaviour that this change newly asserts away or makes reachable; both may legitimately resolve as a documentation correction plus a follow-up issue rather than code here. Must-fix 2 is a policy choice on the safety path and needs the operator's call.
+
+---
+**Authored-By**: `Claude Code Agent`
+**Model**: `Claude Opus 5 (1M context)`
