@@ -86,3 +86,15 @@ of the code being fixed but doesn't block this.
 ---
 **Authored-By**: `Claude Code Agent`
 **Model**: `Claude Sonnet 5`
+
+## Plan Authored
+**Status**: complete
+**When**: 2026-09-10 10:18 -04:00
+**By**: Claude Code Agent (Claude Sonnet 5)
+
+**Plan**: `.agent/work-plans/issue-375/plan.md` at `fb8bff2`
+**Branch**: feature/issue-375 at `fb8bff2`
+**Phases**: single
+
+### Open questions
+- [ ] In-place-rewrite test timing: default is no artificial sleep (assert distinct `mtime_ns` across rewrite); fall back to forcing an explicit timestamp (e.g. `utimensat`) only if that proves flaky in CI — verify locally during implementation.
