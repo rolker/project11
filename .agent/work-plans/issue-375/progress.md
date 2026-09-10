@@ -496,3 +496,149 @@ Lifecycle: **Local Review** → **address-findings** (round 4) → **review-code
     .agent/scripts/dispatch_subagent.sh --mode in-process --issue 375 --skill address-findings
 
 Nothing was pushed. Ship is **recommended** once the four must-fixes land: they are mechanical, their shapes are named above, and no further independent read is needed to settle any of them.
+
+## Implementation
+**Status**: complete
+**When**: 2026-09-10 13:55 -04:00
+**By**: Claude Code Agent (Claude Opus)
+
+**Branch**: feature/issue-375 at `157720c`
+**Addressed**: `## Local Review (Pre-Push)` round 4, 2026-09-10 13:19 -04:00 (branch at `0df2f04`) — 4 must-fixes, 17 suggestions
+**Commits**: `3a8f680` `2cfc1f8` `bddcc6d` `9af4d4f` `fd23b3f` `795f685` `bbc4213` `6219625` `e79212a` `f52357b` `157720c`
+
+Round 4's ship verdict was **recommended**, so this is the last fix pass before
+publishing: every finding is either fixed or consciously deferred with a
+reason, and nothing here opened a design question.
+
+### Verification
+- Clean rebuild (package `build/` + `install/` removed) and full `colcon test`:
+  **173 tests, 0 errors, 0 failures, 19 skipped** (164 before; +9 gtest cases).
+  Per-file JUnit XML read: all 19 skips are `cppcheck` (it self-skips on
+  2.13.0), **zero gtest cases skipped** — including the three permission-based
+  ones, which run here as non-root. `test_indexer_exit_status` 20/20,
+  `test_bag_fingerprint` 19/19, `test_schema` 4/4. cpplint, uncrustify,
+  copyright, lint_cmake and xmllint all pass in-suite.
+- cppcheck run by hand over the changed sources: the only hits are the two
+  pre-existing ones in untouched lines (the known `identicalInnerCondition`
+  false positive at the drain-pending site, and `useStlAlgorithm` in
+  `interval_accumulator.hpp`). The one new hit, on this round's flag-table
+  loop, is fixed (`157720c`).
+- **Live ledger re-checked read-only** (`sqlite3 ... mode=ro`, nothing
+  written): 177 rows, **0 would re-key** — the new migration is a verified
+  no-op on this host, as round 4 measured.
+- **Real-tree regression sweep** against the built binary, `~/data/logs/sim`
+  (51 bags, 1.1 GB): first run 50 indexed / 1 failed of 51, exit 1 — the failed
+  one is the permanently truncated bag round 4 named; second run **50 unchanged
+  skipped**, no re-key noise, no scan problems, exit 1 from the same bag. The
+  incremental skip this issue exists to fix works on a real tree.
+- Same tree passed **twice** on one command line: still `of 51 nominated` —
+  the new dedupe collapses it, and no bag reports as "already up to date" in
+  the run that wrote it.
+- Over-PATH_MAX subtree re-checked: reported, walk survives, all 4 bags
+  nominated, exit 1, and the summary now names the scan problem.
+- Flag sweep: `--level 12 --nav-stride-m 5 --merge-gap 3` and
+  `--earth-frame` all still work; `--level 25`, `--nav-stride-m 0`,
+  `--sound-speed abc`, `--help` and a bare invocation all exit 2;
+  a nonexistent bag URI exits 1 and now says "there is no bag at '...'".
+
+### Mutations run (deleted the condition, confirmed a test fails, restored)
+- unknown-flag rejection → `UnrecognisedFlagDoesNotSwallowTheBagBehindIt` fails
+- missing-value rejection → `ValuelessScanIsAUsageErrorNotASilentlyEmptyRun` fails
+- value-slot-is-another-flag rejection → `AFlagFollowedByAnotherFlagIsAMissingValue` fails
+- ledger re-key branch → `APreFixRowKeyedThroughASymlinkIsRekeyedNotOrphaned` fails
+- stale-duplicate delete branch → `APreFixDuplicateRowIsRemovedRatherThanLeftDoubleReporting` fails
+- the already-canonical short-circuit → `BagThatFailsMidIndexIsRolledBackAndCounted` fails
+  (a row that matched itself would be deleted as its own duplicate)
+- the `reconcileLedgerKeys()` call itself → both migration tests fail
+- `ROLLBACK` in the per-bag handler → `ABagThatFailsMidTransactionRollsBackSoTheNextBagStillIndexes`
+  fails. **This is the round-3 undefended mutation, now closed** — and round 4
+  was right that the reason recorded for it was wrong: the read-only-DB test
+  could never have defended it, because SQLite rolls back at `sqlite3_close`
+  and only a *later* bag's `BEGIN` can observe the difference.
+- the enumerability probe → both `...CannotList` (mode 0111) and the new
+  `...HasNoDescriptorFor` (EMFILE) fail
+- the nomination dedupe → `ABagReachedThroughASymlinkIsNotASecondBag` fails
+- the resolved ledger key (reverted to the unresolved absolute path) → that
+  test plus both migration tests fail
+- the indexer's `busy_timeout` opt-in → `IndexerWaitsOutALockInsteadOfFailingTheBag` fails
+
+**Not defensible by a behavioural test, stated plainly:**
+- `ledgerState`'s new "step result is neither ROW nor DONE" throw. Inducing a
+  failing `SELECT` step needs in-process fault injection, and this suite runs
+  the real binary through `popen`. The guard is still right: the alternative
+  is taking the INSERT path for a bag that already has a row.
+- the `disable_recursion_pending()` added to the undeterminable-type branch.
+  It is inert wherever `readdir` returns a real `d_type` (ext4, and the
+  production CIFS mount), and only a `DT_UNKNOWN` backend reaches it; no local
+  filesystem here can build the case.
+- the `key_ec` warn-and-leave path in `reconcileLedgerKeys()` (a row whose
+  path cannot be resolved at all). Same reason as above — a canonicalisation
+  failure needs an unreadable path component (permission-based, i.e. invisible
+  to the root-run gate) or a network error.
+- the mode-000 `meta_ec` walk guard remains the **known exception** carried
+  forward from round 4: no root-observable route, and I could not construct one
+  either. Recorded in the plan and the README rather than asserted away.
+
+### Actions
+- [x] (must-fix) valueless `--scan` / unknown flag silently lose data and exit 0 — flag table + up-front validation, exit 2; 3 tests — `survey_index_bag_main.cpp`, `README.md` (`3a8f680`, `157720c`)
+- [x] (must-fix) the canonicalised ledger key orphans a pre-fix symlink-keyed row — `reconcileLedgerKeys()` re-keys it, deletes the stale duplicate when the resolved key is taken (CASCADE takes its passes), leaves-and-warns on a row it cannot resolve, and **refuses to index** if the reconciliation fails; schema doc's "needs no migration" corrected; 2 root-observable tests — `survey_index_bag_main.cpp`, `docs/survey_index_schema.md` (`2cfc1f8`)
+- [x] (must-fix) the walk-continuation invariant runs in no merge-gating path, and the plan says otherwise in four places — two of three guards now root-observable (EMFILE via `ulimit -n`; a per-bag-selective write failure), the third recorded as the known exception; all four plan passages corrected — `test_indexer_exit_status.cpp`, `plan.md`, `README.md` (`9af4d4f`, `f52357b`, `e79212a`)
+- [x] (must-fix) `schema.cpp:98`'s "opened read-only by the explorer GUI" is false — corrected to two write-capable handles, which is the stronger argument for the pragma (`bddcc6d`)
+- [x] (suggestion) `weakly_canonical` fallback mints a second key — a key that cannot be resolved now fails its bag (`2cfc1f8`)
+- [x] (suggestion) WAL would remove the contention rather than delay it — **deferred, deliberately**: unsafe on network filesystems and this DB sits beside stores that may live on the NAS. The decision and its reason are now in the schema doc rather than nowhere (`bddcc6d`)
+- [x] (suggestion) the 10 s wait blocks the GUI's Qt thread — `busy_timeout_ms` is a parameter defaulting to 0 (pre-#375 behaviour for every other consumer); the indexer opts in at its own call site (`bddcc6d`)
+- [x] (suggestion) a scan-problem-only run prints an all-clear summary and exits 1 — the summary now names the count and what it costs (`795f685`)
+- [x] (suggestion) `ledgerState` discards `sqlite3_step`'s return — only DONE now means absent (`bbc4213`)
+- [x] (suggestion) nominated bags are never deduplicated — deduped on the resolved key in command-line order; the symlink test reworked into the two questions it conflated, and asserted on the row id (`bbc4213`)
+- [x] (suggestion) undeterminable-entry-type branch omits `disable_recursion_pending()` — added (`fd23b3f`)
+- [x] (suggestion) the probe's "same cost either way" is false — comment now states the measured ~+5% and what it buys (`fd23b3f`)
+- [x] (suggestion) attribute-cache hazard documented against the wrong filesystem — CIFS `actimeo=1` verified in `/proc/mounts` (`e79212a`)
+- [x] (suggestion) a nonexistent bag URI reads as a permission problem — "there is no bag at '...'"; new test (`6219625`)
+- [x] (suggestion) the mid-index test does not defend the `ROLLBACK`, and its honesty note gives the wrong reason — both fixed with the per-bag-selective construction (`9af4d4f`)
+- [x] (suggestion) `bags.path` is one-sided across the repo boundary — the schema doc now tells consumers matching exactly to canonicalise their side; the `marine_perception_tools` half stays a follow-up on the consumer (`2cfc1f8`)
+- [x] (suggestion) one permanently broken bag makes the consumer contract a permanent exit 1 — **partially deferred**: documented (including that `|| true` throws away the whole distinction, and the remedy that works today), but **no acknowledge/exclude flag added**. Reason: which of exclude-by-path, an in-tree marker file, or a fourth exit code is right is an operator call, and a new CLI surface at the publish gate is exactly the kind of scope this pass should not decide alone. Recommended as a follow-up issue (`e79212a`)
+- [x] (suggestion) plan drift: ledger key absent from Approach/Files/Consequences, ADR-0018 unrecorded, test count stale — all three fixed, plus a new Approach step 8 for this round (`f52357b`)
+- [x] (suggestion) `busy_timeout` documented nowhere; README omits that `--help` and a bare invocation exit 2 — schema doc concurrency ground rule, `openIndexDb` docstring, README exit table (`bddcc6d`, `3a8f680`)
+- [x] (suggestion) README implies hosted CI runs these tests — corrected: the one workflow builds `--packages-up-to` six other packages and tests a list this one is not on, and no `package.xml` in the repo depends on it (both verified by reading the workflow and grepping every manifest) (`e79212a`)
+- [x] (suggestion) two `.agents/README.md` Common Pitfalls candidates — **deferred as a proposal, not applied**: the review marked it never-auto-apply and the project agent guide is an instruction file (AGENTS.md Ask First). Drafted below for the operator
+
+### For the host / operator
+
+1. **Salmon and gabby may need a look before this merges — or may not, and the
+   code no longer needs them to.** The orphaned-row hazard only exists on a host
+   whose index was built through a symlinked path. This host is verified clean
+   (0 of 177 rows). The indexer now migrates such a row itself, reports it, and
+   refuses to index at all if it cannot — so **no operator action is required
+   for correctness**. What is worth doing on each of those hosts on the first
+   run after this lands is reading the run's stderr for `note: re-keyed` /
+   `removed the stale duplicate row` lines, which say whether that host had the
+   condition. That is a first-run observation, not a merge gate.
+2. **Recommended follow-up issues** (not filed — no issue was in scope here):
+   an acknowledge-or-exclude path for a permanently unopenable bag (the
+   `~/data/logs/sim` bag makes the documented contract a permanent exit 1);
+   and the fact that 10 of this repo's 18 packages, this one included, sit
+   outside the hosted workflow's build and test lists.
+3. **Proposed `.agents/README.md` Common Pitfalls additions** (for the
+   operator to accept or reject; not applied):
+   - *Runtime-loaded rosbag2 storage plugins*: `marine_survey_index` declares
+     `rosbag2_storage_mcap` / `rosbag2_storage_default_plugins` as
+     `exec_depend` because rosbag2 loads a storage plugin **by name** at run
+     time — no compiler or CMake check will tell you they are missing. Without
+     them the indexer opens no bag at all under a clean-room
+     `rosdep install`, which is the environment `ci_local.sh` uses.
+   - *`survey_index.db` couples two repos with no package dependency*:
+     `marine_perception_tools`' `survey_index_bridge` opens the same SQLite
+     sidecar through `marine_survey_index`'s `openIndexDb`, so it executes
+     that schema's DDL and holds a **write-capable** handle. The schema
+     (`docs/survey_index_schema.md`) is the contract; `bags.path` is stored
+     symlink-resolved, so a consumer comparing paths exactly must canonicalise
+     its own side. Same shape as the `BathyDem` note above.
+4. Nothing was pushed, no PR opened; `git notes --ref=ci-local` still carries
+   no attestation for this branch. The ADR-0018 attestation and the publish
+   decision remain the host's.
+
+### Next step
+Lifecycle: **Implementation** → **review-code** (round 5, targeted per round 4's
+"re-run the targeted checks, not a full round")
+
+    .agent/scripts/dispatch_subagent.sh --mode in-process --issue 375 --skill review-code
