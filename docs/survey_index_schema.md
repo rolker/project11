@@ -41,7 +41,9 @@ CREATE TABLE bags (
   id            INTEGER PRIMARY KEY,
   path          TEXT    NOT NULL UNIQUE,  -- absolute, lexically normalized
   size_bytes    INTEGER NOT NULL,         -- fingerprint: total regular-file bytes
-  mtime_ns      INTEGER NOT NULL,         -- fingerprint: newest mtime under the bag
+  mtime_ns      INTEGER NOT NULL,         -- fingerprint: newest mtime under the
+                                          -- bag, UNIX epoch nanoseconds (UTC),
+                                          -- 0 = unknown; see Incremental re-runs
   indexed_at_ns INTEGER NOT NULL          -- wall clock when (re-)indexed
 );
 
@@ -125,9 +127,37 @@ additive, no schema change.
   stages do the exact math.
 - **Incremental re-runs.** A bag whose `path`, `size_bytes`, and `mtime_ns`
   all match its ledger row is skipped; a changed bag has its passes deleted
-  and re-indexed atomically (single transaction per bag). **A bag whose
-  timestamp cannot be read at all** — every `stat` beneath it failed, or it
-  holds no regular files — never satisfies that test: it is treated as changed,
-  re-indexed, and reported on stderr, so an unreadable mtime cannot present as
-  an up-to-date bag. `mtime_ns` is then stored as `0`, which is not
-  load-bearing; the re-index decision is made before it is read.
+  and re-indexed atomically (single transaction per bag). **A bag the indexer
+  could not fully read** never satisfies that test: it is treated as changed,
+  re-indexed, and reported on stderr (and the run exits non-zero), so no
+  partial reading can present as an up-to-date bag. Two distinct cases:
+  - **No timestamp at all** — every `stat` beneath the bag failed, or it holds
+    no regular files. `mtime_ns` is then stored as `0`.
+  - **An incomplete walk** — an unreadable subdirectory, an entry whose type
+    could not be determined, a file that vanished mid-walk, a path that is not
+    a regular file or directory, or a timestamp outside the range `mtime_ns`
+    can represent. This case matters because a partial walk yields a *stable*
+    size and mtime: it would otherwise match its own stored copy for as long as
+    the cause persisted, skipping a changed bag indefinitely (#375).
+
+  Whatever is stored is never load-bearing — the re-index decision is made
+  before the stored values are read.
+- **`mtime_ns` units and epoch.** UNIX epoch nanoseconds UTC, from `::stat`'s
+  `st_mtim` (**not** `std::filesystem::last_write_time`, whose `file_time_type`
+  epoch is not the UNIX epoch on libstdc++ — that mismatch is #375). `0` means
+  "no readable timestamp", which is also what every row written before #375
+  holds.
+- **One-time re-index at the #375 fix.** Every ledger row written by an indexer
+  predating the fix carries `mtime_ns = 0`, so it compares unequal to its bag's
+  real fingerprint and each such bag is re-indexed **once** on the next run
+  (177 rows on the dev host at the time of the fix). This is expected
+  derived-cache rebuild cost, not a regression, and needs no migration: the
+  index is regenerable by design and self-heals on that run.
+- **What size + mtime cannot see.** The fingerprint is a cheap change detector,
+  not a content hash. It misses an mtime-preserving rewrite (`cp -p`,
+  `rsync --times`, `tar -p`, or a restore from backup) at an identical byte
+  count; it can miss a rewrite finished inside one timestamp tick on a
+  coarse-granularity filesystem; and it double-counts hardlinked members, so
+  changing a link count changes the fingerprint without any content changing
+  (a spurious re-index, the safe direction). Delete `survey_index.db` and
+  re-run when a bag tree has been rewritten in place by any of those means.
