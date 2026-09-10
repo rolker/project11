@@ -26,13 +26,15 @@ find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_storage REQUIRED)
 find_package(SQLite3 REQUIRED)
 
-# Core library: schema, interval accumulator, footprint->tile enumeration, and
-# the query join. Deliberately free of rosbag2/tf2/rclcpp so the unit tests
-# exercise the correctness paths without bag I/O.
+# Core library: schema, interval accumulator, footprint->tile enumeration, the
+# query join, and the bag fingerprint the incremental-skip ledger decides on.
+# Deliberately free of rosbag2/tf2/rclcpp so the unit tests exercise the
+# correctness paths without bag I/O.
 add_library(${PROJECT_NAME}_core
   src/schema.cpp
   src/footprint.cpp
   src/query.cpp
+  src/bag_fingerprint.cpp
 )
 target_include_directories(${PROJECT_NAME}_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -97,6 +99,9 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_query_join test/test_query_join.cpp)
   target_link_libraries(test_query_join ${PROJECT_NAME}_core)
+
+  ament_add_gtest(test_bag_fingerprint test/test_bag_fingerprint.cpp)
+  target_link_libraries(test_bag_fingerprint ${PROJECT_NAME}_core)
 endif()
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)

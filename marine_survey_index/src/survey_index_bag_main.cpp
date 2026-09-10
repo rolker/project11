@@ -65,6 +65,7 @@
 #include "tf2/time.h"
 #include "tf2_msgs/msg/tf_message.hpp"
 
+#include "marine_survey_index/bag_fingerprint.hpp"
 #include "marine_survey_index/footprint.hpp"
 #include "marine_survey_index/interval_accumulator.hpp"
 #include "marine_survey_index/nav_decimation.hpp"
@@ -146,51 +147,6 @@ int toLevel(const std::string & s, const std::string & flag)
     std::exit(2);
   }
   return v;
-}
-
-// Bag identity for the incremental-skip ledger: total regular-file bytes and
-// the newest mtime under the bag directory (or of the single file). A re-run
-// over an unchanged bag is a no-op; a changed bag is re-indexed.
-struct BagFingerprint
-{
-  std::int64_t size_bytes = 0;
-  std::int64_t mtime_ns = 0;
-};
-
-BagFingerprint fingerprint(const std::filesystem::path & bag)
-{
-  namespace fs = std::filesystem;
-  BagFingerprint fp;
-  auto consider = [&fp](const fs::path & f) {
-      std::error_code ec;
-      const auto size = fs::file_size(f, ec);
-      if (!ec) {
-        fp.size_bytes += static_cast<std::int64_t>(size);
-      }
-      const auto mtime = fs::last_write_time(f, ec);
-      if (!ec) {
-        const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-          mtime.time_since_epoch()).count();
-        fp.mtime_ns = std::max(fp.mtime_ns, static_cast<std::int64_t>(ns));
-      }
-    };
-  std::error_code ec;
-  if (fs::is_directory(bag, ec)) {
-    // error_code overloads: a broken symlink or unreadable entry sets ec and
-    // ends the walk cleanly instead of throwing and aborting the whole run.
-    for (fs::recursive_directory_iterator it(
-        bag, fs::directory_options::skip_permission_denied, ec), end;
-      !ec && it != end; it.increment(ec))
-    {
-      std::error_code entry_ec;
-      if (it->is_regular_file(entry_ec)) {
-        consider(it->path());
-      }
-    }
-  } else {
-    consider(bag);
-  }
-  return fp;
 }
 
 // Recursively find rosbag2 bags (directories containing metadata.yaml) under a
@@ -281,7 +237,9 @@ void stepDoneOrThrow(sqlite3 * db, sqlite3_stmt * stmt)
 
 // Ledger lookup: 0 = not indexed; >0 = bag id (unchanged, skip); <0 = -bag id
 // (changed, re-index: caller deletes old passes and updates the row).
-std::int64_t ledgerState(sqlite3 * db, const std::string & path, const BagFingerprint & fp)
+std::int64_t ledgerState(
+  sqlite3 * db, const std::string & path,
+  const marine_survey_index::BagFingerprint & fp)
 {
   sqlite3_stmt * stmt = prepareOrThrow(
     db, "SELECT id, size_bytes, mtime_ns FROM bags WHERE path = ?");
@@ -289,8 +247,8 @@ std::int64_t ledgerState(sqlite3 * db, const std::string & path, const BagFinger
   std::int64_t result = 0;
   if (sqlite3_step(stmt) == SQLITE_ROW) {
     const std::int64_t id = sqlite3_column_int64(stmt, 0);
-    const bool unchanged = sqlite3_column_int64(stmt, 1) == fp.size_bytes &&
-      sqlite3_column_int64(stmt, 2) == fp.mtime_ns;
+    const bool unchanged = marine_survey_index::fingerprintMatches(
+      fp, sqlite3_column_int64(stmt, 1), sqlite3_column_int64(stmt, 2));
     result = unchanged ? id : -id;
   }
   sqlite3_finalize(stmt);
@@ -420,7 +378,7 @@ int main(int argc, char ** argv)
   for (const auto & bag : bags) {
     try {
       const std::string bag_key = std::filesystem::absolute(bag).lexically_normal().string();
-      const BagFingerprint fp = fingerprint(bag);
+      const marine_survey_index::BagFingerprint fp = marine_survey_index::fingerprint(bag);
       const std::int64_t state = ledgerState(db, bag_key, fp);
       if (state > 0) {
         ++n_bags_skipped;
@@ -651,7 +609,7 @@ int main(int argc, char ** argv)
             "UPDATE bags SET size_bytes = ?, mtime_ns = ?, indexed_at_ns = ? WHERE id = ?";
           StmtGuard upd(prepareOrThrow(db, upd_sql));
           sqlite3_bind_int64(upd.get(), 1, fp.size_bytes);
-          sqlite3_bind_int64(upd.get(), 2, fp.mtime_ns);
+          sqlite3_bind_int64(upd.get(), 2, marine_survey_index::fingerprintStoredMtime(fp));
           sqlite3_bind_int64(upd.get(), 3, now_ns);
           sqlite3_bind_int64(upd.get(), 4, bag_id);
           stepDoneOrThrow(db, upd.get());
@@ -662,7 +620,7 @@ int main(int argc, char ** argv)
         StmtGuard ins(prepareOrThrow(db, ins_sql));
         sqlite3_bind_text(ins.get(), 1, bag_key.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int64(ins.get(), 2, fp.size_bytes);
-        sqlite3_bind_int64(ins.get(), 3, fp.mtime_ns);
+        sqlite3_bind_int64(ins.get(), 3, marine_survey_index::fingerprintStoredMtime(fp));
         sqlite3_bind_int64(ins.get(), 4, now_ns);
         stepDoneOrThrow(db, ins.get());
         bag_id = sqlite3_last_insert_rowid(db);
