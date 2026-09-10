@@ -1,7 +1,9 @@
 # Sonar & Survey Data Reference
 
 Durable hardware, protocol, and data-location facts behind the
-[sonar ecosystem map](sonar_ecosystem.md). The map tracks *status*; this page
+[sonar ecosystem map](sonar_ecosystem.md). The map tracks *status*, and the
+[sonar processing chain](sonar_processing_chain.md) tracks what happens to a
+ping and what each stage must be fed; this page
 records the facts that don't change with each PR — sensor identities, wire
 protocols, and where the data of record actually lives. Sourced from field
 sessions (2026 Massabesic campaign) and verified against the drivers where
