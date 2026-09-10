@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -71,16 +72,61 @@ protected:
 
   void TearDown() override
   {
+    // Permissions first: a test that made a directory unreadable must not
+    // leave it that way, or the cleanup silently fails and the next run
+    // inherits it.
+    restorePermissions(dir_);
     std::error_code ec;
     std::filesystem::remove_all(dir_, ec);
   }
 
+  static void restorePermissions(const std::filesystem::path & p)
+  {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(std::filesystem::symlink_status(p, ec)) || ec) {
+      return;
+    }
+    ::chmod(p.c_str(), 0700);
+    std::filesystem::directory_iterator it(p, ec), end;
+    for (; !ec && it != end; it.increment(ec)) {
+      restorePermissions(it->path());
+    }
+  }
+
+  // Root ignores the directory permission bits the walk-abandonment tests
+  // rely on: only a failed `opendir` abandons the walk, and root is not
+  // denied one on a local filesystem. The same fold is covered
+  // root-observably by the symlinked-subtree and ELOOP tests below.
+  static bool runningAsRoot() {return ::geteuid() == 0;}
+
+  // Single-quote for the shell that `popen` runs, so a space or metacharacter
+  // in a temp or build path cannot become argv structure.
+  static std::string quote(const std::string & s)
+  {
+    std::string out = "'";
+    for (const char c : s) {
+      if (c == '\'') {
+        out += "'\\''";
+      } else {
+        out += c;
+      }
+    }
+    return out + "'";
+  }
+
   RunResult runIndexer(const std::string & args) const
   {
+    return runIndexerWithDb((dir_ / "index.db").string(), args);
+  }
+
+  RunResult runIndexerWithDb(const std::string & db, const std::string & args) const
+  {
     // stderr merged in: the summary line and the warnings both go there.
+    // Everything the test interpolates is quoted: a build path or a TMPDIR
+    // containing a space would otherwise mis-parse into extra argv words and
+    // the test would be measuring the wrong invocation.
     const std::string cmd =
-      std::string(SURVEY_INDEX_BAG_EXE) + " --db " + (dir_ / "index.db").string() + " " +
-      args + " 2>&1";
+      quote(SURVEY_INDEX_BAG_EXE) + " --db " + quote(db) + " " + args + " 2>&1";
     RunResult result;
     FILE * pipe = ::popen(cmd.c_str(), "r");
     if (pipe == nullptr) {
@@ -132,7 +178,7 @@ TEST_F(IndexerExitStatusTest, UnopenableBagIsCountedAndExitsNonZero)
   const auto a = makeUnopenableBag("bag_a");
   const auto b = makeUnopenableBag("bag_b");
 
-  const auto run = runIndexer(a.string() + " " + b.string());
+  const auto run = runIndexer(quote(a.string()) + " " + quote(b.string()));
   EXPECT_EQ(run.status, 1) << run.output;
   EXPECT_NE(run.output.find("2 failed (of 2 nominated)"), std::string::npos)
     << "the counters must account for every nominated bag: " << run.output;
@@ -147,7 +193,7 @@ TEST_F(IndexerExitStatusTest, IndexedButUntrustworthyBagExitsWithItsOwnCode)
   ASSERT_TRUE(std::filesystem::exists(bag / "metadata.yaml"))
     << "rosbag2 wrote no metadata for an empty bag";
 
-  const auto clean = runIndexer(bag.string());
+  const auto clean = runIndexer(quote(bag.string()));
   ASSERT_EQ(clean.status, 0) << "a readable empty bag is a clean run: " << clean.output;
 
   // Hide content behind a symlinked subdirectory: the walk will not follow it,
@@ -158,7 +204,7 @@ TEST_F(IndexerExitStatusTest, IndexedButUntrustworthyBagExitsWithItsOwnCode)
   std::filesystem::create_directory_symlink(outside, bag / "sub", link_ec);
   ASSERT_FALSE(link_ec) << "this filesystem refuses directory symlinks: " << link_ec.message();
 
-  const auto run = runIndexer(bag.string());
+  const auto run = runIndexer(quote(bag.string()));
   EXPECT_EQ(run.status, 3) << run.output;
   EXPECT_NE(run.output.find("1 not fully readable"), std::string::npos) << run.output;
   EXPECT_NE(run.output.find("0 failed (of 1 nominated)"), std::string::npos) << run.output;
@@ -180,11 +226,70 @@ TEST_F(IndexerExitStatusTest, ScanReportsASubtreeItCannotEnumerate)
   std::filesystem::create_directory_symlink(elsewhere, root / "linked", link_ec);
   ASSERT_FALSE(link_ec) << "this filesystem refuses directory symlinks: " << link_ec.message();
 
-  const auto run = runIndexer("--scan " + root.string());
+  const auto run = runIndexer("--scan " + quote(root.string()));
   EXPECT_NE(run.output.find("is not scanned for bags"), std::string::npos)
     << "a dropped subtree must not be silent: " << run.output;
   // Nothing was nominated, so this is a usage error -- but a loud one now.
   EXPECT_EQ(run.status, 2) << run.output;
+}
+
+// The regression this round exists for. Removing `skip_permission_denied`
+// (round 2) made the report loud but left recursion pending on a directory the
+// walk cannot read, and a failed `increment()` ends the whole walk -- so ONE
+// unreadable directory dropped every bag after it in readdir order, and the
+// "of N nominated" summary could not reveal it because those bags were never
+// nominated. The invariant asserted here is order-independent: whatever readdir
+// order the filesystem gives, the walk must reach every bag and must never
+// report having stopped.
+TEST_F(IndexerExitStatusTest, ScanWalkContinuesPastADirectoryItCannotProbe)
+{
+  if (runningAsRoot()) {
+    GTEST_SKIP() << "root ignores the directory permissions this test relies on";
+  }
+  const auto root = dir_ / "root";
+  ASSERT_TRUE(std::filesystem::create_directories(root));
+  for (const std::string name : {"bag_1", "bag_2", "bag_3", "bag_4"}) {
+    makeUnopenableBag("root/" + name);
+  }
+  const auto locked = root / "locked";
+  ASSERT_TRUE(std::filesystem::create_directories(locked / "inner"));
+  ASSERT_EQ(::chmod(locked.c_str(), 0000), 0);
+
+  const auto run = runIndexer("--scan " + quote(root.string()));
+  EXPECT_NE(run.output.find("is a bag"), std::string::npos)
+    << "the unreadable directory must still be reported: " << run.output;
+  EXPECT_EQ(run.output.find("stopped at"), std::string::npos)
+    << "one unreadable directory must not abandon the walk: " << run.output;
+  EXPECT_NE(run.output.find("(of 4 nominated)"), std::string::npos)
+    << "every bag outside the unreadable directory must still be nominated: " << run.output;
+  EXPECT_EQ(run.status, 1) << run.output;
+}
+
+// The same abandonment by the other route: a traverse-only directory (mode
+// 0111) answers the `metadata.yaml` probe without error, so it reaches none of
+// the reporting branches -- and then cannot be listed. Enumerability is asked
+// about up front for exactly this case.
+TEST_F(IndexerExitStatusTest, ScanWalkContinuesPastADirectoryItCannotList)
+{
+  if (runningAsRoot()) {
+    GTEST_SKIP() << "root ignores the directory permissions this test relies on";
+  }
+  const auto root = dir_ / "root";
+  ASSERT_TRUE(std::filesystem::create_directories(root));
+  for (const std::string name : {"bag_1", "bag_2", "bag_3", "bag_4"}) {
+    makeUnopenableBag("root/" + name);
+  }
+  const auto locked = root / "listless";
+  ASSERT_TRUE(std::filesystem::create_directories(locked / "inner"));
+  ASSERT_EQ(::chmod(locked.c_str(), 0111), 0);
+
+  const auto run = runIndexer("--scan " + quote(root.string()));
+  EXPECT_NE(run.output.find("could not enumerate"), std::string::npos)
+    << "a directory the walk cannot list must be reported: " << run.output;
+  EXPECT_EQ(run.output.find("stopped at"), std::string::npos)
+    << "it must not abandon the walk either: " << run.output;
+  EXPECT_NE(run.output.find("(of 4 nominated)"), std::string::npos) << run.output;
+  EXPECT_EQ(run.status, 1) << run.output;
 }
 
 TEST_F(IndexerExitStatusTest, NoBagsIsAUsageError)

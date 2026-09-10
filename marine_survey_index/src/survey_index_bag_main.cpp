@@ -203,6 +203,11 @@ std::vector<std::filesystem::path> scanForBags(
       } else if (meta_ec && !resolvesToNothing(meta_ec)) {
         problems.push_back(
           "could not tell whether '" + current.string() + "' is a bag: " + meta_ec.message());
+        // Reporting is not enough: descent has to be cancelled too. A failed
+        // `increment()` ends the WHOLE walk (see below), so leaving recursion
+        // pending on a directory we already know we cannot read would drop
+        // every bag after it in readdir order, not just the ones beneath it.
+        it.disable_recursion_pending();
       } else {
         std::error_code link_ec;
         // A symlinked directory is not descended into (a link can close a
@@ -213,6 +218,20 @@ std::vector<std::filesystem::path> scanForBags(
           problems.push_back(
             "'" + current.string() +
             "' is a symlink to a directory, which is not scanned for bags");
+        } else {
+          // Ask whether this directory can be enumerated *before* the walk
+          // descends into it. A traverse-only directory (mode 0111) probes
+          // for `metadata.yaml` successfully yet cannot be listed, so it
+          // reaches neither branch above and would abandon the walk in
+          // `increment()` the same way. Same cost either way: the walk is
+          // about to open this directory anyway.
+          std::error_code enum_ec;
+          fs::directory_iterator probe(current, enum_ec);
+          if (enum_ec) {
+            problems.push_back(
+              "could not enumerate '" + current.string() + "': " + enum_ec.message());
+            it.disable_recursion_pending();
+          }
         }
       }
     }
