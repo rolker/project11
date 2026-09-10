@@ -32,8 +32,16 @@ consumer, so the codes distinguish the causes):
 |------|---------|
 | `0` | every nominated bag is in the index, and every fingerprint is trustworthy |
 | `1` | the index is **incomplete**: a bag failed mid-index or could not be opened, a `--scan` tree could not be fully enumerated (bags may be missing outright), or the index DB itself could not be opened (nothing was done) |
-| `2` | usage error — bad flag value, or no bags nominated |
+| `2` | usage error — bad flag value, or nothing nominated by a well-formed command line |
 | `3` | the index is complete, but at least one bag cannot be fingerprinted authoritatively and so **re-indexes on every run** until the cause is fixed |
+
+`1` dominates `3`, and it also dominates `2`: a `--scan` tree that could not be
+enumerated exits `1` even when it leaves nothing nominated at all — "the survey
+disk is not mounted" is an incomplete index, not a mistyped command line, and a
+scheduler has to be able to tell them apart. Every run that got as far as
+nominating bags prints a `done:` summary line, including that one (`of 0
+nominated`); a run that exits `1` because the index DB itself could not be
+opened prints no summary, because nothing was done.
 
 Single interleaved chronological pass per bag (the bounded-TF-window pattern
 from cube#63 / the sidescan importer): georeferences every MBES

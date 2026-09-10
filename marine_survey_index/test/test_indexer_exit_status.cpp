@@ -212,6 +212,12 @@ TEST_F(IndexerExitStatusTest, IndexedButUntrustworthyBagExitsWithItsOwnCode)
 
 // A --scan tree the walk cannot fully enumerate drops whole bags from the run,
 // which is worse than re-indexing one needlessly. It used to be silent.
+//
+// A good bag is nominated alongside the dropped subtree deliberately: this is
+// the test that makes the `!scan_problems.empty()` conjunct in the exit-1 fold
+// load-bearing. With nothing nominated the run returns before the fold is ever
+// reached, so the old version of this test asserted an exit code that came from
+// the empty bag list and would have passed with the conjunct deleted.
 TEST_F(IndexerExitStatusTest, ScanReportsASubtreeItCannotEnumerate)
 {
   const auto root = dir_ / "root";
@@ -222,6 +228,9 @@ TEST_F(IndexerExitStatusTest, ScanReportsASubtreeItCannotEnumerate)
     std::ofstream out(elsewhere / "bag_hidden" / "metadata.yaml", std::ios::trunc);
     out << "this is not: [valid rosbag2 metadata\n";
   }
+  const auto good = makeEmptyBag("root/bag_good");
+  ASSERT_TRUE(std::filesystem::exists(good / "metadata.yaml"))
+    << "rosbag2 wrote no metadata for an empty bag";
   std::error_code link_ec;
   std::filesystem::create_directory_symlink(elsewhere, root / "linked", link_ec);
   ASSERT_FALSE(link_ec) << "this filesystem refuses directory symlinks: " << link_ec.message();
@@ -229,8 +238,26 @@ TEST_F(IndexerExitStatusTest, ScanReportsASubtreeItCannotEnumerate)
   const auto run = runIndexer("--scan " + quote(root.string()));
   EXPECT_NE(run.output.find("is not scanned for bags"), std::string::npos)
     << "a dropped subtree must not be silent: " << run.output;
-  // Nothing was nominated, so this is a usage error -- but a loud one now.
-  EXPECT_EQ(run.status, 2) << run.output;
+  EXPECT_NE(run.output.find("0 failed (of 1 nominated)"), std::string::npos)
+    << "the nominated bag indexed cleanly, so only the scan can be what fails: " << run.output;
+  EXPECT_NE(run.output.find("0 not fully readable"), std::string::npos) << run.output;
+  // Nothing failed and nothing is untrustworthy: the incomplete *scan* is the
+  // whole reason this run cannot report success.
+  EXPECT_EQ(run.status, 1) << run.output;
+}
+
+// The other half of that contract, and the case that reads worst in the field:
+// a --scan tree that could not be enumerated at all nominates nothing, and used
+// to exit 2 -- so a scheduler could not tell an unmounted survey disk from a
+// mistyped command line. A missing root is the same condition as an unmounted
+// mountpoint, and needs no permission bits, so this runs as root too.
+TEST_F(IndexerExitStatusTest, ScanTreeThatCannotBeEnumeratedIsIncompleteNotAUsageError)
+{
+  const auto run = runIndexer("--scan " + quote((dir_ / "not_mounted").string()));
+  EXPECT_NE(run.output.find("could not scan"), std::string::npos) << run.output;
+  EXPECT_EQ(run.status, 1) << "an unreadable scan tree is an incomplete index: " << run.output;
+  EXPECT_NE(run.output.find("of 0 nominated"), std::string::npos)
+    << "a run that nominated nothing still has to say so: " << run.output;
 }
 
 // The regression this round exists for. Removing `skip_permission_denied`

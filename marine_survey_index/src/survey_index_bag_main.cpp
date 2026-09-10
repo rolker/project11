@@ -429,6 +429,20 @@ int main(int argc, char ** argv)
               << " - any bag beneath it is missing from this run\n";
   }
   if (bags.empty()) {
+    // Precedence: a scan that could not be enumerated is an INCOMPLETE index
+    // (1), not a usage error (2) — the command line was well formed, the tree
+    // was not readable. Tested before the empty-bag return because that is the
+    // worst instance of it: "the survey disk is not mounted" nominates nothing
+    // at all, and reporting it as "you invoked me wrong" is exactly the
+    // conclusion a scheduler must not draw. Summarised like any other run so
+    // the zero is stated rather than inferred from an absent summary.
+    if (!scan_problems.empty()) {
+      std::cerr << "done: 0 bag(s) indexed, 0 unchanged skipped, 0 failed"
+                << " (of 0 nominated); 0 not fully readable"
+                << "; no bag could be nominated because the scan above could not"
+                << " be enumerated -> " << db_path << " (unchanged)\n";
+      return 1;
+    }
     std::cerr << "error: no bags given (positional URIs and/or --scan DIR)\n";
     return 2;
   }
