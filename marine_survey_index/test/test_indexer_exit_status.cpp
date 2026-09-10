@@ -471,22 +471,42 @@ TEST_F(IndexerExitStatusTest, UnopenableIndexDbExitsOneWithNothingDone)
 }
 
 // A bag reached through a symlinked path is the SAME bag: the ledger key
-// resolves links, so the second nomination is recognised as unchanged instead
-// of inserting every pass interval and nav point a second time under a second
-// bag_id. `--scan` nominates such a link as a bag (the metadata probe follows
-// it), so this is reachable without anyone naming both paths by hand.
+// resolves links, so it cannot become a second bag under a second `bag_id`
+// with every pass interval and nav point inserted twice. `--scan` nominates
+// such a link as a bag (the metadata probe follows it), so this is reachable
+// without anyone naming both paths by hand.
+//
+// Within one run that is a matter of nomination -- two paths for one bag are
+// one nomination, not a bag plus a bag that is mysteriously already up to
+// date. Across runs it is the ledger key that recognises it, which is the case
+// that matters: the row must be found, not inserted beside.
 TEST_F(IndexerExitStatusTest, ABagReachedThroughASymlinkIsNotASecondBag)
 {
   const auto bag = makeEmptyBag("bag_ok");
+  const auto link = dir_ / "link_to_bag";
   std::error_code link_ec;
-  std::filesystem::create_directory_symlink(bag, dir_ / "link_to_bag", link_ec);
+  std::filesystem::create_directory_symlink(bag, link, link_ec);
   ASSERT_FALSE(link_ec) << "this filesystem refuses directory symlinks: " << link_ec.message();
+  const auto db = (dir_ / "index.db").string();
 
-  const auto run =
-    runIndexer(quote(bag.string()) + " " + quote((dir_ / "link_to_bag").string()));
-  EXPECT_EQ(run.status, 0) << run.output;
-  EXPECT_NE(run.output.find("1 bag(s) indexed, 1 unchanged skipped"), std::string::npos)
-    << "the same bag under two paths must index once: " << run.output;
+  const auto both = runIndexerWithDb(db, quote(bag.string()) + " " + quote(link.string()));
+  EXPECT_EQ(both.status, 0) << both.output;
+  EXPECT_NE(
+    both.output.find("1 bag(s) indexed, 0 unchanged skipped, 0 failed (of 1 nominated)"),
+    std::string::npos)
+    << "two paths to one bag are one nomination: " << both.output;
+  const std::string id_after_first = queryScalar(db, "SELECT id FROM bags");
+  EXPECT_FALSE(id_after_first.empty());
+
+  // A second run, nominating only the link: the ledger key is now the only
+  // thing that can recognise the bag.
+  const auto again = runIndexerWithDb(db, quote(link.string()));
+  EXPECT_EQ(again.status, 0) << again.output;
+  EXPECT_NE(again.output.find("0 bag(s) indexed, 1 unchanged skipped"), std::string::npos)
+    << "the link must find the row the real path wrote: " << again.output;
+  EXPECT_EQ(queryScalar(db, "SELECT COUNT(*) FROM bags"), "1");
+  EXPECT_EQ(queryScalar(db, "SELECT id FROM bags"), id_after_first)
+    << "a new id means a second row was written for the same bag";
 }
 
 // The migration half of the resolved ledger key, and the one with reach beyond

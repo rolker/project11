@@ -433,18 +433,25 @@ std::int64_t ledgerState(
   sqlite3 * db, const std::string & path,
   const marine_survey_index::BagFingerprint & fp)
 {
-  sqlite3_stmt * stmt = prepareOrThrow(
-    db, "SELECT id, size_bytes, mtime_ns FROM bags WHERE path = ?");
-  sqlite3_bind_text(stmt, 1, path.c_str(), -1, SQLITE_TRANSIENT);
-  std::int64_t result = 0;
-  if (sqlite3_step(stmt) == SQLITE_ROW) {
-    const std::int64_t id = sqlite3_column_int64(stmt, 0);
+  StmtGuard sel(
+    prepareOrThrow(db, "SELECT id, size_bytes, mtime_ns FROM bags WHERE path = ?"));
+  sqlite3_bind_text(sel.get(), 1, path.c_str(), -1, SQLITE_TRANSIENT);
+  const int step = sqlite3_step(sel.get());
+  if (step == SQLITE_ROW) {
+    const std::int64_t id = sqlite3_column_int64(sel.get(), 0);
     const bool unchanged = marine_survey_index::fingerprintMatches(
-      fp, sqlite3_column_int64(stmt, 1), sqlite3_column_int64(stmt, 2));
-    result = unchanged ? id : -id;
+      fp, sqlite3_column_int64(sel.get(), 1), sqlite3_column_int64(sel.get(), 2));
+    return unchanged ? id : -id;
   }
-  sqlite3_finalize(stmt);
-  return result;
+  // Only DONE means "this bag is not in the ledger". A SQLITE_BUSY that
+  // outlived the busy timeout, or a SQLITE_CORRUPT, used to read as an
+  // unindexed bag and take the INSERT path for a bag that already has a row --
+  // contained today only incidentally, by the `path UNIQUE` constraint. Throw
+  // instead, matching `stepDoneOrThrow`, so it fails this bag loudly.
+  if (step != SQLITE_DONE) {
+    throw SqliteError(std::string("ledger lookup: ") + sqlite3_errmsg(db));
+  }
+  return 0;
 }
 
 // Reconcile ledger rows written before the key resolved symlinks (#375).
@@ -659,6 +666,28 @@ int main(int argc, char ** argv)
   for (const std::string & problem : scan_problems) {
     std::cerr << "warning: " << problem << "\n";
   }
+  // The same bag nominated twice -- named twice, or named and also reached by a
+  // `--scan` -- is one bag. Reported as "1 indexed, 1 unchanged skipped" it
+  // read as "one bag was already up to date" about a bag this run had written
+  // seconds earlier. Deduplicated on the resolved ledger key, keeping
+  // command-line order so the run still processes bags in the order given. A
+  // bag whose key cannot be resolved is kept as it is: the per-bag loop fails
+  // it loudly, which is a better answer than collapsing two of them on a key
+  // neither could be given.
+  {
+    std::vector<std::filesystem::path> unique_bags;
+    std::set<std::string> seen_keys;
+    for (const std::filesystem::path & bag : bags) {
+      std::error_code key_ec;
+      const std::string key = ledgerKey(bag, key_ec);
+      if (!key_ec && !seen_keys.insert(key).second) {
+        continue;
+      }
+      unique_bags.push_back(bag);
+    }
+    bags = std::move(unique_bags);
+  }
+
   if (bags.empty()) {
     // Precedence: a scan that could not be enumerated is an INCOMPLETE index
     // (1), not a usage error (2) — the command line was well formed, the tree
