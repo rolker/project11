@@ -80,7 +80,8 @@ struct BagFingerprint
 /// Size and mtime come from the same `::stat` call per file, so a file whose
 /// timestamp cannot be read contributes neither. Every way the walk can fail
 /// to see the whole bag — an unreadable directory, a failed `::stat`, an entry
-/// whose type cannot be determined, or a non-regular single path — clears
+/// whose type cannot be determined, a non-regular single path, or an mtime
+/// outside the range `int64_t` nanoseconds can represent — clears
 /// `scan_complete`; reading no timestamp at all also leaves `mtime_valid`
 /// false. Either way `fingerprintMatches()` then refuses to call the bag
 /// unchanged.

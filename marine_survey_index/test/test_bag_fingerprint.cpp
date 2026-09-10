@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -255,6 +256,38 @@ TEST_F(BagFingerprintTest, UnlistableBagDirectoryIsNotAuthoritative)
 
   EXPECT_FALSE(fp.scan_complete);
   EXPECT_FALSE(fp.mtime_valid) << "nothing was enumerated, so nothing was timed";
+  EXPECT_FALSE(problem.empty());
+  EXPECT_FALSE(marine_survey_index::fingerprintMatches(fp, fp.size_bytes, fp.mtime_ns));
+}
+
+// An mtime past ~2262 overflows `tv_sec * 1e9` in int64_t — signed-overflow UB,
+// and the wrapped value would index as an ordinary timestamp. Reachable from a
+// corrupt inode or a wrong host clock, not only a deliberate `touch`.
+TEST_F(BagFingerprintTest, UnrepresentableMtimeIsNotTrusted)
+{
+  write("a.mcap", "0123456789");
+  const auto f = dir_ / "a.mcap";
+
+  // 2500-01-01T00:00:00Z. Not every filesystem can store it; if this one
+  // clamped or refused, there is nothing to police here.
+  constexpr std::int64_t kYear2500Sec = 16725225600LL;
+  const struct ::timespec times[2] = {{kYear2500Sec, 0}, {kYear2500Sec, 0}};
+  if (::utimensat(AT_FDCWD, f.c_str(), times, 0) != 0) {
+    GTEST_SKIP() << "this filesystem refuses a year-2500 mtime";
+  }
+  struct ::stat st {};
+  ASSERT_EQ(::stat(f.c_str(), &st), 0);
+  constexpr std::int64_t kMaxMtimeSec = (INT64_MAX - (kNsPerS - 1)) / kNsPerS;
+  if (static_cast<std::int64_t>(st.st_mtim.tv_sec) <= kMaxMtimeSec) {
+    GTEST_SKIP() << "this filesystem clamped the mtime back into range";
+  }
+
+  std::string problem;
+  const auto fp = marine_survey_index::bagFingerprint(dir_, &problem);
+  EXPECT_FALSE(fp.mtime_valid) << "an unrepresentable timestamp is not a reading";
+  EXPECT_FALSE(fp.scan_complete);
+  EXPECT_EQ(fp.mtime_ns, 0) << "no wrapped value may reach the ledger";
+  EXPECT_EQ(fp.size_bytes, 0) << "a file whose timestamp is unusable contributes no bytes either";
   EXPECT_FALSE(problem.empty());
   EXPECT_FALSE(marine_survey_index::fingerprintMatches(fp, fp.size_bytes, fp.mtime_ns));
 }

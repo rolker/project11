@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <string>
 #include <system_error>
 
@@ -35,17 +36,32 @@ namespace
 {
 constexpr std::int64_t kNsPerS = 1000000000LL;
 
+// The tv_sec range whose nanosecond conversion still fits in int64_t. Outside
+// it, `tv_sec * kNsPerS` is signed-overflow undefined behaviour (roughly past
+// the year 2262, or before 1678) and the wrapped value would be indexed as a
+// perfectly ordinary timestamp. That is reachable from a corrupt inode or a
+// host with a wrong clock, not only from a deliberate `touch -d 2500-01-01`.
+constexpr std::int64_t kMaxMtimeSec =
+  (std::numeric_limits<std::int64_t>::max() - (kNsPerS - 1)) / kNsPerS;
+constexpr std::int64_t kMinMtimeSec = std::numeric_limits<std::int64_t>::min() / kNsPerS;
+
 // One ::stat per file: size and mtime together, so a file whose timestamp
-// cannot be read contributes neither. Returns false if the stat failed.
+// cannot be read contributes neither. Returns false if the stat failed or the
+// timestamp is outside the representable range, in which case the caller
+// treats the file as unreadable rather than trusting a wrapped value.
 bool statFile(const std::filesystem::path & f, std::int64_t & size, std::int64_t & mtime_ns)
 {
   struct ::stat st {};
   if (::stat(f.c_str(), &st) != 0) {
     return false;
   }
+  const auto sec = static_cast<std::int64_t>(st.st_mtim.tv_sec);
+  const auto nsec = static_cast<std::int64_t>(st.st_mtim.tv_nsec);
+  if (sec > kMaxMtimeSec || sec < kMinMtimeSec || nsec < 0 || nsec >= kNsPerS) {
+    return false;
+  }
   size = static_cast<std::int64_t>(st.st_size);
-  mtime_ns = static_cast<std::int64_t>(st.st_mtim.tv_sec) * kNsPerS +
-    static_cast<std::int64_t>(st.st_mtim.tv_nsec);
+  mtime_ns = sec * kNsPerS + nsec;
   return true;
 }
 }  // namespace
