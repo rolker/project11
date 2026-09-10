@@ -31,13 +31,17 @@ own comments disagree, the disagreement is recorded rather than smoothed over.
 | 2 | Projection | `cube::DetectionsProjector` | ping + TF + SOG | **sonar-frame** soundings |
 | 3 | Uncertainty | `cube::ErrorModel` | ping + `Platform` + `Vessel` + `Device` | per-sounding TPU |
 | 4 | Georeferencing | **no single owner — five copies** | soundings + TF | world / geographic soundings |
-| 5 | Estimation | `cube::GeoMapSheet` / `cube::Node` | geo soundings + `cube::Parameters` | per-node depth, uncertainty, backscatter |
+| 5 | Estimation | `cube::GeoMapSheet` / `cube::Node` | **`PointCloud2` on `soundings`** + `cube::Parameters` | per-node depth, uncertainty, backscatter |
 | 6 | Store write | `cube::store_import` | nodes | GGGS tiles in `marine_bathymetry_store` |
 
 Stages 2 and 3 are **one component**: `DetectionsProjector` exists so that
 projection and the error model happen together and once, and its header forbids
 node-bound includes so bag replay can reuse it. Stage 4 is **not** in it, and
 that is the chain's weakest joint. See stage 4.
+
+Stages 2 and 3 are also **skippable**. The estimator's input is a point cloud
+carrying per-sounding uncertainty, so a sensor that already delivers that can
+publish it directly. See stage 1.
 
 ## Units and conventions
 
@@ -71,79 +75,114 @@ variances, so a consumer that squares them is wrong by a square.
 
 ## Stage 1 — Acquisition
 
-**What it does.** Gets a sonar onto the message contract: one `SonarDetections`
-per ping, plus a latched `SonarInfo` companion
-([ADR-0009](decisions/0009-sonar-info-message.md)) saying what the intensities
-actually are and what corrections have been applied.
+**What it does.** Gets a sensor onto a contract the estimator can consume.
 
-**Owner: one ROS driver per sonar. The contract is the message, not any
-particular driver.** This stage is the only one in the chain that is expected to
-be rewritten repeatedly, because the sonar changes with the platform and with
-what is available. BizzyBoat carried a Kongsberg M3, which is a **loaner being
-returned**; the Imagenex DeltaT is the likely reinstall until another test sonar
-is borrowed or bought, and Ben or DriX may carry an EM2040 or similar
-(operator direction, 2026-09-10). Nothing downstream of this stage should name a
-sonar, and where the rest of this page does, that is a defect in the page.
+**Owner: one driver per sonar, and the right adapter for what that sonar
+delivers.** This is the only stage expected to be rewritten repeatedly, because
+the sonar changes with the platform and with what is available. BizzyBoat
+carried a Kongsberg M3, which is a **loaner being returned**; the Imagenex
+DeltaT is the likely reinstall until another test sonar is borrowed or bought,
+and Ben or DriX may carry an EM2040 or similar (operator direction,
+2026-09-10). Nothing downstream of this stage should name a sonar, and where the
+rest of this page does, that is a defect in the page.
 
-The practical consequence: **adding a sonar is a driver task, not a chain
-task.** Everything from stage 2 onward already works for any sonar whose driver
-meets the contract below, and nothing works for one whose driver does not,
-however good the sensor is.
+**Read the rest of this page with one caveat.** Essentially all of this chain was
+developed and refined while the M3 was the sonar on the boat, so its assumptions
+are M3-shaped in places nobody has had reason to test. A change of sonar is a
+work item with real content, not a configuration change, and the first such
+change is expected rather than hypothetical.
 
-**Read the rest of this page with one caveat.** Essentially all of this chain
-was developed and refined while the M3 was the sonar on the boat, so its
-assumptions are M3-shaped in places nobody has had reason to test — a single
-transmit sector, the beam counts and swath of that unit, and the workaround
-below that exists only because of how that one driver reports. A change of sonar
-is therefore a work item with real content, not a configuration change, and the
-first such change is expected rather than hypothetical.
+### What the estimator actually consumes
 
-### The contract a driver must meet
+Not `SonarDetections`. The live CUBE node subscribes to a **`PointCloud2` on
+`soundings`**, in the sensor frame, with named fields:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `x`, `y`, `z` | yes | position relative to the sonar head, metres |
+| `vertical_uncertainty` | yes | **variance**, m²; must be finite and positive |
+| `horizontal_uncertainty` | yes | **variance**, m²; must be finite and non-negative |
+| `intensity` | no | backscatter; NaN means not reported, not zero |
+| `beam_angle` | no | radians; needed for the angular-response corrections |
+
+The two optional fields are probed by name, so a producer may omit them. The
+two uncertainty fields are not: a cloud without them throws while the iterators
+are built, and the ping is dropped with a throttled warning. A point whose
+position or uncertainty is non-finite, or whose vertical uncertainty is
+non-positive, is dropped and counted. **Nothing is defaulted.** A sensor that
+cannot say how good its soundings are does not get to have them guessed at.
+
+That contract is the seam. Everything above it is per-sensor; everything below
+it is shared.
+
+### Three ways a sensor can arrive
+
+**1. Raw detections — travel times and steering angles.** The full chain
+applies: project (stage 2), run the error model (stage 3), publish the cloud.
+`detections_to_pointcloud` is that adapter, and the M3 by way of
+`kongsberg_em_bridge` is the worked example. This is the richest path, because
+the error model has the geometry that produced each sounding.
+
+What such a driver must publish, in `SonarDetections`:
 
 | Field | Requirement |
 |---|---|
-| `header.stamp` | **transmit** time, not receive time, and not arrival time |
+| `header.stamp` | **transmit** time, not receive or arrival time |
 | `header.frame_id` | the sonar frame, resolvable to `earth` through TF at that stamp |
 | `two_way_travel_times` | seconds, per beam — **raw travel times, not ranges** |
 | `tx_angles`, `rx_angles` | radians, positive forward and positive to starboard |
 | `flags` | per beam; zero means good |
 | `intensities` | per beam, with `SonarInfo` declaring what they are |
-| `ping_info.sound_speed` | m/s used to compute ranges, or 0 for unavailable |
-| `ping_info.frequency` | Hz, or 0 for unavailable |
-| `ping_info.tx_beamwidths`, `rx_beamwidths` | full −3 dB, **radians**, per beam — or **empty**, never guessed and never zero-filled |
+| `ping_info.sound_speed`, `frequency` | m/s and Hz, or 0 for unavailable |
+| `ping_info.tx_beamwidths`, `rx_beamwidths` | full −3 dB, **radians** — or **empty**, never guessed and never zero-filled |
 
-Travel times and steering angles are the load-bearing part. A driver that
-publishes only positions has not met the contract, because the error model needs
-the geometry that produced them, and no downstream stage can recover it.
+**2. Soundings that already carry uncertainties.** An EM2040 and similar units
+deliver device-relative soundings with their own vertical and horizontal
+uncertainty, computed by the manufacturer's own model against the real
+installation. Those sensors **skip stages 2 and 3 entirely**: the driver
+publishes the point-cloud contract directly and the estimator consumes it.
 
-### Where each driver actually stands
+This is not a special case bolted on; it is why the seam is a point cloud rather
+than a detections message, and an early real-time CUBE test ingested exactly
+such a cloud. Two obligations come with it: the uncertainties must be
+**variances in m²**, matching the field semantics above rather than the standard
+deviations or 95% bounds a manufacturer is more likely to quote; and the
+provenance should be recorded, because a surface built from vendor uncertainty
+and one built from our error model are not the same product even where the
+numbers agree.
 
-| Driver | Publishes | Beamwidths | Conformant |
+**3. Soundings with no uncertainties.** A sensor may deliver `x, y, z` and
+nothing else. The DeltaT's live driver is in this class today: it publishes a
+`PointCloud2` on `soundings` — the estimator's own topic — carrying positions
+only. Under the contract above, every one of those pings is rejected.
+
+That rejection is correct, and the answer is not to default the missing fields.
+It is to apply an error model that works from what is available. Calder's
+original ships one for exactly this: the **IHO f(z) model**, where the vertical
+uncertainty is `sqrt(a + b·z²)` from depth alone, converted from a 95% bound to
+a standard deviation and then to a variance. Our port deliberately did not port
+it, on the reasoning that with a real vessel and device configuration the full
+model is richer — a reasoning that assumed the sensor gives us the geometry the
+full model needs. A positions-only sensor is the case that assumption excluded.
+
+So the routing is: geometry available, use the full model; vendor uncertainties
+available, use those; neither, use a depth-based model and label the product
+accordingly. What must never happen is a sounding reaching the estimator with a
+confidence nobody computed.
+
+### Where each multibeam driver stands
+
+Sidescan sensors are **not** in this table. They feed the sidescan store
+([ADR-0006](decisions/0006-multi-platform-backscatter-store.md)) and the mosaic
+chain, not the CUBE error model, so `garmin_sidescan` is out of scope here
+however similar its beamwidth handling looks.
+
+| Driver | Arrives as | Beamwidths | State |
 |---|---|---|---|
-| `marine_tools/kongsberg_em_bridge` (M3) | `SonarDetections` + `SonarInfo` | empty, deliberately | yes, apart from beamwidths |
-| `marine_tools/garmin_sidescan` | sidescan imagery | populated, radians, per-generation table; empty where uncharacterised | yes — and it is the pattern to copy |
-| `r2sonic` | `SonarDetections` | assigned | yes |
-| `norbit_driver` | `SonarDetections` | `resize()`d and never assigned — **an array of zeros** | no: a zero is read as a measurement |
-| `imagenex_deltat` | **`PointCloud2` only** | none | **no** — see below |
-
-The Garmin driver is the model: full −3 dB widths in radians from a cited table,
-and empty rather than guessed where a generation is not characterised.
-
-### The DeltaT does not currently reach this chain at all
-
-This matters because it is the sonar most likely to go back on the boat.
-
-- Its live node publishes **`PointCloud2`** on `soundings`. Positions only: no
-  travel times, no steering angles, no ping info, no flags. Nothing downstream
-  can compute an uncertainty for those points, so a DeltaT survey today cannot
-  produce a CUBE surface with a real error budget.
-- Its only `SonarDetections` producer is an offline converter,
-  `nodes/deltat_to_bag.py`, and that fills **only** the stamp, frequency and
-  sound speed. A ping it writes carries no beams.
-
-So "the DeltaT publishes no beamwidths" understates it. Bringing the DeltaT onto
-this chain is a driver rewrite to the contract above, not a beamwidth table.
-Not yet filed; `imagenex_deltat` is its own repository.
+| `marine_tools/kongsberg_em_bridge` (M3) | raw detections | empty, deliberately | conformant apart from beamwidths |
+| `r2sonic` | raw detections | assigned | conformant |
+| `norbit_driver` | raw detections | `resize()`d, never assigned — **an array of zeros** | a zero is read as a measurement |
+| `imagenex_deltat` | positions only | none | class 3 above; needs a depth-based model |
 
 ### Why the M3 bridge leaves beamwidths empty
 
@@ -159,8 +198,7 @@ smaller-but-wrong in the more dangerous direction.
 The M3's own datagram stream does not carry beamwidth either, so for any
 Kongsberg unit the figure has to come from a device table rather than the wire.
 The same bridge already decodes the XYZ88 datagram, which the M3 exports empty
-but an EM2040 would populate, so a future Kongsberg unit is a smaller job than a
-new driver.
+but an EM2040 would populate.
 
 ## Stage 2 — Projection
 
@@ -296,10 +334,14 @@ hypotheses with Kalman updates, monitoring and intervention.
 The live node accumulates into a geographic map sheet so that persistence needs
 no lossy Cartesian-to-geographic step.
 
-**What it must be fed.** Geographic soundings carrying depth, vertical error and
-horizontal error, plus intensity, beam angle and slant range when the
+**What it must be fed.** On the live path, the `PointCloud2` contract from
+stage 1 — sensor-frame positions with per-point variances, optionally intensity
+and beam angle — which this node georeferences itself before accumulating (that
+is the stage-4 duplication). Offline, the same content arrives as
+`cube::GeoSounding`. Either way the estimator needs depth, a vertical variance
+and a horizontal variance, plus intensity, beam angle and slant range when the
 backscatter product is wanted
-([ADR-0007](decisions/0007-mbes-backscatter-store.md)). The horizontal error
+([ADR-0007](decisions/0007-mbes-backscatter-store.md)). The horizontal variance
 sets the influence radius, so an under-stated horizontal budget pins every
 radius to the cell size.
 
@@ -345,7 +387,7 @@ are fixed as of 2026-09-10.
 | Stage 3 | No offline `Vessel` or `Device` configuration | archive cannot be reprocessed | [cube#145](https://github.com/rolker/cube_bathymetry/issues/145) |
 | Stage 4 | Five copies of the world lift, four in one package | drift, and it has already happened | [cube#146](https://github.com/rolker/cube_bathymetry/issues/146) |
 | Stage 1 | M3 publishes no beamwidths | works around the above | [marine_tools#82](https://github.com/rolker/marine_tools/issues/82) |
-| Stage 1 | The DeltaT's live driver publishes `PointCloud2`, not detections | that sonar cannot reach the chain | not yet filed |
+| Stage 1 | No error model for positions-only sensors; Calder's IHO f(z) is unported | such a sensor's pings are all rejected | not yet filed |
 
 ### The beamwidth units defect, in full
 
