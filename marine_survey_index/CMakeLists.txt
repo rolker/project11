@@ -102,6 +102,14 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_bag_fingerprint test/test_bag_fingerprint.cpp)
   target_link_libraries(test_bag_fingerprint ${PROJECT_NAME}_core)
+
+  # Runs the real indexer binary: its exit-status contract lives in main(),
+  # where no library call can reach it.
+  ament_add_gtest(test_indexer_exit_status test/test_indexer_exit_status.cpp)
+  target_link_libraries(test_indexer_exit_status ${PROJECT_NAME}_core)
+  ament_target_dependencies(test_indexer_exit_status rosbag2_cpp rosbag2_storage)
+  target_compile_definitions(test_indexer_exit_status PRIVATE
+    SURVEY_INDEX_BAG_EXE=\"$<TARGET_FILE:survey_index_bag>\")
 endif()
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
