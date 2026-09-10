@@ -193,8 +193,10 @@ TEST_F(BagFingerprintTest, UnreadableMtimeForcesReindexOnEveryRun)
   EXPECT_FALSE(marine_survey_index::fingerprintMatches(again, again.size_bytes, stored))
     << "an in-band sentinel would round-trip and skip the bag on the second run";
 
-  // And the persisted value must stay inside the range a real mtime occupies,
-  // so it can never be mistaken for one.
+  // The persisted value is a perfectly reachable real mtime (`touch -d @0`
+  // produces exactly it), so it is *not* what makes this safe -- only the
+  // validity gate in fingerprintMatches() is. Asserted because the struct
+  // invariant the write path relies on is that mtime_ns stays 0 here.
   EXPECT_EQ(stored, 0);
 }
 
