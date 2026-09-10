@@ -1,0 +1,14 @@
+ci-local: pass
+repo: unh_marine_autonomy
+commit: 5a93ad777873d9a1eef6c8e98613e86324f63e8c
+image: ros2-agent-workspace-agent:latest
+image-id: sha256:8f225e9cad1e2d979c1d30512414878a9fb268674a41c51e3980f187bafc0f82
+packages: bathymetry_layer command_bridge helm_manager joy_to_helm marine_autonomy marine_autonomy_integration_tests marine_backscatter marine_bathymetry_store marine_contacts marine_interfaces marine_mbes_backscatter_store marine_sidescan_mosaic marine_survey_index marine_tiled_raster_store marine_vertical_datum marine_web_view mission_manager mission_manager_interfaces
+scope: full
+upstream-repo: geographic_info@f70b81a438172cd7a066dc1b18314d70e0eb6389
+upstream-repo: unh_marine_navigation@60e4063658699070750fefe6ad8d0eac17de60ca
+upstream-repo: marine_ais@c821363dd0e0a65984389c71cfcb14b7a753bddc
+steps: template+upstream+upstream-hook
+date: 2026-09-10T18:45:47Z
+host: deadpool
+log-sha256: 83f24bc1438bcc5b01c5fd9ae7afd14de5104ff41eeaf0eefb9c9286fed03e9a
