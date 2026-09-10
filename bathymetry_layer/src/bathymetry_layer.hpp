@@ -73,12 +73,26 @@ namespace bathymetry_layer
 /// uniform level-10 `processed` is already a 4x or 16x fan-out per cell, and a
 /// 1 m global over level-14 depth-adaptive tiles would be 256 covered cells per
 /// costmap cell — ~2.56 M cell visits for one 100x100 tile, each a map find and
-/// a `push_back` — multiplied again by the 4-6 query cells each costmap cell
-/// overlaps (`evaluateCostmapCell`). `generateTile`'s time budget is checked only *between* tiles,
+/// a `push_back` — multiplied again by the query cells each costmap cell
+/// overlaps (`evaluateCostmapCell`): 4 to 9, mean 5.48, measured over 1,600
+/// placements. Neighbouring costmap cells share most of those, so the render
+/// carries a per-tile memo and pays for ~16.8k distinct query cells per 100x100
+/// tile at 1 m rather than ~54.8k evaluations.
+///
+/// Measured store-query time for one 100x100 tile at 1 m on a fast laptop, with
+/// the single-cell (pre-round-3) cost beside it: level-10 store 2 -> ~3 ms,
+/// level-12 7 -> ~12 ms, level-13 13 -> ~22 ms, level-14 36 -> ~61 ms. (The
+/// before column and the 3.26x redundancy were measured; the after column
+/// applies the memo's ratio to them.) The shape to keep in mind is that a
+/// present-but-EMPTY fine tile costs the same as a full one — the inner walk is
+/// geometric, not data-gated — so the shoreline pays the worst case.
+/// `generateTile`'s time budget is checked only *between* tiles,
 /// so one tile is uninterruptible once started. Reducing the work by
-/// point-sampling is exactly the defect uma#369 fixed, so the remedy is a bound
-/// or an interruption point, not a narrower query; tracked in
-/// [#371](https://github.com/rolker/unh_marine_autonomy/issues/371).
+/// point-sampling is exactly the defect uma#369 fixed, so a narrower query is
+/// not on the list of remedies. Removing REDUNDANT work is — the per-tile memo
+/// above is the first instance, and it took 3.26x off this path without
+/// narrowing anything. What remains is a bound or an interruption point, tracked
+/// in [#371](https://github.com/rolker/unh_marine_autonomy/issues/371).
 /// `hasAnyData` short-circuits at the first cell holding data, so the existence
 /// gate itself costs one cell over surveyed ground and only an empty region pays
 /// its full walk.
@@ -175,8 +189,12 @@ protected:
   // 40-82% of the ground unread (round 3, uma#369) — see the implementation for
   // the geometry and for the two deliberate asymmetries it carries.
   // Exposed for unit testing.
+  // @p memo, when given, caches one verdict per GGGS query cell for the duration
+  // of a single rendered tile: neighbouring costmap cells share query cells, so
+  // a 100x100 tile at 1 m asks ~54.8k times for ~16.8k distinct answers.
   std::optional<unsigned char> evaluateCostmapCell(
-    double min_lat, double min_lon, double max_lat, double max_lon) const;
+    double min_lat, double min_lon, double max_lat, double max_lon,
+    std::map<gggs::CellIndex, std::optional<unsigned char>> * memo = nullptr) const;
 
   // Expand a leading "~"/"~/" in @p path to $HOME (so one portable store_path
   // resolves on both the boat and dev/sim). Absolute, empty, and "~user" paths

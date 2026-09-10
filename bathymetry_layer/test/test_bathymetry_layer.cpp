@@ -1300,3 +1300,92 @@ TEST(BathymetryLayer, AnUnsurveyedQueryCellMakesTheCostmapCellLandUnderTheBasinF
     << "an unsurveyed query cell inside the costmap cell was not treated as "
     "land under unsurveyed_is_lethal";
 }
+
+TEST(BathymetryLayer, TheQueryCellMemoDoesNotChangeAnyVerdict)
+{
+  // Round 4: neighbouring costmap cells share query cells, so generateTile
+  // carries a per-tile memo. It must be a pure cache — same verdicts, whether it
+  // is present, absent, or already warm.
+  BathymetryLayerForTest layer;
+  layer.setMinimumDepth(1.0);
+  layer.setMaximumCautionDepth(3.0);
+  layer.setConfidenceGate(0.5);
+  layer.setMapTideZ(0.0);
+  layer.setMapTideValid(true);
+
+  auto store = std::make_unique<BathymetryStore>(10);
+  const gggs::Level query_level(10);
+  const auto block = queryCellBlock(query_level);
+  store->set(SourceLayer::Processed, block.south_west, BathyCell{-20.0, 0.1});
+  store->set(
+    SourceLayer::Processed,
+    query_level.cellIndex(
+      gggs::geoPoint(
+        block.min_lat + 1.25 * block.lat_span, block.min_lon + 1.25 * block.lon_span)),
+    BathyCell{-0.4, 0.1});
+  layer.setStore(std::move(store));
+
+  const auto without = layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon);
+
+  std::map<gggs::CellIndex, std::optional<unsigned char>> memo;
+  const auto cold = layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon, &memo);
+  ASSERT_FALSE(memo.empty()) << "the memo was never populated";
+  const auto warm = layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon, &memo);
+
+  EXPECT_EQ(cold, without) << "the memo changed a verdict on its first pass";
+  EXPECT_EQ(warm, without) << "a warm memo changed a verdict";
+
+  // An unsurveyed query cell caches its std::nullopt too, and a cached nullopt
+  // must stay "leave it to another prior", not become a cost.
+  BathymetryLayerForTest empty_layer;
+  empty_layer.setMapTideZ(0.0);
+  empty_layer.setMapTideValid(true);
+  empty_layer.setStore(std::make_unique<BathymetryStore>(10));
+  std::map<gggs::CellIndex, std::optional<unsigned char>> empty_memo;
+  const auto first = empty_layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon, &empty_memo);
+  const auto second = empty_layer.evaluateCostmapCell(
+    block.min_lat, block.min_lon, block.max_lat, block.max_lon, &empty_memo);
+  EXPECT_FALSE(first.has_value());
+  EXPECT_EQ(first, second);
+}
+
+TEST(BathymetryLayer, AnAntimeridianStraddleFallsBackToTheCentreCell)
+{
+  // Round 4: a costmap cell whose corners fall on both sides of 180 folds into a
+  // box spanning ~360°, because the callers take min/max over the four corner
+  // longitudes. That box is not a wide cell and must never be iterated — at
+  // level 10 it is ~46,000 grid columns of walking on the costmap thread. The
+  // span test catches it; the earlier `max_lon < min_lon` test could not, since
+  // min/max over the same four values never invert.
+  //
+  // A regression here does not fail this test, it hangs it: that is what the
+  // ctest timeout is for.
+  BathymetryLayerForTest layer;
+  layer.setMinimumDepth(1.0);
+  layer.setMaximumCautionDepth(3.0);
+  layer.setConfidenceGate(0.5);
+  layer.setMapTideZ(0.0);
+  layer.setMapTideValid(true);
+
+  auto store = std::make_unique<BathymetryStore>(10);
+  const gggs::Level query_level(10);
+  // A rock at the seam, in the cell the folded box's true centre lands in.
+  const auto seam_cell = query_level.cellIndex(gggs::geoPoint(kLat, -180.0));
+  store->set(SourceLayer::Processed, seam_cell, BathyCell{-0.4, 0.1});
+  layer.setStore(std::move(store));
+
+  const double lat_span =
+    seam_cell.grid().latitudinalSpan() / gggs::cell_rows_per_grid;
+  const auto result = layer.evaluateCostmapCell(
+    kLat - 0.25 * lat_span, -179.9995, kLat + 0.25 * lat_span, 179.9995);
+
+  ASSERT_TRUE(result.has_value())
+    << "the straddling cell was not evaluated at all";
+  EXPECT_EQ(*result, layer.evaluateCell(seam_cell))
+    << "the straddle fallback did not land on the cell containing the true "
+    "centre of the box";
+}

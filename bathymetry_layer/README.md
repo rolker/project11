@@ -126,6 +126,19 @@ counts as surveyed: within a cell the gaps are routine holes in one fused
 surface, across cells they are whole cells of the basin's prior with nothing in
 them.
 
+**What the closed-basin flag now costs in channel width.** Because a costmap
+cell goes lethal when *any* overlapping query cell is unsurveyed, and a query
+cell counts even where it overlaps the cell by a sliver, the lethal boundary
+advances past the true unsurveyed edge by one costmap cell plus one query cell:
+**1.90 m in latitude and 1.66 m in longitude** at 1 m resolution and 43.5
+degrees north, against roughly 0.5 m under the old centre test. That is about
+1.2 to 1.4 m more per side, so a surveyed gap between two unsurveyed shoals
+loses ~2.5 m of usable width, and nothing is logged when it does. The direction
+is the shoal-safe one and the flag exists for basins whose prior fills the
+interior, but the magnitude is an operational input, not a rounding error: on a
+lake where the boat threads a 4 m gap, this is the difference between transiting
+it and refusing it.
+
 ### Store residency, the other half of the lever (uma#369, round 3)
 
 A store tile is a 960x960 pair of `double` bands — about **14.7 MB at every

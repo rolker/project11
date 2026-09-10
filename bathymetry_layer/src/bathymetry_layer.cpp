@@ -496,6 +496,10 @@ void BathymetryLayer::generateTile(
         lon_lattice[k] = w00 * clon[0] + w10 * clon[1] + w01 * clon[2] + w11 * clon[3];
       }
     }
+    // One memo per rendered tile: query cells shared between neighbouring costmap
+    // cells are evaluated once. Scoped to the tile so it cannot outlive a store
+    // window refresh.
+    std::map<gggs::CellIndex, std::optional<unsigned char>> memo;
     for (int ty = 0; ty < tile_size_; ++ty) {
       for (int tx = 0; tx < tile_size_; ++tx) {
         const size_t sw = static_cast<size_t>(ty) * lattice_n + tx;
@@ -514,7 +518,8 @@ void BathymetryLayer::generateTile(
             std::max(lat_lattice[nw], lat_lattice[ne])),
           std::max(
             std::max(lon_lattice[sw], lon_lattice[se]),
-            std::max(lon_lattice[nw], lon_lattice[ne])));
+            std::max(lon_lattice[nw], lon_lattice[ne])),
+          &memo);
         if (evaluated) {
           tile->setCost(
             static_cast<unsigned int>(tx), static_cast<unsigned int>(ty), *evaluated);
@@ -534,6 +539,7 @@ void BathymetryLayer::generateTile(
   auto tile = std::make_shared<nav2_costmap_2d::Costmap2D>(
     tile_size_, tile_size_, resolution_, world_min_x, world_min_y,
     nav2_costmap_2d::NO_INFORMATION);
+  std::map<gggs::CellIndex, std::optional<unsigned char>> fallback_memo;
   for (int ty = 0; ty < tile_size_; ++ty) {
     for (int tx = 0; tx < tile_size_; ++tx) {
       double wx;
@@ -572,7 +578,7 @@ void BathymetryLayer::generateTile(
         continue;
       }
       const std::optional<unsigned char> evaluated =
-        evaluateCostmapCell(min_lat, min_lon, max_lat, max_lon);
+        evaluateCostmapCell(min_lat, min_lon, max_lat, max_lon, &fallback_memo);
       if (evaluated) {
         tile->setCost(
           static_cast<unsigned int>(tx), static_cast<unsigned int>(ty), *evaluated);
@@ -929,7 +935,8 @@ unsigned char BathymetryLayer::computeCost(double worst_case_clearance, bool tru
 }
 
 std::optional<unsigned char> BathymetryLayer::evaluateCostmapCell(
-  double min_lat, double min_lon, double max_lat, double max_lon) const
+  double min_lat, double min_lon, double max_lat, double max_lon,
+  std::map<gggs::CellIndex, std::optional<unsigned char>> * memo) const
 {
   if (!store_) {
     return std::nullopt;
@@ -962,14 +969,27 @@ std::optional<unsigned char> BathymetryLayer::evaluateCostmapCell(
   //    gaps inside one fused surface, here they are whole query cells of a
   //    closed basin's prior, which is what the flag calls land.
   //
-  // Cost: 4-6 query cells per costmap cell at typical resolutions, multiplying
-  // the per-query fan-out recorded on unh_marine_autonomy#371.
-  if (max_lon < min_lon) {
-    // Antimeridian straddle: not iterable as a lat/lon range. Fall back to the
-    // centre cell — the pre-round-3 behaviour, and the one place the partial
-    // coverage above survives. No boat this store serves operates there.
-    return evaluateCell(
-      store_->cellIndex(0.5 * (min_lat + max_lat), min_lon));
+  // Cost, measured over 1,600 costmap-cell placements with the real iterators:
+  // 4 to 9 query cells per costmap cell, mean 5.48 (4 in 38% of placements, 6 in
+  // 54%, 9 in 8% — the 9s are the cells whose box straddles both a grid row and
+  // a grid column). That multiplies the per-query fan-out recorded on
+  // unh_marine_autonomy#371, which is why the memo above is not optional.
+  // Antimeridian straddle. A costmap cell is metres wide, so a box spanning more
+  // than half the globe is not a wide cell — it is a cell whose corners fell on
+  // both sides of 180 and were folded into one AABB by the callers' min/max. The
+  // test is the SPAN, not `max_lon < min_lon`: min/max over the same four values
+  // can never invert, so that comparison was dead code, and the box it let
+  // through would have iterated every grid column at the query level (~46,000 at
+  // level 10) on the costmap thread.
+  if (max_lon - min_lon > 180.0) {
+    // Fall back to the centre cell — the pre-round-3 behaviour, and the one
+    // place the partial coverage this function exists to fix survives. The
+    // centre is found by measuring across the seam, not across the fold.
+    double centre_lon = max_lon + 0.5 * (360.0 - (max_lon - min_lon));
+    if (centre_lon > 180.0) {
+      centre_lon -= 360.0;
+    }
+    return evaluateCell(store_->cellIndex(0.5 * (min_lat + max_lat), centre_lon));
   }
   const auto south_west = gggs::geoPoint(min_lat, min_lon);
   const auto north_east = gggs::geoPoint(max_lat, max_lon);
@@ -981,7 +1001,24 @@ std::optional<unsigned char> BathymetryLayer::evaluateCostmapCell(
     for (gggs::CellAreaIterator cell_it(*grid_it, south_west, north_east);
       cell_it.valid(); cell_it.next())
     {
-      const std::optional<unsigned char> cost = evaluateCell(*cell_it);
+      // Adjacent costmap cells SHARE query cells — a query cell is smaller than a
+      // costmap cell but not by a whole factor, so a 100x100 tile at 1 m covers
+      // ~16.8k distinct query cells while the cells between them ask for ~54.8k
+      // evaluations. Each one is a full region walk plus a heap-allocated sample
+      // vector, so without the per-tile memo the honest fix above would cost
+      // 3.26x what it needs to on the live costmap thread.
+      std::optional<unsigned char> cost;
+      if (memo != nullptr) {
+        const auto seen = memo->find(*cell_it);
+        if (seen != memo->end()) {
+          cost = seen->second;
+        } else {
+          cost = evaluateCell(*cell_it);
+          memo->emplace(*cell_it, cost);
+        }
+      } else {
+        cost = evaluateCell(*cell_it);
+      }
       if (!cost) {
         continue;   // unknown: leave it to another prior, as the single-cell path did
       }
