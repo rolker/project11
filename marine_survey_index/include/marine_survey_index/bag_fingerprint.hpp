@@ -103,10 +103,10 @@ struct BagFingerprint
 /// without clearing `scan_complete`: nothing is hidden by leaving it out, and
 /// a dangling symlink is not worth a permanent re-index.
 ///
-/// This function is silent by design: it is exported from the core library and
-/// linked into GUI processes (`marine_perception_tools`) where stderr is
-/// invisible. It reports the fact through the returned flags, and the reason
-/// through @p problem, leaving the diagnostic to the call site.
+/// This function is silent by design: it is exported from the core library,
+/// which is already linked into GUI processes where stderr is invisible, and
+/// will be called from them. It reports the fact through the returned flags,
+/// and the reason through @p problem, leaving the diagnostic to the call site.
 ///
 /// @param bag Bag directory or single bag file.
 /// @param problem Optional out-param. Set to a human-readable description of

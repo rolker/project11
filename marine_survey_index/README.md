@@ -25,8 +25,8 @@ ros2 run marine_survey_index survey_index_bag <bag_uri ...> [--scan DIR] \
     [--earth-frame earth] [--sound-speed 1500]
 ```
 
-**Exit status** (a scheduler or a `set -euo pipefail` store build is the
-consumer, so the codes distinguish the causes):
+**Exit status** (a scheduler or a store build is the consumer, so the codes
+distinguish the causes):
 
 | Code | Meaning |
 |------|---------|
@@ -43,6 +43,20 @@ nominating bags prints a `done:` summary line, including that one (`of 0
 nominated`); a run that exits `1` because the index DB itself could not be
 opened prints no summary, because nothing was done.
 
+The distinction only survives a consumer that reads the code. Under `set -e`
+an exit `3` aborts a store build exactly as hard as a `1`, which throws away
+the difference between "the index is unusable" and "the index is fine, one bag
+re-indexes every run" — so take the status yourself:
+
+```bash
+rc=0; survey_index_bag --scan ~/data/logs --db "$db" || rc=$?
+case $rc in
+  0) ;;
+  3) echo "warning: a bag re-indexes every run; index is complete" >&2 ;;
+  *) echo "error: survey index incomplete (rc=$rc)" >&2; exit "$rc" ;;
+esac
+```
+
 Single interleaved chronological pass per bag (the bounded-TF-window pattern
 from cube#63 / the sidescan importer): georeferences every MBES
 `SonarDetections` and sidescan `RawSonarImage` ping, computes its conservative
@@ -56,9 +70,13 @@ entry of undeterminable type, an unrepresentable timestamp) — is never skipped
 it is treated as changed, warned about on stderr, counted in the run summary,
 and makes the run exit non-zero, because a partial reading is stable and would
 otherwise skip a changed bag indefinitely. Symlinks are deliberately not
-followed into directories, by the fingerprint or by `--scan` (a link can close
-a cycle a recursive walk would never leave), so a symlinked directory is
-*reported* rather than walked — name the real path on the command line instead.
+followed *into* directories, by the fingerprint or by `--scan` (a link can
+close a cycle a recursive walk would never leave). This is narrower than it
+sounds: a symlink to a **bag** directory is nominated and indexed normally
+(under the bag's resolved path, so it is not a second bag), so a scan root made
+of links to bags on other volumes works. Only a symlink to an *intermediate*
+directory is reported rather than walked — bags beneath one are missed, so name
+the real path, or those bags, on the command line instead.
 An entry that definitively holds no bag bytes (a FIFO, socket or device node,
 or a symlink that resolves to nothing) is skipped without penalty: it hides
 nothing. A **decimated nav track** (one point per ≥

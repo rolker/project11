@@ -180,5 +180,10 @@ additive, no schema change.
   would make an unrelated touch of the directory re-index the bag); and it
   double-counts hardlinked members, so
   changing a link count changes the fingerprint without any content changing
-  (a spurious re-index, the safe direction). Delete `survey_index.db` and
+  (a spurious re-index, the safe direction); and on a network mount it reads
+  what the client's attribute cache holds, not the server (NFS `acregmax`
+  defaults to 60 s), so a bag rewritten on the server and indexed within that
+  window can fingerprint identically — the one on this list that bites on a
+  real survey tree, where the bags live on a NAS and a run can follow a copy
+  by seconds. Delete `survey_index.db` and
   re-run when a bag tree has been rewritten in place by any of those means.
