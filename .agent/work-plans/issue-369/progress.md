@@ -700,3 +700,63 @@ Lifecycle: **Implementation** → **review-code** (re-review the fixes).
 ---
 **Authored-By**: `Claude Code Agent`
 **Model**: `Claude Opus 5 (1M context)`
+
+## Implementation
+**Status**: complete
+**When**: 2026-09-10 13:24 -04:00
+**By**: Claude Code Agent (Claude Opus 5 (1M context))
+
+**Addressed**: `## Local Review (Pre-Push)` (round 3, complete, 2026-09-10 12:47 -04:00, branch at `ab272ff`) — 4 must-fixes, 8 suggestions
+**Commits**: `ba9cdf3` `444e773` `87ea704` `d2077a3`
+**Follow-up filed**: [rolker/unh_marine_autonomy#376](https://github.com/rolker/unh_marine_autonomy/issues/376) — "Store residency is unbounded on the costmap thread — a depth-adaptive store makes it gigabytes" (Part of #369; no closing keyword)
+
+**Operator decisions taken at the round-3 checkpoint** (all three offered with alternatives):
+- The costmap-cell coverage gap: **fix in code here**, not document-and-defer.
+- Partial no-data inside a query cell: **keep any-data-wins and document it**, rather than "any no-data means land" or a fraction threshold.
+- Store residency: **record it and file a follow-up**, rather than bounding it in this branch.
+
+### Actions
+
+- [x] (must-fix) **The region walk covered the GGGS query cell, not the costmap cell** — fixed in code. `fromCellSize` returns the coarsest level at or finer than the resolution, so a query cell spans (resolution/2, resolution] in latitude and that times cos(latitude) in longitude: 0.60 m² of a 1.00 m² costmap cell at 1 m and 43.5°N, and 18% of a 3.24 m² cell at 1.80 m resolution (level 9's 1.812 m is coarser, so the level does not step down). New `evaluateCostmapCell` reads every query cell the costmap cell's ground overlaps and keeps the most hazardous verdict. The fast render path builds a shared corner lattice instead of interpolating cell centres, so adjacent cells agree at their seams; the tf fallback path projects each cell's four corners and skips the cell if any is unprojectable, exactly as it did for the centre. Three tests, each verified to fail against centre sampling — `bathymetry_layer/src/bathymetry_layer.cpp`, `.hpp`, `test/test_bathymetry_layer.cpp` (`ba9cdf3`)
+- [x] (must-fix) **Partial no-data under `unsurveyed_is_lethal_`** — documented as the operator directed, not changed. The rule inside a query cell stays any-data-wins; the reasoning and the declined alternative are written at the decision site, because unfilled cells inside a fine tile are routine and "any no-data means land" would turn sparse but surveyed water lethal. The land question is answered one level up instead: across the query cells of a costmap cell, an uncovered one is land under the flag, which the new fold makes true and a test pins — `bathymetry_layer/src/bathymetry_layer.cpp` (`87ea704`, `ba9cdf3`)
+- [x] (must-fix) **Store residency is unbounded and was unanalysed** — recorded, not bounded, as directed. A tile is ~14.7 MB at every level and only its ground shrinks: ~19 MB per km² at level 10, ~1.2 GB at level 13, ~4.9 GB at level 14, loaded synchronously by `refreshWindow` with no cap, before and outside the per-cycle render budget. Written into the layer class doc, its README and the ADR-0010 D9 amendment, with the two stale "a handful of GGGS tiles for a lake" comments corrected. Filed as #376, sibling to #371 — `bathymetry_layer/src/bathymetry_layer.hpp`, `.cpp`, `README.md`, `docs/decisions/0010-geospatial-world-model.md` (`87ea704`)
+- [x] (must-fix) **The store README omitted `hasAnyData`** — documented in the Queries section, and the section's "every query returns `std::optional`" line corrected rather than deleted: it now says what is true of the optional-returning queries and names the `bool` existence probe as the deliberate exception — `marine_bathymetry_store/README.md` (`87ea704`)
+- [x] (suggestion) **The grown result structs are a stale-binary hazard for `cube_bathymetry`** — verified and scoped rather than worked around. `cube_bathymetry/src/store_import.cpp:543` takes `clearOverlappedDraft`'s result **by value**, and its build tree does track the installed header (`compiler_depend.make` lists `core_ws/install/marine_bathymetry_store/include/.../bathymetry_store.hpp`, a symlink-install symlink to the source), so a full `make build` rebuilds it. The hazard is a core_ws-only rebuild. Recorded as a Consequences row and called out in the PR body — `.agent/work-plans/issue-369/plan.md` (`d2077a3`)
+- [x] (suggestion) **The retained-residue doc framed the common case as an edge** — reframed. Coarse draft under finer processed is the *normal* shallow-water case under the ladder, supersession requires every one of 16-256 fine cells to hold data, and a CUBE surface is gappy by construction, so a large residue and a `draft/` that does not shrink are expected, not a malfunction — `marine_bathymetry_store/include/marine_bathymetry_store/bathymetry_store.hpp` (`87ea704`)
+- [x] (suggestion) **The draft-clear walk ran at the import's finest level** — fixed in code. `finestLevelOver` asks the cheap grid-level question and walks at the finest level with a tile over *this* draft cell. One distant level-14 tile no longer sets the granularity for an entire import (a level-14 tile covers 3,600 level-10 draft cells, each previously walking 256 cells against every level present). Not an approximation: a level with no grid over the cell contributes nothing either way. An equivalence test runs the same import with and without a distant fine tile — `marine_bathymetry_store/src/bathymetry_store.cpp`, `test/test_store.cpp` (`444e773`)
+- [x] (suggestion) **"Cost is bounded by data, not by geometry" overstated the bound** — corrected: only tiles are data-gated, and the walk inside a present tile is purely geometric, so a sparse level-14 tile still costs 4096 visits under a level-8 query — `marine_bathymetry_store/src/query.cpp` (`87ea704`)
+- [x] (suggestion) **`boxContains` had no caller** — dropped — `marine_bathymetry_store/src/cell_geometry.hpp` (`444e773`)
+- [x] (suggestion) **`docs/sonar_ecosystem.md` was stale** — the bathy-store rows now say the draft clear is level-aware and that `processed` itself is mixed-level, with a #369 link reference added — `87ea704`
+- [x] (suggestion) **Two round-2 files never became plan rows** — added, along with the full round-3 table and four new Consequences rows — `d2077a3`
+
+### Deferred
+
+- (suggestion) **`levelsPresent` is rebuilt per query cell per layer.** Not implemented here. The obvious remedy is a level cache inside the store, invalidated on every mutation site, and a stale level cache on the safety path is a worse failure than the scan it removes. This change also just multiplied the per-costmap-cell query count by 4-6, which strengthens the case for measuring the whole per-query cost together rather than hand-optimising one term of it blind. Left to [#371](https://github.com/rolker/unh_marine_autonomy/issues/371), which owns exactly that measurement.
+- (suggestion) **`cube_bathymetry` discards `coarse_draft_cells_retained` and re-scans every layer directory per persisted tile.** Out of repo; belongs to [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143), which owns the writer.
+
+### Build and test
+
+Built and tested from the worktree against the real suites; all three affected packages at 0 failures, linters included.
+
+```
+marine_autonomy:           147 tests, 0 errors, 0 failures, 16 skipped
+marine_bathymetry_store:   380 tests, 0 errors, 0 failures, 43 skipped
+bathymetry_layer:           53 tests, 0 errors, 0 failures,  4 skipped
+```
+
+Test counts grew by 4: `test_bathymetry_layer` 27 → 30, `test_store` 29 → 30. No existing test was weakened, removed or relaxed. One cpplint line-length divergence introduced by this round was fixed, not suppressed.
+
+The three new `bathymetry_layer` tests were empirically verified to FAIL against centre sampling before the fix: the implementation was temporarily reverted to a centre lookup and all three failed, including the `unsurveyed_is_lethal` asymmetry test, which read FREE_SPACE where the fold gives LETHAL.
+
+### Notes
+
+- This repo has no `.pre-commit-config.yaml`, so no pre-commit hooks ran on these commits. That is a repo governance gap, not a bypass — nothing was skipped with `--no-verify`.
+- No issue-closing keyword was used for #369, #371, #376 or cube_bathymetry#143 anywhere.
+
+### Next step
+
+Lifecycle: **Implementation** → **review-code** (round 4, re-review the fixes — the safety-path code changed substantially).
+
+---
+**Authored-By**: `Claude Code Agent`
+**Model**: `Claude Opus 5 (1M context)`
