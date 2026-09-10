@@ -286,7 +286,10 @@ TEST_F(IndexerExitStatusTest, ScanReportsASubtreeItCannotEnumerate)
     << "the nominated bag indexed cleanly, so only the scan can be what fails: " << run.output;
   EXPECT_NE(run.output.find("0 not fully readable"), std::string::npos) << run.output;
   // Nothing failed and nothing is untrustworthy: the incomplete *scan* is the
-  // whole reason this run cannot report success.
+  // whole reason this run cannot report success -- so the summary line has to
+  // say so, or it reads as a clean run with an inexplicable exit code.
+  EXPECT_NE(run.output.find("1 scan problem(s) reported above"), std::string::npos)
+    << "the summary must name the cause of its own exit status: " << run.output;
   EXPECT_EQ(run.status, 1) << run.output;
 }
 

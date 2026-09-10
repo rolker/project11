@@ -1070,8 +1070,17 @@ int main(int argc, char ** argv)
   std::cerr << "done: " << n_bags_indexed << " bag(s) indexed, "
             << n_bags_skipped << " unchanged skipped, "
             << n_bags_failed << " failed (of " << bags.size() << " nominated); "
-            << n_bags_unreadable << " not fully readable, so re-indexing every run"
-            << " -> " << db_path << "\n";
+            << n_bags_unreadable << " not fully readable, so re-indexing every run";
+  // A run that exits 1 solely because of a scan problem would otherwise print
+  // an all-clear summary (`0 failed ... 0 not fully readable`) and then exit
+  // 1, leaving anyone triaging from the summary line with a clean run and an
+  // inexplicable code. The zero-bags path already names its cause; this names
+  // it in the normal summary too, and says what it costs.
+  if (!scan_problems.empty()) {
+    std::cerr << "; " << scan_problems.size()
+              << " scan problem(s) reported above, so bags may be missing outright";
+  }
+  std::cerr << " -> " << db_path << "\n";
   // Exit status contract (also stated in the README):
   //   0  every nominated bag is in the index, and every fingerprint is
   //      authoritative
