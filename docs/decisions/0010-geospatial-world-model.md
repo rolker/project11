@@ -574,6 +574,43 @@ full-data replay remain offline properties).
   over surveyed ground it costs one cell and only a genuinely empty region pays
   the full walk.
 
+
+  **Round 3 — the costmap cell, and the memory the levels cost.** Two further
+  consequences surfaced in the third review round; both are recorded here
+  because they are properties of the *policy*, not of the patch that implements
+  it.
+
+  *The unit the query covers.* `fromCellSize` returns the coarsest level whose
+  cells are at or finer than the costmap resolution, so a GGGS query cell is
+  always **smaller** than the costmap cell whose cost it decides — 0.60 m² of a
+  1.00 m² cell at 1 m and 43.5 degrees north, and as little as 18% of the cell
+  just under a level boundary. Costing a costmap cell from the single query cell
+  under its centre therefore left 40-82% of its ground unread *at every store
+  resolution*: the same point-sampling defect the region-aware walk exists to
+  remove, one level up, and it would have made this amendment's own safety claim
+  false. `bathymetry_layer::evaluateCostmapCell` now reads every query cell the
+  costmap cell overlaps and keeps the most hazardous verdict. It also settles
+  where the "no data means land" question is answered: **inside** a query cell,
+  partial no-data still counts as surveyed (unfilled cells within one fused fine
+  surface are routine), while **across** the query cells of a costmap cell, an
+  unsurveyed one is land under `unsurveyed_is_lethal`. That asymmetry is the
+  operator's decision, taken with both alternatives on the table.
+
+  *Residency, not just fan-out.* The fan-out above is CPU. The same lever moves
+  memory, and harder: a tile is ~14.7 MB at **every** level, so what a finer
+  level buys in resolution it pays in tiles per unit ground — ~19 MB per km² at
+  level 10, ~1.2 GB at level 13, ~4.9 GB at level 14. `refreshWindow` loads the
+  whole buffered costmap window with no tile or byte cap, synchronously, before
+  and outside the per-cycle render budget. A 1 km global costmap over a shallow
+  level-13/14 store is thus a multi-gigabyte synchronous load on the costmap
+  thread — an OOM kill, or a stall the planner sees as a stale costmap. Like the
+  fan-out it is a design consequence of the ladder rather than a defect in the
+  writer, and like the fan-out it is recorded rather than bounded here: bounding
+  it means choosing an eviction policy and deciding what the layer reports while
+  a window is partly resident. Tracked as
+  [#376](https://github.com/rolker/unh_marine_autonomy/issues/376), sibling to
+  #371.
+
   With those in place a native level boundary *inside* `processed` carries no
   operational risk — the same argument the `reference` bullet below makes for
   its native-wins pyramid, and the same one that exempts `chart` above. The

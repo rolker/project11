@@ -83,6 +83,23 @@ namespace bathymetry_layer
 /// gate itself costs one cell over surveyed ground and only an empty region pays
 /// its full walk.
 ///
+/// **Runtime consequence — store RESIDENCY, the other half of the same lever
+/// (uma#369, round 3).** A `BathymetryTile` is a 960x960 pair of `double` bands
+/// — about 14.7 MB — at EVERY level; what shrinks with level is the ground it
+/// covers. A level-10 tile spans 869.7 m (~19 MB per km² of survey), a level-13
+/// tile 108.7 m (~1.2 GB/km²), a level-14 tile 54.4 m (~4.9 GB/km²).
+/// `refreshWindow` loads the whole buffered costmap window with no tile or byte
+/// cap, synchronously, and it runs BEFORE and OUTSIDE the per-cycle budget that
+/// guards the `generateTile` loop. A 1 km global costmap over a shallow store
+/// whose `processed` tiles are level 13/14 is therefore a multi-gigabyte
+/// synchronous load on the costmap thread: an OOM kill, or a stall the planner
+/// sees as a non-current costmap, with no parameter bounding either. It is
+/// reachable only once a depth-adaptive WRITER exists
+/// ([cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143)),
+/// which is why it is recorded here rather than bounded in this change; bounding
+/// it is an eviction-policy design, tracked in
+/// [#376](https://github.com/rolker/unh_marine_autonomy/issues/376).
+///
 /// A cell whose only data carries σ = ∞ / NaN (genuinely unknown quality) has no
 /// usable magnitude of uncertainty and stays conservatively `LETHAL_OBSTACLE`
 /// (the "data exists but no reliable sample" path) — same as before. This

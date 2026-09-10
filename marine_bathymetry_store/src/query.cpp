@@ -73,9 +73,12 @@ std::optional<BathyCell> cellIn(
 /// query level, one cell contains the whole query cell, so its centre resolves
 /// it exactly — see the callers' fast path.
 ///
-/// Cost is bounded by data, not by geometry: grids with no tile in this layer
-/// are skipped without touching a cell, so the walk visits only cells that
-/// exist. A survey covering the query cell at level 14 under a level-10 query
+/// Only TILES are data-gated: a grid with no tile in this layer is skipped
+/// without touching a cell. Inside a tile that IS present the walk is purely
+/// geometric — 4^(fine - query) cells — whether or not those cells hold
+/// anything, so a sparse level-14 tile holding ten values still costs 4096
+/// visits under a level-8 query cell. The bound is the level gap, not the data.
+/// A survey covering the query cell at level 14 under a level-10 query
 /// genuinely is 256 cells of finest data, and reading fewer of them is the
 /// defect this exists to prevent.
 ///

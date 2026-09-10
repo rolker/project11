@@ -388,8 +388,11 @@ std::vector<BathymetryLayer::CoverageBox> BathymetryLayer::buildCoverage() const
   if (!store_) {
     return coverage;
   }
-  // The store holds only the windowed coverage (a handful of GGGS tiles for a
-  // lake), so this is cheap. One AABB per resident tile across all source layers.
+  // One AABB per resident tile across all source layers. "A handful of tiles for
+  // a lake" held while `processed` was uniformly level 10; a depth-adaptive store
+  // (uma#369) puts 4^(level-10) times as many tiles over the same ground, and
+  // `tileHasCoverage` scans this vector once per rendered tile — see the
+  // residency note in the class doc and #376.
   for (const auto layer : marine_bathymetry_store::source_layers_by_priority) {
     for (const auto & entry : store_->tiles(layer)) {
       const gggs::GridIndex & grid = entry.first;
@@ -784,9 +787,9 @@ void BathymetryLayer::updateBounds(
         name_.c_str(), global_frame_id_.c_str(), e.what());
     }
 
-    // The store holds only the windowed coverage (a handful of GGGS tiles for a
-    // lake); collect their lat/lon AABBs once so generateTile can cheaply skip the
-    // per-cell projection on tiles that fall entirely outside coverage.
+    // Collect the resident tiles' lat/lon AABBs once so generateTile can cheaply
+    // skip the per-cell projection on tiles that fall entirely outside coverage.
+    // The list is no longer "a handful" under a depth-adaptive store (#376).
     const std::vector<CoverageBox> coverage = buildCoverage();
 
     // #2 safety: an EMPTY store window under unsurveyed_is_lethal_ would make
@@ -1025,6 +1028,19 @@ std::optional<unsigned char> BathymetryLayer::evaluateCell(
   //   a between-lines gap, an absent fine tile beside a present one — returned
   //   early and dropped the rock in the other 255. Never gate the region-aware
   //   query behind a point query.
+  //   PARTIAL COVERAGE INSIDE THE QUERY CELL — the operator's call, round 3.
+  //   One covered native cell holding data makes the whole query cell SURVEYED,
+  //   and the cost comes from the cells that hold data. A query cell that is
+  //   mostly no-data with a little deep water in it therefore reads as deep
+  //   water, including under unsurveyed_is_lethal_, where it previously
+  //   depended on whatever the centre happened to hold. The alternative — any
+  //   covered no-data cell means land — was considered and declined: unfilled
+  //   cells inside a fine tile are routine (a gated-drop hole, a between-lines
+  //   gap), so that rule would turn surveyed open water lethal wherever the
+  //   surface is sparse, which is most of a depth-adaptive store's fine band.
+  //   The land question is answered one level up instead, across the query
+  //   cells of a costmap cell, where an uncovered cell is a whole cell of the
+  //   basin's prior with nothing in it (see evaluateCostmapCell).
   const std::vector<DepthSample> samples =
     reliableSamples(*store_, cell, std::numeric_limits<double>::infinity());
 

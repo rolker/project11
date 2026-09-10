@@ -107,6 +107,38 @@ or measuring it. `hasAnyData` short-circuits at the first cell holding data, so
 the existence gate costs one cell over surveyed ground; only a genuinely empty
 region pays its full walk.
 
+### The query cell is smaller than the costmap cell (uma#369, round 3)
+
+`fromCellSize(resolution)` returns the coarsest level whose cells are *at or
+finer than* the costmap resolution, so the GGGS query cell is always smaller than
+the costmap cell it costs: 0.60 m² of a 1.00 m² cell at 1 m resolution and 43.5
+degrees north, and as little as 18% of the cell at a resolution just under a
+level boundary. The layer therefore evaluates every query cell the costmap cell's
+ground overlaps and keeps the **most hazardous** verdict, rather than the one
+under the cell's centre — otherwise 40-82% of every costmap cell went unqueried
+no matter how fine the store was.
+
+Two asymmetries are deliberate. The lat/lon box of a map-frame-aligned cell
+over-covers under a rotated map, which can only add a hazard. And an *unsurveyed*
+query cell inside the costmap cell makes it lethal under `unsurveyed_is_lethal`,
+which is stricter than the rule inside a query cell, where partial no-data still
+counts as surveyed: within a cell the gaps are routine holes in one fused
+surface, across cells they are whole cells of the basin's prior with nothing in
+them.
+
+### Store residency, the other half of the lever (uma#369, round 3)
+
+A store tile is a 960x960 pair of `double` bands — about **14.7 MB at every
+level**; only the ground it covers shrinks. That is ~19 MB per km² of survey at
+level 10, ~1.2 GB at level 13 and ~4.9 GB at level 14. `refreshWindow` loads the
+whole buffered costmap window with no tile or byte cap, synchronously, and it
+runs before and outside the per-cycle budget that guards rendering. A 1 km global
+costmap over a shallow level-13/14 store is therefore a multi-gigabyte
+synchronous load on the costmap thread: an OOM kill, or a stall the planner sees
+as a costmap that is not current. Reachable once the depth-adaptive writer lands
+(cube_bathymetry#143); bounding it is an eviction-policy design, tracked in
+[#376](https://github.com/rolker/unh_marine_autonomy/issues/376).
+
 The critical distinction: a surveyed-but-noisy cell is a **navigable-with-caution
 obstacle**, costed by its worst-case clearance — not an unsurveyed cell (treating
 it as unsurveyed would be a safety regression), and no longer wholesale keepout

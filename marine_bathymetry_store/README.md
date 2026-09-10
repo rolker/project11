@@ -108,12 +108,21 @@ written.
   than the shoalest pick, for callers that cost each and take the most hazardous
   (ADR-0010 §D7). Region-aware in the same way, so one query cell over a fine
   `processed` tile can return one sample per covered native cell.
+- `hasAnyData(store, cell)` — quality-blind existence probe: does **any** layer
+  hold data anywhere under this cell? Region-aware in the same way, and it
+  short-circuits at the first cell holding data, so it costs one cell over
+  surveyed ground and pays the full walk only over an empty region. This is the
+  gate that separates *unsurveyed* from *surveyed but unusable* in
+  `bathymetry_layer` (uma#369); it deliberately applies no reliability test,
+  because folding one in would collapse that distinction.
 - `forEachCellBestSource(store, min, max, visitor)` — the region form, over a
   geographic box.
 
-Every query returns `std::optional`: **`std::nullopt` means *unknown*** — no
-(reliable) layer covers the cell. A safety-conscious consumer must treat unknown
-as not-safe, never as deep water (ADR-0002 §D7).
+Every query that returns a value returns `std::optional`: **`std::nullopt` means
+*unknown*** — no (reliable) layer covers the cell. A safety-conscious consumer
+must treat unknown as not-safe, never as deep water (ADR-0002 §D7).
+`hasAnyData` is the exception by design: it answers a yes/no existence question,
+so it returns `bool` and has no unknown state.
 
 ### Persistence (`tile_io.hpp`)
 

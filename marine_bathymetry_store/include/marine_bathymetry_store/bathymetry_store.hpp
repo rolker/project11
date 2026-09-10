@@ -89,6 +89,18 @@ struct DraftClearResult
   /// depth-adaptive `processed` (uma#369) that is the *deep* end of the ladder;
   /// where `processed` goes finer than `draft` (levels 11-14, shallow water) the
   /// coarse path is live.
+  ///
+  /// **Expect this to be large in shallow water, and expect `draft/` not to
+  /// shrink there** (round 3). `draft` stays fixed-level while `processed` goes
+  /// to 11-14, so coarse-draft-under-finer-processed is the NORMAL case for a
+  /// shallow survey, not an edge residue — and supersession requires *every* one
+  /// of the 16-256 fine cells under a draft cell to hold data, while a CUBE
+  /// `processed` surface is gappy by construction (gated-drop holes,
+  /// between-lines gaps). One hole keeps the whole draft cell. The direction is
+  /// shoal-safe and the count makes it visible, but a caller should not read a
+  /// large residue as a malfunction, and a draft blunder over ground the re-run
+  /// does speak for can keep winning `shallowestReliable` until the draft cell is
+  /// fully covered.
   std::size_t coarse_draft_cells_retained = 0;
 };
 
