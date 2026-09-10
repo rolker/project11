@@ -59,6 +59,12 @@ namespace bathymetry_layer
 /// holds data finer than the costmap's query level, every covered native cell is
 /// read, not one sample from the query cell's centre. A point-sampled gate walks
 /// past a rock sitting anywhere but the centre — see `query.hpp`'s `hasAnyData`.
+/// And the region is the whole COSTMAP cell, not one GGGS cell inside it: a query
+/// cell is smaller than the costmap cell it costs (0.60 m² of 1.00 m² at 1 m and
+/// 43.5°N, and as little as 18% of it just under a level boundary), so
+/// `evaluateCostmapCell` reads every query cell the costmap cell overlaps and
+/// keeps the most hazardous verdict. Reading one of them left 40-82% of the
+/// cell's ground unqueried at every store resolution.
 ///
 /// **Runtime consequence — the fan-out is a config parameter (uma#369).** The
 /// query level is `BathymetryStore::fromCellSize(resolution_)`, so the gap
@@ -67,7 +73,8 @@ namespace bathymetry_layer
 /// uniform level-10 `processed` is already a 4x or 16x fan-out per cell, and a
 /// 1 m global over level-14 depth-adaptive tiles would be 256 covered cells per
 /// costmap cell — ~2.56 M cell visits for one 100x100 tile, each a map find and
-/// a `push_back`. `generateTile`'s time budget is checked only *between* tiles,
+/// a `push_back` — multiplied again by the 4-6 query cells each costmap cell
+/// overlaps (`evaluateCostmapCell`). `generateTile`'s time budget is checked only *between* tiles,
 /// so one tile is uninterruptible once started. Reducing the work by
 /// point-sampling is exactly the defect uma#369 fixed, so the remedy is a bound
 /// or an interruption point, not a narrower query; tracked in
@@ -142,6 +149,17 @@ protected:
   // Returns std::nullopt when the cell is truly unsurveyed (the layer leaves the
   // master cost untouched); otherwise the cost to combine into the master grid.
   std::optional<unsigned char> evaluateCell(const gggs::CellIndex & cell) const;
+
+  // The cost of one COSTMAP cell, given the geographic bounding box of its
+  // ground. Reads every GGGS query cell the box overlaps and keeps the most
+  // hazardous verdict; std::nullopt when none of them has a verdict (all
+  // unsurveyed, and unsurveyed_is_lethal_ is not set). A query cell is smaller
+  // than a costmap cell, so costing from the single cell under the centre left
+  // 40-82% of the ground unread (round 3, uma#369) — see the implementation for
+  // the geometry and for the two deliberate asymmetries it carries.
+  // Exposed for unit testing.
+  std::optional<unsigned char> evaluateCostmapCell(
+    double min_lat, double min_lon, double max_lat, double max_lon) const;
 
   // Expand a leading "~"/"~/" in @p path to $HOME (so one portable store_path
   // resolves on both the boat and dev/sim). Absolute, empty, and "~user" paths

@@ -472,18 +472,46 @@ void BathymetryLayer::generateTile(
       tile_size_, tile_size_, resolution_, world_min_x, world_min_y,
       nav2_costmap_2d::NO_INFORMATION);
     const double inv = 1.0 / static_cast<double>(tile_size_);
-    for (int ty = 0; ty < tile_size_; ++ty) {
-      const double fy = (static_cast<double>(ty) + 0.5) * inv;
-      for (int tx = 0; tx < tile_size_; ++tx) {
-        const double fx = (static_cast<double>(tx) + 0.5) * inv;
+    // Corner LATTICE, not cell centres (round 3): the cost of a costmap cell is
+    // decided over the cell's whole ground, so each cell needs its four corner
+    // geos, and adjacent cells share them. One (tile_size+1)^2 lattice is both
+    // cheaper than four bilinear evaluations per cell and exactly consistent at
+    // the shared edges.
+    const int lattice_n = tile_size_ + 1;
+    std::vector<double> lat_lattice(static_cast<size_t>(lattice_n) * lattice_n);
+    std::vector<double> lon_lattice(lat_lattice.size());
+    for (int iy = 0; iy < lattice_n; ++iy) {
+      const double fy = static_cast<double>(iy) * inv;
+      for (int ix = 0; ix < lattice_n; ++ix) {
+        const double fx = static_cast<double>(ix) * inv;
         const double w00 = (1.0 - fx) * (1.0 - fy);
         const double w10 = fx * (1.0 - fy);
         const double w01 = (1.0 - fx) * fy;
         const double w11 = fx * fy;
-        const double lat = w00 * clat[0] + w10 * clat[1] + w01 * clat[2] + w11 * clat[3];
-        const double lon = w00 * clon[0] + w10 * clon[1] + w01 * clon[2] + w11 * clon[3];
-        const gggs::CellIndex cell = store_->cellIndex(lat, lon);
-        const std::optional<unsigned char> evaluated = evaluateCell(cell);
+        const size_t k = static_cast<size_t>(iy) * lattice_n + ix;
+        lat_lattice[k] = w00 * clat[0] + w10 * clat[1] + w01 * clat[2] + w11 * clat[3];
+        lon_lattice[k] = w00 * clon[0] + w10 * clon[1] + w01 * clon[2] + w11 * clon[3];
+      }
+    }
+    for (int ty = 0; ty < tile_size_; ++ty) {
+      for (int tx = 0; tx < tile_size_; ++tx) {
+        const size_t sw = static_cast<size_t>(ty) * lattice_n + tx;
+        const size_t se = sw + 1;
+        const size_t nw = sw + lattice_n;
+        const size_t ne = nw + 1;
+        const std::optional<unsigned char> evaluated = evaluateCostmapCell(
+          std::min(
+            std::min(lat_lattice[sw], lat_lattice[se]),
+            std::min(lat_lattice[nw], lat_lattice[ne])),
+          std::min(
+            std::min(lon_lattice[sw], lon_lattice[se]),
+            std::min(lon_lattice[nw], lon_lattice[ne])),
+          std::max(
+            std::max(lat_lattice[sw], lat_lattice[se]),
+            std::max(lat_lattice[nw], lat_lattice[ne])),
+          std::max(
+            std::max(lon_lattice[sw], lon_lattice[se]),
+            std::max(lon_lattice[nw], lon_lattice[ne])));
         if (evaluated) {
           tile->setCost(
             static_cast<unsigned int>(tx), static_cast<unsigned int>(ty), *evaluated);
@@ -509,10 +537,30 @@ void BathymetryLayer::generateTile(
       double wy;
       tile->mapToWorld(
         static_cast<unsigned int>(tx), static_cast<unsigned int>(ty), wx, wy);
-      gggs::CellIndex cell;
+      // The cell's four corners, not its centre: the cost is decided over the
+      // cell's whole ground (round 3). A throw at any corner skips the cell,
+      // exactly as the centre-only projection did.
+      const double half = 0.5 * resolution_;
+      double min_lat = 0.0;
+      double min_lon = 0.0;
+      double max_lat = 0.0;
+      double max_lon = 0.0;
       try {
-        const auto geo = worldToLatLon(wx, wy, to_earth);
-        cell = store_->cellIndex(geo.latitude, geo.longitude);
+        bool first = true;
+        for (int c = 0; c < 4; ++c) {
+          const auto geo = worldToLatLon(
+            wx + ((c & 1) ? half : -half), wy + ((c & 2) ? half : -half), to_earth);
+          if (first) {
+            min_lat = max_lat = geo.latitude;
+            min_lon = max_lon = geo.longitude;
+            first = false;
+            continue;
+          }
+          min_lat = std::min(min_lat, geo.latitude);
+          max_lat = std::max(max_lat, geo.latitude);
+          min_lon = std::min(min_lon, geo.longitude);
+          max_lon = std::max(max_lon, geo.longitude);
+        }
       } catch (const tf2::TransformException & e) {
         RCLCPP_WARN_THROTTLE(
           logger_, *clock_, 10000,
@@ -520,7 +568,8 @@ void BathymetryLayer::generateTile(
           name_.c_str(), e.what());
         continue;
       }
-      const std::optional<unsigned char> evaluated = evaluateCell(cell);
+      const std::optional<unsigned char> evaluated =
+        evaluateCostmapCell(min_lat, min_lon, max_lat, max_lon);
       if (evaluated) {
         tile->setCost(
           static_cast<unsigned int>(tx), static_cast<unsigned int>(ty), *evaluated);
@@ -874,6 +923,71 @@ unsigned char BathymetryLayer::computeCost(double worst_case_clearance, bool tru
   const double scaled =
     nav2_costmap_2d::MAX_NON_OBSTACLE * (1.0 - (worst_case_clearance - minimum_depth_) / range);
   return static_cast<unsigned char>(scaled);
+}
+
+std::optional<unsigned char> BathymetryLayer::evaluateCostmapCell(
+  double min_lat, double min_lon, double max_lat, double max_lon) const
+{
+  if (!store_) {
+    return std::nullopt;
+  }
+  const gggs::Level & level = store_->level();
+
+  // The GGGS query cell is SMALLER than the costmap cell it costs (round 3).
+  // `BathymetryStore::fromCellSize(resolution_)` returns the coarsest level whose
+  // cells are AT OR FINER than the costmap resolution, so a query cell's latitude
+  // extent lies in (resolution/2, resolution] and its longitude extent is that
+  // times cos(latitude). At 1 m resolution and 43.5°N that is 0.906 m × 0.657 m =
+  // 0.60 m² of a 1.00 m² costmap cell; just under a level boundary (1.80 m
+  // resolution, still level 10) it is 0.60 m² of 3.24 m². Costing the cell from
+  // the single GGGS cell under its CENTRE therefore left 40-82% of its ground
+  // unread — a 0.3 m rock in the remainder was never queried, no matter how fine
+  // `processed` was, which defeated the region-aware walk uma#369 exists for.
+  //
+  // So: read EVERY GGGS cell overlapping the costmap cell and keep the most
+  // hazardous verdict. Two consequences, both deliberate:
+  //
+  //  - The lat/lon box is the AABB of a cell that is axis-aligned in the MAP
+  //    frame, so under a rotated map->WGS84 relation it is slightly larger than
+  //    the cell. Over-reading neighbouring ground can only ADD a hazard, never
+  //    hide one; under-reading is the failure that grounds the boat.
+  //  - A cell the box covers that is UNSURVEYED makes the whole costmap cell
+  //    LETHAL when unsurveyed_is_lethal_ is set (its evaluateCell returns
+  //    LETHAL, and this fold keeps the max). That is a stricter rule than the
+  //    one INSIDE a query cell, where partial no-data still counts as surveyed
+  //    (see evaluateCell) — deliberately: there the no-data cells are routine
+  //    gaps inside one fused surface, here they are whole query cells of a
+  //    closed basin's prior, which is what the flag calls land.
+  //
+  // Cost: 4-6 query cells per costmap cell at typical resolutions, multiplying
+  // the per-query fan-out recorded on unh_marine_autonomy#371.
+  if (max_lon < min_lon) {
+    // Antimeridian straddle: not iterable as a lat/lon range. Fall back to the
+    // centre cell — the pre-round-3 behaviour, and the one place the partial
+    // coverage above survives. No boat this store serves operates there.
+    return evaluateCell(
+      store_->cellIndex(0.5 * (min_lat + max_lat), min_lon));
+  }
+  const auto south_west = gggs::geoPoint(min_lat, min_lon);
+  const auto north_east = gggs::geoPoint(max_lat, max_lon);
+  std::optional<unsigned char> worst;
+  for (gggs::GridAreaIterator grid_it(
+      level.gridIndex(min_lat, min_lon), level.gridIndex(max_lat, max_lon));
+    grid_it.valid(); grid_it.next())
+  {
+    for (gggs::CellAreaIterator cell_it(*grid_it, south_west, north_east);
+      cell_it.valid(); cell_it.next())
+    {
+      const std::optional<unsigned char> cost = evaluateCell(*cell_it);
+      if (!cost) {
+        continue;   // unknown: leave it to another prior, as the single-cell path did
+      }
+      if (!worst || *cost > *worst) {
+        worst = cost;
+      }
+    }
+  }
+  return worst;
 }
 
 std::optional<unsigned char> BathymetryLayer::evaluateCell(
