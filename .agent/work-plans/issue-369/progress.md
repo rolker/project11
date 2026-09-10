@@ -790,3 +790,48 @@ Lifecycle: **Implementation** → **review-code** (round 4, re-review the fixes 
 ---
 **Authored-By**: `Claude Code Agent`
 **Model**: `Claude Opus 5 (1M context)`
+
+## Implementation
+**Status**: complete
+**When**: 2026-09-10 13:55 -04:00
+**By**: Claude Code Agent (Claude Opus 5 (1M context))
+
+**Addressed**: `## Local Review (Pre-Push)` (round 4, complete, 2026-09-10 13:52 -04:00, branch at `aead3e4`) — 2 must-fixes, 3 suggestions, all 5 actioned
+**Commits**: `ae89283` `4f62349`
+
+### Actions
+
+- [x] (must-fix) **The antimeridian guard was dead code hiding an unbounded walk** — the test is now the box SPAN (`max_lon - min_lon > 180.0`), which is what a folded straddle actually looks like, and the fallback resolves the centre longitude across the seam rather than across the fold. A test pins that the straddle lands on the cell holding the box's true centre; a regression manifests as a hang, which the ctest timeout catches — `bathymetry_layer/src/bathymetry_layer.cpp` (`ae89283`)
+- [x] (must-fix) **Shared query cells were re-evaluated per costmap cell** — a per-tile memo, keyed on `gggs::CellIndex`, scoped to one rendered tile so it cannot outlive a window refresh. Both render paths carry one. It removes the measured 3.26x redundancy without narrowing any query: ~16.8k distinct evaluations per 100x100 tile at 1 m instead of ~54.8k. A test pins that it is a pure cache cold, warm, and over a cached `std::nullopt` — `bathymetry_layer/src/bathymetry_layer.cpp`, `.hpp`, `test/test_bathymetry_layer.cpp` (`ae89283`)
+- [x] (suggestion) **The walk-granularity test could not fail** — replaced with the discriminating case: draft at the same level as the processed tile over it, with a gated-drop hole. The covering-level walk takes the centre branch and reports 0 residue; the old whole-import granularity was dragged to level 14 by a tile four grids away and reported 1 — `marine_bathymetry_store/test/test_store.cpp` (`4f62349`). The reporting change is real, so `DraftClearResult` now documents that the count can read *lower* as well as higher — `bathymetry_store.hpp`, `bathymetry_store.cpp` (`4f62349`)
+- [x] (suggestion) **The fan-out figure was wrong by 50%** — the measured distribution is in the code comment and the class doc: 4 to 9 query cells per costmap cell, mean 5.48 over 1,600 placements, the 9s being cells whose box straddles both a grid row and a grid column — `ae89283`
+- [x] (suggestion) **The channel width was never quantified** — written into the ADR D9 amendment and `bathymetry_layer/README.md`: the lethal boundary advances one costmap cell plus one query cell past the true unsurveyed edge, 1.90 m in latitude and 1.66 m in longitude at 1 m and 43.5N against ~0.5 m before, so a surveyed gap loses ~2.5 m of usable width and nothing is logged when it does — `ae89283`
+
+Also corrected while there: the class doc claimed a bound or an interruption point were the only remedies for the fan-out. Removing *redundant* work is another, and the memo is the first instance.
+
+### Deferred
+
+None.
+
+### Build and test
+
+```
+marine_autonomy:           147 tests, 0 errors, 0 failures, 16 skipped
+marine_bathymetry_store:   380 tests, 0 errors, 0 failures, 43 skipped
+bathymetry_layer:           55 tests, 0 errors, 0 failures,  4 skipped
+```
+
+Test counts grew by 2 this round (`test_bathymetry_layer` 30 → 32), and one round-3 test was replaced by a discriminating one rather than added to. One cpplint line-length divergence introduced by the new doc text was fixed, not suppressed.
+
+### Notes
+
+- The measured render figures come from the systemic review pass building the branch's real query path on an i7-10875H laptop, which is faster than the boat's hardware. The before column and the 3.26x redundancy were measured; the after column applies the memo's ratio to them, and the code comment says so rather than presenting derived numbers as measured.
+- **Open for the operator**: the ~2.5 m of channel width the closed-basin flag now costs is a consequence of the round-3 coverage fix, not a defect in it. If that is too aggressive for Massabesic, the lever is to require more than incidental overlap before an unsurveyed query cell condemns a costmap cell.
+
+### Next step
+
+Lifecycle: **Implementation** → push / open PR → **triage-reviews**. The branch is already pushed as [draft PR#372](https://github.com/rolker/unh_marine_autonomy/pull/372), which has drawn no bot review because Copilot does not review drafts — taking it out of draft is what starts that.
+
+---
+**Authored-By**: `Claude Code Agent`
+**Model**: `Claude Opus 5 (1M context)`
