@@ -98,3 +98,26 @@ of the code being fixed but doesn't block this.
 
 ### Open questions
 - [ ] In-place-rewrite test timing: default is no artificial sleep (assert distinct `mtime_ns` across rewrite); fall back to forcing an explicit timestamp (e.g. `utimensat`) only if that proves flaky in CI — verify locally during implementation.
+
+## Plan Review
+**Status**: complete
+**When**: 2026-09-10 10:22 -04:00
+**By**: Claude Code Agent (Claude Opus)
+
+**Plan**: `.agent/work-plans/issue-375/plan.md` at `fb8bff2`
+**PR**: PR-less (`--issue` mode, branch `feature/issue-375`)
+**Verdict**: changes-requested
+
+### Findings
+- [ ] (must-fix) The `INT64_MIN` unreadable-mtime sentinel is written back into `bags.mtime_ns` (`survey_index_bag_main.cpp:651-667`), so on the next run `ledgerState()`'s `stored == fp.mtime_ns` is `INT64_MIN == INT64_MIN` → unchanged → skip; the loud policy defeats itself on run 2. Plan must state whether `ledgerState()` returns changed whenever the fingerprint is a sentinel, or the write path refuses to persist one — and test that, not the weaker "does not match a (0,0) row" assertion — `plan.md` Approach step 4 / test step 7 bullet 4
+- [ ] (must-fix) `ledgerState()` cannot move alone: it calls `prepareOrThrow()`/`SqliteError`, which live in main.cpp's anonymous namespace (73-321) and are still needed by main's re-index path (638-703). Plan lists only three symbols moving and is silent on the helpers; also, leaving the anonymous namespace for `namespace marine_survey_index` makes step 5's "call sites are unchanged" false (they become `marine_survey_index::fingerprint(...)`, as every other core-lib call in main.cpp already is) — `plan.md` Approach steps 1 and 5
+- [ ] (must-fix) The unreadable-mtime policy is a NEW observable contract that `docs/survey_index_schema.md:126` ("Incremental re-runs", the stated cross-stage contract) does not cover, so "Documentation & Instruction Impact: None — this PR makes the implementation match the existing description" is right for the mtime fix and wrong for the new policy; one sentence there, this PR. `CMakeLists.txt:29-31`'s comment enumerating the core lib's contents also goes stale — `plan.md` Documentation & Instruction Impact
+- [ ] (suggestion) Settle the Open Question instead of deferring: force the timestamp (`std::filesystem::last_write_time(path, t)` as a *setter* is C++17 and converts the epoch correctly inside libstdc++, so it is safe even in a test policing this bug; or `utimensat`). Same line count as "assert they differ", removes an if-it-flakes-in-CI branch, and lets the accuracy test assert an exact value rather than the plan's ±2 s window — which would not catch a future seconds-vs-nanoseconds scaling slip — `plan.md` Open Questions
+- [ ] (suggestion) Take size and mtime from one `::stat` (`st.st_size` is already in the struct): halves syscalls over the recursive walk and makes "unreadable" one condition instead of two — today's code accumulates a file's size even when its mtime read fails — `plan.md` Approach step 2
+- [ ] (suggestion) Record the `::stat` trade in the plan: it is the right call here (C++17 is fixed, `file_clock::to_sys` is C++20, and `marine_bathymetry_store/src/tile_io.cpp:721` is in-repo precedent). Consequences to note: `st_mtim` is POSIX.1-2008, not the macOS spelling (`st_mtimespec`) — fine for a Linux/jazzy package but newly non-portable where `<filesystem>` was not; no precision loss either way (both nanosecond-resolution, both follow symlinks, matching the walk's `is_regular_file`); a later C++20 bump leaves `::stat` correct, so no follow-up debt — `plan.md` Approach step 2
+- [ ] (suggestion) stderr is the right channel — `main()` already reports every error there, so a different channel would be the inconsistency; the every-run repetition is correct loudness under automation (one line per affected bag). Be deliberate that this only reads as loud once finding 1 is fixed; unfixed it is a warning printed next to a silent skip — `plan.md` Approach step 4
+- [ ] (suggestion) Mirror `test_query_join.cpp`'s fixture (SetUp/TearDown, `:memory:`) for the temp-directory lifecycle, not `test_schema.cpp` as cited — no test in this package touches the filesystem today and `test_schema.cpp` uses `:memory:`. Cleanup belongs in `TearDown()`: a failing `ASSERT_*` returns early and would leak the temp tree — `plan.md` Approach step 7
+
+---
+**Authored-By**: `Claude Code Agent`
+**Model**: `Claude Opus`
