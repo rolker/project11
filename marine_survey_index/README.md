@@ -25,6 +25,16 @@ ros2 run marine_survey_index survey_index_bag <bag_uri ...> [--scan DIR] \
     [--earth-frame earth] [--sound-speed 1500]
 ```
 
+**Exit status** (a scheduler or a `set -euo pipefail` store build is the
+consumer, so the codes distinguish the causes):
+
+| Code | Meaning |
+|------|---------|
+| `0` | every nominated bag is in the index, and every fingerprint is trustworthy |
+| `1` | the index is **incomplete**: a bag failed mid-index or could not be opened, a `--scan` tree could not be fully enumerated (bags may be missing outright), or the index DB itself could not be opened (nothing was done) |
+| `2` | usage error — bad flag value, or no bags nominated |
+| `3` | the index is complete, but at least one bag cannot be fingerprinted authoritatively and so **re-indexes on every run** until the cause is fixed |
+
 Single interleaved chronological pass per bag (the bounded-TF-window pattern
 from cube#63 / the sidescan importer): georeferences every MBES
 `SonarDetections` and sidescan `RawSonarImage` ping, computes its conservative
@@ -33,11 +43,17 @@ a SQLite sidecar. Indexing is from **ping geometry, not store acceptance** —
 pings CUBE rejected still index. Unchanged already-indexed bags are skipped
 (size+mtime ledger); changed bags are re-indexed atomically. A bag the indexer
 could not fully read — no readable timestamp anywhere beneath it, or an
-incomplete walk (an unreadable subdirectory, an entry of undeterminable type,
-an unrepresentable timestamp) — is never skipped: it is treated as changed,
-warned about on stderr, counted in the run summary, and makes the run exit
-non-zero, because a partial reading is stable and would otherwise skip a
-changed bag indefinitely. A **decimated nav track** (one point per ≥
+incomplete walk (an unreadable subdirectory, a *symlinked* subdirectory, an
+entry of undeterminable type, an unrepresentable timestamp) — is never skipped:
+it is treated as changed, warned about on stderr, counted in the run summary,
+and makes the run exit non-zero, because a partial reading is stable and would
+otherwise skip a changed bag indefinitely. Symlinks are deliberately not
+followed into directories, by the fingerprint or by `--scan` (a link can close
+a cycle a recursive walk would never leave), so a symlinked directory is
+*reported* rather than walked — name the real path on the command line instead.
+An entry that definitively holds no bag bytes (a FIFO, socket or device node,
+or a symlink that resolves to nothing) is skipped without penalty: it hides
+nothing. A **decimated nav track** (one point per ≥
 `--nav-stride-m` metres, default 10) is recorded per bag so the explorer map
 can draw the survey track from the index alone.
 
@@ -76,7 +92,20 @@ decimation gate and accessors, and the bag fingerprint the incremental
 skip decides on (mtime accuracy against `::stat`, a same-size in-place
 rewrite, the ledger round-trip, and every route by which the fingerprint
 must refuse to call a bag unchanged — unreadable timestamp, partial walk,
-unrepresentable mtime, legacy `mtime_ns = 0` row):
+symlinked subdirectory, unresolvable symlink, unrepresentable mtime, legacy
+`mtime_ns = 0` row — plus the routes it must *not* penalise, a dangling
+symlink and a FIFO).
+
+The permission-based routes cannot run as root (root ignores the mode bits),
+and both hosted CI and `ci_local.sh` run as root — so each trust flag is
+guarded by at least one route that needs no permission trick (a symlinked
+subdirectory reaches `mtime_valid && !scan_complete` directly). Keep it that
+way: a guard that skips in every merge-gating path defends nothing.
+
+`test_indexer_exit_status` runs the built `survey_index_bag` binary, because
+the exit-status contract above lives in `main()` where no library call reaches
+it: an unopenable bag, an indexed-but-untrustworthy bag, a `--scan` subtree
+that was dropped, and a usage error.
 
 ```bash
 colcon test --packages-select marine_survey_index

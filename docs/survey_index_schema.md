@@ -42,8 +42,9 @@ CREATE TABLE bags (
   path          TEXT    NOT NULL UNIQUE,  -- absolute, lexically normalized
   size_bytes    INTEGER NOT NULL,         -- fingerprint: total regular-file bytes
   mtime_ns      INTEGER NOT NULL,         -- fingerprint: newest mtime under the
-                                          -- bag, UNIX epoch nanoseconds (UTC),
-                                          -- 0 = unknown; see Incremental re-runs
+                                          -- bag, UNIX epoch nanoseconds (UTC);
+                                          -- 0 if none was readable (and also a
+                                          -- legal reading) -- see below
   indexed_at_ns INTEGER NOT NULL          -- wall clock when (re-)indexed
 );
 
@@ -133,20 +134,33 @@ additive, no schema change.
   partial reading can present as an up-to-date bag. Two distinct cases:
   - **No timestamp at all** — every `stat` beneath the bag failed, or it holds
     no regular files. `mtime_ns` is then stored as `0`.
-  - **An incomplete walk** — an unreadable subdirectory, an entry whose type
-    could not be determined, a file that vanished mid-walk, a path that is not
-    a regular file or directory, or a timestamp outside the range `mtime_ns`
+  - **An incomplete walk** — an unreadable subdirectory, a *symlink to* a
+    subdirectory (deliberately not followed: a link can close a cycle a
+    recursive walk would never leave, so it is reported instead), a symlink
+    whose target's existence cannot be established, an entry whose type could
+    not be determined, a file that vanished mid-walk, a path that is not a
+    regular file or directory, or a timestamp outside the range `mtime_ns`
     can represent. This case matters because a partial walk yields a *stable*
     size and mtime: it would otherwise match its own stored copy for as long as
     the cause persisted, skipping a changed bag indefinitely (#375).
+
+  An entry the walk knows *definitively* carries no bag bytes — a FIFO, socket
+  or device node, or a symlink that resolves to nothing — is neither counted
+  nor treated as an incomplete walk: leaving it out hides nothing, and a
+  dangling symlink is not worth a permanent re-index.
 
   Whatever is stored is never load-bearing — the re-index decision is made
   before the stored values are read.
 - **`mtime_ns` units and epoch.** UNIX epoch nanoseconds UTC, from `::stat`'s
   `st_mtim` (**not** `std::filesystem::last_write_time`, whose `file_time_type`
-  epoch is not the UNIX epoch on libstdc++ — that mismatch is #375). `0` means
-  "no readable timestamp", which is also what every row written before #375
-  holds.
+  epoch is not the UNIX epoch on libstdc++ — that mismatch is #375). `0` is
+  what a bag with no readable timestamp stores, and also what every row written
+  before #375 holds. It is *not* a reserved sentinel: a genuine epoch-zero
+  mtime (`touch -d @0`, and some archive extractions) stores `0` too, with the
+  reading perfectly valid. The distinction never reaches the decision — the
+  trust flags live in memory and the re-index test is made before the stored
+  values are read — but an operator reading `mtime_ns = 0` out of the DB cannot
+  tell the two apart, and should not assume the bag was unreadable.
 - **One-time re-index at the #375 fix.** Every ledger row written by an indexer
   predating the fix carries `mtime_ns = 0`, so it compares unequal to its bag's
   real fingerprint and each such bag is re-indexed **once** on the next run
@@ -157,7 +171,12 @@ additive, no schema change.
   not a content hash. It misses an mtime-preserving rewrite (`cp -p`,
   `rsync --times`, `tar -p`, or a restore from backup) at an identical byte
   count; it can miss a rewrite finished inside one timestamp tick on a
-  coarse-granularity filesystem; and it double-counts hardlinked members, so
+  coarse-granularity filesystem; it sees only regular files' mtimes, so
+  deleting one member and adding another of the same size, both older than the
+  newest member, leaves size *and* mtime unchanged (the bag directory's own
+  mtime moved, but directory mtimes are not folded into the maximum — doing so
+  would make an unrelated touch of the directory re-index the bag); and it
+  double-counts hardlinked members, so
   changing a link count changes the fingerprint without any content changing
   (a spurious re-index, the safe direction). Delete `survey_index.db` and
   re-run when a bag tree has been rewritten in place by any of those means.
