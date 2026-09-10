@@ -545,6 +545,20 @@ TEST_F(BagFingerprintTest, UnreadableMemberOfAListableDirectoryReindexesEveryRun
 }
 
 
+// The commonest operator error of all -- a mistyped or moved bag URI -- used
+// to be reported as "could not determine what '...' is: No such file or
+// directory", which sends whoever typed it looking for a permission problem.
+// The trust flags and the exit status were always right; the message was not.
+TEST_F(BagFingerprintTest, ANonexistentBagUriIsReportedAsMissingNotUnreadable)
+{
+  std::string problem;
+  const auto fp = marine_survey_index::bagFingerprint(dir_ / "no_such_bag", &problem);
+  EXPECT_FALSE(fp.authoritative()) << "there is nothing to fingerprint";
+  EXPECT_NE(problem.find("there is no bag at"), std::string::npos) << problem;
+  EXPECT_EQ(problem.find("could not determine what"), std::string::npos)
+    << "a missing path is not an undeterminable one: " << problem;
+}
+
 // The invariant the CLI would otherwise have to trust: the reported string and
 // the trust flags always agree. The CLI branches on `authoritative()` and uses
 // the string only for the message, so no empty-string convention is

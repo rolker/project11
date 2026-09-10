@@ -167,8 +167,16 @@ BagFingerprint bagFingerprint(const std::filesystem::path & bag, std::string * p
   std::error_code ec;
   const bool is_dir = fs::is_directory(bag, ec);
   if (ec) {
-    // The type itself is unknown, so neither branch below can be trusted.
-    incomplete("could not determine what '" + bag.string() + "' is: " + ec.message());
+    if (ec == std::errc::no_such_file_or_directory || ec == std::errc::not_a_directory) {
+      // The commonest operator error, and it must read as one: "could not
+      // determine what this is" sent whoever mistyped a bag URI looking for a
+      // permission problem. Still not authoritative -- there is nothing to
+      // fingerprint -- and the bag will fail to open a moment later anyway.
+      incomplete("there is no bag at '" + bag.string() + "'");
+    } else {
+      // The type itself is unknown, so neither branch below can be trusted.
+      incomplete("could not determine what '" + bag.string() + "' is: " + ec.message());
+    }
   } else if (is_dir) {
     // error_code overloads throughout (#259): a broken symlink or unreadable
     // entry ends the walk cleanly instead of throwing and aborting the whole
