@@ -319,6 +319,63 @@ TEST_F(IndexerExitStatusTest, ScanWalkContinuesPastADirectoryItCannotList)
   EXPECT_EQ(run.status, 1) << run.output;
 }
 
+// An entry whose type cannot be established at all (a symlink loop: ELOOP,
+// which root is not exempt from) is the third scan report, and the
+// root-observable one. It costs the run its clean exit, and must not cost it
+// the rest of the walk.
+TEST_F(IndexerExitStatusTest, ScanReportsAnEntryOfUndeterminableType)
+{
+  const auto root = dir_ / "root";
+  ASSERT_TRUE(std::filesystem::create_directories(root));
+  const auto good = makeEmptyBag("root/bag_good");
+  ASSERT_TRUE(std::filesystem::exists(good / "metadata.yaml"));
+  std::error_code link_ec;
+  std::filesystem::create_symlink("loop", root / "loop", link_ec);
+  ASSERT_FALSE(link_ec) << "this filesystem refuses symlinks: " << link_ec.message();
+
+  const auto run = runIndexer("--scan " + quote(root.string()));
+  EXPECT_NE(run.output.find("could not determine the type"), std::string::npos) << run.output;
+  EXPECT_EQ(run.output.find("stopped at"), std::string::npos) << run.output;
+  EXPECT_NE(run.output.find("0 failed (of 1 nominated)"), std::string::npos) << run.output;
+  EXPECT_EQ(run.status, 1) << run.output;
+}
+
+// The line the dangling-symlink exemption draws, from the CLI's side: an entry
+// that definitively resolves to nothing hides nothing, so it must cost the run
+// neither a warning nor its clean exit. Without `resolvesToNothing()` one
+// broken link under a scan root would force a non-zero exit every run.
+TEST_F(IndexerExitStatusTest, DanglingSymlinkUnderAScanRootIsACleanRun)
+{
+  const auto root = dir_ / "root";
+  ASSERT_TRUE(std::filesystem::create_directories(root));
+  const auto good = makeEmptyBag("root/bag_good");
+  ASSERT_TRUE(std::filesystem::exists(good / "metadata.yaml"));
+  std::error_code link_ec;
+  std::filesystem::create_symlink(dir_ / "gone", root / "dangling", link_ec);
+  ASSERT_FALSE(link_ec) << "this filesystem refuses symlinks: " << link_ec.message();
+
+  const auto run = runIndexer("--scan " + quote(root.string()));
+  EXPECT_EQ(run.output.find("warning:"), std::string::npos)
+    << "a broken link hides nothing, so it must not be reported: " << run.output;
+  EXPECT_NE(run.output.find("1 bag(s) indexed"), std::string::npos) << run.output;
+  EXPECT_EQ(run.status, 0) << run.output;
+}
+
+// The index DB itself: named in the contract table as a cause of exit 1
+// (nothing was done at all), and previously untested. A path under a
+// non-existent directory cannot be created by sqlite even as root.
+TEST_F(IndexerExitStatusTest, UnopenableIndexDbExitsOneWithNothingDone)
+{
+  const auto bag = makeEmptyBag("bag_ok");
+  const auto db = (dir_ / "no_such_dir" / "index.db").string();
+
+  const auto run = runIndexerWithDb(db, quote(bag.string()));
+  EXPECT_EQ(run.status, 1) << run.output;
+  EXPECT_NE(run.output.find("cannot open"), std::string::npos) << run.output;
+  EXPECT_EQ(run.output.find("done:"), std::string::npos)
+    << "nothing was indexed, so there is no run to summarise: " << run.output;
+}
+
 TEST_F(IndexerExitStatusTest, NoBagsIsAUsageError)
 {
   const auto run = runIndexer("");
