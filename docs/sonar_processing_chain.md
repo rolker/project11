@@ -9,7 +9,8 @@ to write code that touches soundings:
 - [sonar_ecosystem.md](sonar_ecosystem.md) — the big-picture *status* map: what
   is built, what is next, where to direct effort.
 - [sonar_reference.md](sonar_reference.md) — durable *hardware and protocol*
-  facts: sensor identities, wire formats, where the data of record lives.
+  facts: sensor identities, wire formats, where the data of record lives. Sonars
+  come and go; that page tracks which ones, and this one deliberately does not.
 - **this page** — the *processing chain*: stages, ownership, inputs, units.
 
 It records what the chain is and what it needs. It decides nothing; where a
@@ -26,7 +27,7 @@ own comments disagree, the disagreement is recorded rather than smoothed over.
 
 | # | Stage | Owner | In | Out |
 |---|---|---|---|---|
-| 1 | Acquisition | `marine_tools/kongsberg_em_bridge` | EM datagrams | `SonarDetections` + latched `SonarInfo` |
+| 1 | Acquisition | one driver per sonar — the contract is the message | sensor wire protocol | `SonarDetections` + latched `SonarInfo` |
 | 2 | Projection | `cube::DetectionsProjector` | ping + TF + SOG | **sonar-frame** soundings |
 | 3 | Uncertainty | `cube::ErrorModel` | ping + `Platform` + `Vessel` + `Device` | per-sounding TPU |
 | 4 | Georeferencing | **no single owner — five copies** | soundings + TF | world / geographic soundings |
@@ -70,45 +71,96 @@ variances, so a consumer that squares them is wrong by a square.
 
 ## Stage 1 — Acquisition
 
-**What it does.** Decodes the M3's EM datagram export into one
-`SonarDetections` per ping, plus a latched `SonarInfo` companion
-([ADR-0009](decisions/0009-sonar-info-message.md)) carrying what the intensities
+**What it does.** Gets a sonar onto the message contract: one `SonarDetections`
+per ping, plus a latched `SonarInfo` companion
+([ADR-0009](decisions/0009-sonar-info-message.md)) saying what the intensities
 actually are and what corrections have been applied.
 
-**Owner.** `marine_tools/kongsberg_em_bridge`. The populated soundings datagram
-on the M3 is Raw Range and Angle 78; XYZ88 is exported but empty. See
-[sonar_reference.md](sonar_reference.md) for why the route is the sonar's own
-export rather than QINSy.
+**Owner: one ROS driver per sonar. The contract is the message, not any
+particular driver.** This stage is the only one in the chain that is expected to
+be rewritten repeatedly, because the sonar changes with the platform and with
+what is available. BizzyBoat carried a Kongsberg M3, which is a **loaner being
+returned**; the Imagenex DeltaT is the likely reinstall until another test sonar
+is borrowed or bought, and Ben or DriX may carry an EM2040 or similar
+(operator direction, 2026-09-10). Nothing downstream of this stage should name a
+sonar, and where the rest of this page does, that is a defect in the page.
 
-**What it must be fed.** The datagram stream, and a frame id for the header. It
-fills `frequency` from the first sector's centre frequency, `sound_speed` from
-the datagram, per-beam travel times, tx delays, intensities and steering angles,
-and a detection flag per beam.
+The practical consequence: **adding a sonar is a driver task, not a chain
+task.** Everything from stage 2 onward already works for any sonar whose driver
+meets the contract below, and nothing works for one whose driver does not,
+however good the sensor is.
 
-**What it deliberately does not fill.** `tx_beamwidths` and `rx_beamwidths` are
-left empty **on purpose**, with a comment saying so: the error model treats
-those arrays as degrees while the message says radians, so leaving them empty
-avoids the mismatch. This is a workaround for a downstream defect, not a driver
-gap — which is why
+**Read the rest of this page with one caveat.** Essentially all of this chain
+was developed and refined while the M3 was the sonar on the boat, so its
+assumptions are M3-shaped in places nobody has had reason to test — a single
+transmit sector, the beam counts and swath of that unit, and the workaround
+below that exists only because of how that one driver reports. A change of sonar
+is therefore a work item with real content, not a configuration change, and the
+first such change is expected rather than hypothetical.
+
+### The contract a driver must meet
+
+| Field | Requirement |
+|---|---|
+| `header.stamp` | **transmit** time, not receive time, and not arrival time |
+| `header.frame_id` | the sonar frame, resolvable to `earth` through TF at that stamp |
+| `two_way_travel_times` | seconds, per beam — **raw travel times, not ranges** |
+| `tx_angles`, `rx_angles` | radians, positive forward and positive to starboard |
+| `flags` | per beam; zero means good |
+| `intensities` | per beam, with `SonarInfo` declaring what they are |
+| `ping_info.sound_speed` | m/s used to compute ranges, or 0 for unavailable |
+| `ping_info.frequency` | Hz, or 0 for unavailable |
+| `ping_info.tx_beamwidths`, `rx_beamwidths` | full −3 dB, **radians**, per beam — or **empty**, never guessed and never zero-filled |
+
+Travel times and steering angles are the load-bearing part. A driver that
+publishes only positions has not met the contract, because the error model needs
+the geometry that produced them, and no downstream stage can recover it.
+
+### Where each driver actually stands
+
+| Driver | Publishes | Beamwidths | Conformant |
+|---|---|---|---|
+| `marine_tools/kongsberg_em_bridge` (M3) | `SonarDetections` + `SonarInfo` | empty, deliberately | yes, apart from beamwidths |
+| `marine_tools/garmin_sidescan` | sidescan imagery | populated, radians, per-generation table; empty where uncharacterised | yes — and it is the pattern to copy |
+| `r2sonic` | `SonarDetections` | assigned | yes |
+| `norbit_driver` | `SonarDetections` | `resize()`d and never assigned — **an array of zeros** | no: a zero is read as a measurement |
+| `imagenex_deltat` | **`PointCloud2` only** | none | **no** — see below |
+
+The Garmin driver is the model: full −3 dB widths in radians from a cited table,
+and empty rather than guessed where a generation is not characterised.
+
+### The DeltaT does not currently reach this chain at all
+
+This matters because it is the sonar most likely to go back on the boat.
+
+- Its live node publishes **`PointCloud2`** on `soundings`. Positions only: no
+  travel times, no steering angles, no ping info, no flags. Nothing downstream
+  can compute an uncertainty for those points, so a DeltaT survey today cannot
+  produce a CUBE surface with a real error budget.
+- Its only `SonarDetections` producer is an offline converter,
+  `nodes/deltat_to_bag.py`, and that fills **only** the stamp, frequency and
+  sound speed. A ping it writes carries no beams.
+
+So "the DeltaT publishes no beamwidths" understates it. Bringing the DeltaT onto
+this chain is a driver rewrite to the contract above, not a beamwidth table.
+Not yet filed; `imagenex_deltat` is its own repository.
+
+### Why the M3 bridge leaves beamwidths empty
+
+`tx_beamwidths` and `rx_beamwidths` are left empty **on purpose**, with a
+comment saying so: the error model treats those arrays as degrees while the
+message says radians, so leaving them empty avoids the mismatch. This is a
+workaround for a downstream defect, not a driver gap — which is why
 [marine_tools#82](https://github.com/rolker/marine_tools/issues/82) is
 explicitly sequenced *after* the consumer unit fix. Do not "fix" the driver
 first: publishing correct radians into the current consumer makes the error
 smaller-but-wrong in the more dangerous direction.
 
-**Other drivers do not behave alike**, which matters because the consumer
-branches on whether the array is empty:
-
-| Driver | Beamwidths | Consequence today |
-|---|---|---|
-| `garmin_sidescan` | populated, radians, from a per-generation table; left empty where uncharacterised | takes the per-beam branch, so it is already exposed to that branch's defect |
-| `kongsberg_em_bridge` (M3) | empty, deliberately | takes the fallback branch |
-| `imagenex_deltat` | absent | takes the fallback branch |
-| `r2sonic` | assigned | takes the per-beam branch |
-| `norbit_driver` | `resize(num_beams)` with the assignment commented out, marked "not reported" | **an array of zeros**, which is non-empty, so it takes the per-beam branch with a beamwidth of zero |
-
-The Garmin driver is the pattern the other two should copy: full −3 dB widths in
-radians from a cited table, and **empty rather than guessed** where a model is
-not characterised.
+The M3's own datagram stream does not carry beamwidth either, so for any
+Kongsberg unit the figure has to come from a device table rather than the wire.
+The same bridge already decodes the XYZ88 datagram, which the M3 exports empty
+but an EM2040 would populate, so a future Kongsberg unit is a smaller job than a
+new driver.
 
 ## Stage 2 — Projection
 
@@ -292,7 +344,8 @@ are fixed as of 2026-09-10.
 | Stage 3 | A doc comment claims a doubling the code does not do | reader misled | [cube#144](https://github.com/rolker/cube_bathymetry/issues/144) |
 | Stage 3 | No offline `Vessel` or `Device` configuration | archive cannot be reprocessed | [cube#145](https://github.com/rolker/cube_bathymetry/issues/145) |
 | Stage 4 | Five copies of the world lift, four in one package | drift, and it has already happened | [cube#146](https://github.com/rolker/cube_bathymetry/issues/146) |
-| Stage 1 | M3 and DeltaT publish no beamwidths | works around the above | [marine_tools#82](https://github.com/rolker/marine_tools/issues/82) |
+| Stage 1 | M3 publishes no beamwidths | works around the above | [marine_tools#82](https://github.com/rolker/marine_tools/issues/82) |
+| Stage 1 | The DeltaT's live driver publishes `PointCloud2`, not detections | that sonar cannot reach the chain | not yet filed |
 
 ### The beamwidth units defect, in full
 
@@ -330,9 +383,9 @@ be closed:
 
 - It says "the live path is the normal one (real pings carry `rx_beamwidths`);
   the fallback only fires when the message omits them." That is **backwards for
-  the sonar the fleet surveys with**. The M3 driver leaves the arrays empty
-  deliberately, so for M3 data the fallback is not the rare path — it is the
-  only path, on every ping.
+  the sonar this chain was built against**. The M3 driver leaves the arrays
+  empty deliberately, so for M3 data the fallback is not the rare path — it is
+  the only path, on every ping.
 - It leaves open whether the divisor should be `12` or the textbook
   `sqrt(12)`. Calder's device code settles it: for the flat-plate and FFT
   beamformer devices the angular sigma is `bw / 12.0`, where `bw` is already
