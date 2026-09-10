@@ -295,6 +295,15 @@ std::vector<std::filesystem::path> scanForBags(
       problems.push_back(
         "could not determine the type of '" + current.string() + "': " + entry_ec.message() +
         " - if it is a bag, or holds one, it is missing from this run");
+      // Cancel descent here too, for the same reason the next two branches
+      // do: a failed `increment()` ends the WHOLE walk. Where `readdir`
+      // returns a real `d_type` (ext4, and the production CIFS mount) an entry
+      // of unknown type is never a directory and recursion was never pending,
+      // so this is inert; on a `DT_UNKNOWN` backend, where the type comes from
+      // the `stat` that just failed, it is the difference between losing this
+      // entry and losing every bag after it in the walk. Untested for that
+      // reason -- no local filesystem reaches it.
+      it.disable_recursion_pending();
     } else if (!entry_ec && dir) {
       std::error_code meta_ec;
       if (fs::exists(current / "metadata.yaml", meta_ec)) {
@@ -325,8 +334,17 @@ std::vector<std::filesystem::path> scanForBags(
           // descends into it. A traverse-only directory (mode 0111) probes
           // for `metadata.yaml` successfully yet cannot be listed, so it
           // reaches neither branch above and would abandon the walk in
-          // `increment()` the same way. Same cost either way: the walk is
-          // about to open this directory anyway.
+          // `increment()` the same way -- as does a directory there is no
+          // descriptor left to open (EMFILE), which is the route the tests
+          // use, root being exempt from mode bits but not from a descriptor
+          // limit.
+          //
+          // It is not free: `increment()` opens the directory again, so this
+          // costs one extra `opendir` per non-bag directory -- measured at
+          // ~+5% of walk time over the CIFS survey tree (672 probes, ~+50 ms
+          // of ~950 ms). What it buys is that a directory the walk cannot
+          // list costs a reported, contained subtree instead of every bag
+          // after it in the walk.
           std::error_code enum_ec;
           fs::directory_iterator probe(current, enum_ec);
           if (enum_ec) {
