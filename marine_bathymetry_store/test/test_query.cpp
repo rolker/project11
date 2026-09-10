@@ -64,8 +64,13 @@ TestCellBox cellBoxOf(const gggs::CellIndex & cell)
     sw, gggs::geoPoint(sw.latitude + lat_per_cell, sw.longitude + lon_per_cell)};
 }
 
-/// The point at fractional position (@p lat_fraction, @p lon_fraction) inside
+/// The point at fractional position (@p lat_fraction, @p lon_fraction) of
 /// @p cell — (0.5, 0.5) is its centre.
+///
+/// Fractions OUTSIDE [0, 1] are deliberate and used throughout this file: they
+/// name a point in a neighbouring cell in the same units (1.125 is just past the
+/// cell's own edge), which is how the region-coverage tests place data just
+/// inside and just outside the query cell without hand-computing spans.
 geographic_msgs::msg::GeoPoint pointInCell(
   const gggs::CellIndex & cell, double lat_fraction, double lon_fraction)
 {

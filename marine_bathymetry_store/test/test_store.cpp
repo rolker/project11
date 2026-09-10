@@ -41,10 +41,15 @@ static std::size_t tilesIn(const BathymetryStore & store, SourceLayer layer)
   return store.tiles(layer).size();
 }
 
-// The point at fractional position (@p lat_fraction, @p lon_fraction) inside a
-// cell — (0.5, 0.5) is its centre. Re-derived here rather than reusing the
+// The point at fractional position (@p lat_fraction, @p lon_fraction) of a cell
+// — (0.5, 0.5) is its centre. Re-derived here rather than reusing the
 // implementation's own helper, so the cross-level tests do not lean on the code
 // they check.
+//
+// Fractions OUTSIDE [0, 1] are deliberate and used by several tests here: they
+// name a point in a neighbouring cell in the same units (3.5 is the centre of
+// the cell three along), which is how the cross-level tests reach the cells
+// around a coarse draft cell without hand-computing spans.
 static geographic_msgs::msg::GeoPoint pointInCell(
   const gggs::CellIndex & cell, double lat_fraction, double lon_fraction)
 {

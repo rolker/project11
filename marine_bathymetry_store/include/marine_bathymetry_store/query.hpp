@@ -92,8 +92,10 @@ std::optional<DepthSample> bestSource(
 /// level-10 costmap query — and **every one of them is read**, with the
 /// shoalest reliable value winning. Point-sampling the centre would read 1 of
 /// 256 and could walk past exactly the 0.2-0.5 m rock those fine levels exist to
-/// resolve. Cost is bounded by data: native cells with no tile are never
-/// visited.
+/// resolve. Only TILES are data-gated — a native cell whose tile this layer does
+/// not hold is never visited — but inside a tile that IS present the walk is
+/// purely geometric, so a sparse fine tile costs exactly what a dense one costs.
+/// The bound is the level gap, not the data.
 ///
 /// @note Since #221 there is one fused surface per layer, so the ADR-0002 §A1.3
 ///   safety walk (a noisy newest epoch falling through to a prior confident
