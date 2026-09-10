@@ -70,6 +70,19 @@ TEST(Schema, FreshOpenCreatesTablesAndVersion)
   sqlite3_close(db);
 }
 
+// A GUI holds this DB open (marine_perception_tools' survey_index_bridge), and
+// an indexer run writes to it. With sqlite's default zero busy timeout, a lock
+// held for an instant turns a bag into a *failed* bag -- an exit-1 incomplete
+// index, with no retry. So the open must arrive already willing to wait.
+TEST(Schema, OpenWaitsForAWriterInsteadOfFailingOnOne)
+{
+  sqlite3 * db = marine_survey_index::openIndexDb(":memory:");
+  ASSERT_NE(db, nullptr);
+  EXPECT_GE(singleInt(db, "PRAGMA busy_timeout"), 5000)
+    << "a zero (default) busy timeout makes a concurrent reader a failed bag";
+  sqlite3_close(db);
+}
+
 TEST(Schema, ReopenExistingSucceeds)
 {
   const std::string path = testing::TempDir() + "/survey_index_schema_test.db";

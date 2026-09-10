@@ -95,6 +95,15 @@ sqlite3 * openIndexDb(const std::string & path)
     throw std::runtime_error("survey index: cannot open '" + path + "': " + message);
   }
   execOrThrow(db, "PRAGMA foreign_keys = ON;");
+  // Wait for a writer's lock instead of failing on contact with one. The index
+  // is opened read-only by the explorer GUI (marine_perception_tools'
+  // survey_index_bridge opens it in its constructor), and opening it here
+  // executes DDL, so even opening takes a write lock. Without a timeout a GUI
+  // holding the DB for a moment turns an indexer run into failed bags -- and a
+  // failed bag is an exit-1 incomplete index, not a retry. Ten seconds is far
+  // longer than any read this DB serves and far shorter than a survey-tree
+  // indexing run.
+  execOrThrow(db, "PRAGMA busy_timeout = 10000;");
   execOrThrow(db, kSchemaDdl);
 
   // Version gate: stamp a fresh DB, verify an existing one. Regeneration is
