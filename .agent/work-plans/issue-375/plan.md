@@ -31,15 +31,18 @@ tests can run without bag I/O — but `fingerprint()`/`ledgerState()` have no
 such dependency themselves (`<filesystem>`, `<chrono>`, `<cstdint>`, and
 `SQLite3`, which the core lib already links). Testing them in place would
 require a new test binary pulling in the full `rosbag2`/`tf2` dependency
-chain just to construct one function's inputs. Moving both functions into
-the core lib is the natural fix and matches the existing library/executable
-split in this package.
+chain just to construct one function's inputs. Moving the skip *decision*
+into the core lib is the natural fix and matches the existing
+library/executable split in this package. (`ledgerState()` itself stays in the
+executable — see the amendment under Approach step 1.)
 
 ## Approach
 
 1. **Add `marine_survey_index/include/marine_survey_index/bag_fingerprint.hpp`
    and `marine_survey_index/src/bag_fingerprint.cpp`.** Move `BagFingerprint`
    and `fingerprint()` out of `survey_index_bag_main.cpp` into this new pair
+   (renamed `bagFingerprint()` at pre-push review round 1 — `fingerprint()` is
+   too generic a name for an exported symbol)
    (same license header and doc-comment style as
    `footprint.hpp`/`schema.hpp`), and add one pure decision function,
    `fingerprintMatches(current, stored_size, stored_mtime)`. `bag_fingerprint.cpp`
@@ -68,6 +71,19 @@ split in this package.
    ```
    This sidesteps the `file_clock` epoch entirely and gives a value directly
    comparable to `stat`-based tooling elsewhere (as the issue requests).
+
+   **Amended after pre-push review round 1 (must-fix 2): the multiply is
+   range-checked.** `tv_sec * 1e9` is signed-overflow UB past roughly the year
+   2262 (or before 1678), and the wrapped result would be stored and compared
+   as an ordinary mtime — reachable from a corrupt inode or a host whose clock
+   came up wrong, not only from a deliberate `touch`. As shipped, `statFile()`
+   validates `tv_sec` against the largest/smallest values whose ns conversion
+   fits in `int64_t` and `tv_nsec` into [0, 1e9) *before* multiplying, and
+   treats an out-of-range timestamp exactly like an unreadable one.
+
+   The `st_mtim` field is POSIX.1-2008; macOS spells it `st_mtimespec`. This
+   package targets Linux (ROS 2 Jazzy on Ubuntu), so no shim is carried — the
+   trade-off is recorded in the new header (plan-review finding 6).
 
 3. **Fix the accumulator so a legitimate value can never be swallowed by the
    initializer.** Carry an explicit `bool mtime_valid = false` in
@@ -113,6 +129,38 @@ split in this package.
    result does not match a `(0, 0)` row — passes with the hole wide open, as
    the plan review pointed out.
 
+   **Amended after pre-push review round 1 (must-fix 1): "no timestamp at all"
+   was too narrow a policy.** The reviewer reproduced the same silent-skip bug
+   one level up: an unreadable *subdirectory* was swallowed by
+   `skip_permission_denied`, `is_regular_file`'s `error_code` was discarded and
+   a failed per-file `::stat` returned silently, so a **partial** walk produced
+   a *stable* size and mtime that matched its own stored copy run after run —
+   a permanent silent skip of a changed bag.
+
+   As shipped, `BagFingerprint` carries a second trust flag, `scan_complete`,
+   cleared by every way the walk can come up short: an undeterminable bag type,
+   a directory that cannot be opened, a walk that stops early (the diagnostic
+   names the entry it stopped at, not the bag root), an entry whose type cannot
+   be read, a failed or out-of-range `::stat`, or a single path that is not a
+   regular file (a FIFO used to fingerprint as size 0 with a moving timestamp).
+   `skip_permission_denied` is gone — the iteration is still non-throwing
+   (#259's requirement), but an unreadable entry is now recorded instead of
+   hidden. `fingerprintMatches()` requires `mtime_valid` **and**
+   `scan_complete` before comparing anything.
+
+   The diagnostic moved **out of the library** to the CLI call site: the core
+   lib is linked into `marine_perception_tools`' Qt GUI where stderr is
+   invisible, so `bagFingerprint()` reports the reason through an optional
+   `problem` out-param and stays silent itself. The CLI counts
+   not-fully-readable and failed bags, reports both in the run summary, and
+   **exits non-zero** on either — a bag re-indexing forever previously left no
+   signal a script or scheduler could see.
+
+   The test that matters most is the subdirectory route (mode 0000: identical
+   size and mtime across a content change behind it) plus the
+   production-reachable mode-0111 bag directory that `scanForBags` does
+   nominate.
+
 5. **Update `survey_index_bag_main.cpp`** to `#include
    "marine_survey_index/bag_fingerprint.hpp"`, drop the moved
    `BagFingerprint`/`fingerprint()` definitions, and rewrite `ledgerState()`'s
@@ -124,7 +172,11 @@ split in this package.
    and `marine_survey_index::fingerprintMatches(...)`, matching every other
    core-lib call already in this file (lines 405, 432, 440, 494). The write
    path also changes, to persist `0` rather than an in-band sentinel when
-   `mtime_valid` is false.
+   `mtime_valid` is false — as shipped it binds `fp.mtime_ns` directly, since
+   the struct's invariant keeps that field `0` while `mtime_valid` is false.
+   The exported helper that wrapped this (`fingerprintStoredMtime()`) was
+   dropped at pre-push review round 1: it was provably an identity given that
+   invariant, which is now stated on the struct instead.
 
 6. **Update `marine_survey_index/CMakeLists.txt`**: add `src/bag_fingerprint.cpp`
    to the `${PROJECT_NAME}_core` library's source list (alongside
@@ -134,37 +186,41 @@ split in this package.
    existing test block (after `test_query_join`).
 
 7. **Add `marine_survey_index/test/test_bag_fingerprint.cpp`** covering the
-   three cases the issue names, using `std::filesystem::temp_directory_path()`
-   + a per-test unique subdirectory (created/removed in the test, mirroring
-   the temp-file pattern in `test_schema.cpp`):
-   - **mtime accuracy**: fingerprint a temp file; assert `fp.mtime_ns` is
-     within ~2 seconds of `::stat`'s own reading of the same file (not
-     `fs::last_write_time`, to keep the test independent of the bug it's
-     catching).
-   - **in-place rewrite at identical size** (the actual stale-data
-     scenario): write a file, fingerprint it, sleep briefly (or force a
-     distinct mtime — see Open Questions), overwrite its content with
+   cases the issue names, using `std::filesystem::temp_directory_path()`
+   + a per-test unique subdirectory (created/removed in the fixture, mirroring
+   the temp-file pattern in `test_schema.cpp`). As shipped, and amended for the
+   two reviews:
+   - **mtime accuracy**: fingerprint a temp file and assert `fp.mtime_ns`
+     equals `::stat`'s own reading of the same file **exactly** — not a ±2 s
+     window, which would also accept a seconds-versus-nanoseconds scaling slip
+     (settled at plan review; see Open Questions).
+   - **in-place rewrite at identical size** (the actual stale-data scenario):
+     write a file, force a distinct mtime with the two-argument
+     `last_write_time` setter rather than sleeping, overwrite its content with
      different bytes of the *same length*, re-fingerprint, and assert
-     `size_bytes` is unchanged but `mtime_ns` changed (fingerprint differs).
-   - **ledger round-trip**: exercise `ledgerState()` directly against an
-     in-memory/temp sqlite DB with the `bags` table (reuse the schema via
-     `marine_survey_index::openOrCreate`/`schema.hpp` or a minimal inline
-     `CREATE TABLE`) — insert a row with a real fingerprint's
-     `(size_bytes, mtime_ns)`, call `ledgerState()` with the same fingerprint
-     (expect unchanged/positive id), then with a fingerprint from the
-     rewritten-file case (expect changed/negative id).
-   - **unreadable-mtime policy**: fingerprint an empty directory (or a
-     directory whose only entries are unreadable) and assert the result
-     never equals a previously-stored `(0, 0)`-style row — i.e. it does not
-     silently satisfy `unchanged`.
+     `size_bytes` is unchanged but the fingerprint no longer matches.
+   - **ledger round-trip at the decision, not at the SQL.** `ledgerState()`
+     stays in the executable (Approach step 1's amendment), so the round-trip
+     is exercised through `fingerprintMatches()` — same size / different mtime,
+     different size / same mtime, and an unindexed-looking `(0, 0)` row. No
+     temp sqlite DB and no schema dependency in this test.
+   - **untrustworthy-fingerprint policy**, one test per route, each asserting
+     the bag cannot read as unchanged: no timestamp anywhere (asserting the
+     **second** run also re-indexes, since a sentinel would round-trip through
+     the ledger), a partial walk at an unreadable subdirectory, an unlistable
+     mode-0111 bag directory, a non-regular single path, an unrepresentable
+     year-2500 mtime, and the legacy `mtime_ns = 0` migration row. The
+     permission-dependent ones skip under root, and the year-2500 one skips if
+     the filesystem clamps or refuses the timestamp — a test must not assert
+     filesystem behaviour it cannot guarantee.
 
 ## Files to Change
 
 | File | Change |
 |------|--------|
-| `marine_survey_index/include/marine_survey_index/bag_fingerprint.hpp` | New. Declares `BagFingerprint` (with `mtime_valid`), `fingerprint()`, `fingerprintMatches()`. `ledgerState()` stays in the executable — plan-review finding 2. |
-| `marine_survey_index/src/bag_fingerprint.cpp` | New. Moves + fixes the implementations (one `::stat()` for size and mtime, explicit `mtime_valid`, no sentinel, loud unreadable-mtime policy). |
-| `marine_survey_index/src/survey_index_bag_main.cpp` | Remove the moved struct/function; include the new header; `ledgerState()` delegates to `fingerprintMatches()`; qualify call sites; write path stores `0` for an unknown mtime. |
+| `marine_survey_index/include/marine_survey_index/bag_fingerprint.hpp` | New. Declares `BagFingerprint` (with `mtime_valid` **and `scan_complete`**), `bagFingerprint()` (with its optional `problem` out-param), `fingerprintMatches()`. `ledgerState()` stays in the executable — plan-review finding 2. No `fingerprintStoredMtime()`: dropped at pre-push review round 1 as an identity over the struct's own invariant. |
+| `marine_survey_index/src/bag_fingerprint.cpp` | New. Moves + fixes the implementations (one range-checked `::stat()` for size and mtime, explicit `mtime_valid`/`scan_complete`, no sentinel, silent library + reason reported to the caller). |
+| `marine_survey_index/src/survey_index_bag_main.cpp` | Remove the moved struct/function; include the new header; `ledgerState()` delegates to `fingerprintMatches()`; qualify call sites; write path binds `fp.mtime_ns`; warn per bag on an untrustworthy fingerprint, count not-fully-readable and failed bags in the run summary, and exit non-zero on either. |
 | `marine_survey_index/CMakeLists.txt` | Add `bag_fingerprint.cpp` to the core lib; add the new gtest target; refresh the stale core-lib contents comment at lines 29-31 — plan-review finding 3. |
 | `marine_survey_index/test/test_bag_fingerprint.cpp` | New. The four test cases above, with a `SetUp`/`TearDown` fixture for the temp tree modelled on `test_query_join.cpp` — a failing `ASSERT_*` returns early and would otherwise leak it. |
 | `docs/survey_index_schema.md` | Document the new unreadable-mtime rule in the "Incremental re-runs" contract — plan-review finding 3. |
@@ -175,7 +231,7 @@ split in this package.
 |---|---|
 | Test what breaks | The four new tests target the exact regressions named in the issue (mtime accuracy, same-size rewrite, ledger round-trip) plus the unreadable-mtime policy this plan adds — not framework glue. |
 | A change includes its consequences | PR description will state the one-time full re-index of all 177 existing (`mtime_ns=0`) rows on the dev host, per the operator's note — this is expected derived-cache-rebuild cost, not a regression, and no data migration is needed. |
-| Human control and transparency | The unreadable-mtime path now fails loud (stderr warning + guaranteed-mismatching sentinel) instead of silently contributing nothing to a max, per `review-issue`'s flag. |
+| Human control and transparency | An untrustworthy fingerprint — no readable timestamp, or an incomplete walk — now fails the unchanged test **on its validity flags** (`mtime_valid` / `scan_complete`), checked before any comparison, instead of silently contributing nothing to a max. The "guaranteed-mismatching sentinel" the first draft of this plan proposed was **rejected at plan review and never shipped**: the ledger persists whatever the fingerprint carries, so an in-band sentinel compares equal to itself on the next run and restores the skip. Loudness is the caller's job: the CLI warns per bag, counts them in the run summary, and exits non-zero. |
 | Only what's needed | No ledger schema change, no new DB column, no speculative generalization beyond moving the two functions needed for testability. |
 | Improve incrementally | Single PR, single package, bounded diff. |
 
@@ -190,9 +246,11 @@ split in this package.
 | If we change... | Also update... | Included in plan? |
 |---|---|---|
 | `mtime_ns` computation becomes non-zero and correct | Existing on-disk indexes (177 rows, `mtime_ns=0`) will compare unequal on next run and each bag re-indexes once | Yes — called out in PR description per the operator's note; no code change needed, the index is a derived cache and self-heals on the next `survey_index_bag` run |
-| `fingerprint()`/`ledgerState()` move to the core lib | `survey_index_bag_main.cpp`'s includes and any other in-package caller | Yes — only caller is `main()`, which is updated in step 5 |
+| `bagFingerprint()`/`fingerprintMatches()` move to the core lib (`ledgerState()` does not — Approach step 1's amendment) | `survey_index_bag_main.cpp`'s includes and any other in-package caller | Yes — the only caller is `main()`, updated in step 5; no caller outside this package exists yet (checked across the workspace's checked-out repos) |
 | New test binary in CMakeLists | `docs/survey_index_schema.md` build/test instructions | N/A — that doc doesn't enumerate test binaries by name |
-| An unreadable mtime now forces a re-index | `docs/survey_index_schema.md`'s "Incremental re-runs" contract | **Yes — amended after plan review (finding 3).** This is a *new* rule, not the code catching up to an existing description: the doc's contract says a bag whose `path`, `size_bytes` and `mtime_ns` all match is skipped, and says nothing about a timestamp that cannot be read. One sentence, this PR. |
+| An unreadable mtime now forces a re-index | `docs/survey_index_schema.md`'s "Incremental re-runs" contract | **Yes — amended after plan review (finding 3).** This is a *new* rule, not the code catching up to an existing description: the doc's contract says a bag whose `path`, `size_bytes` and `mtime_ns` all match is skipped, and says nothing about a timestamp that cannot be read. Widened at pre-push review round 1 (see Documentation & Instruction Impact). |
+| A partial walk now forces a re-index too | The schema doc, the package README, and the walk itself (`skip_permission_denied` had to go) | **Yes — amended after pre-push review round 1 (must-fix 1).** The affected bag re-indexes on *every* run until the cause is fixed. That is deliberate and is the safe direction — the alternative, which is what shipped before this round, is skipping a changed bag permanently — but it needs the loud signal below to be actionable. |
+| `survey_index_bag` now exits non-zero when a bag could not be fingerprinted or failed mid-index | Nothing automated — no script, launch file or test in this workspace consumes this binary's exit status (checked); the README documents the new behaviour | **Yes — amended after pre-push review round 1 (suggestion).** A bag re-indexing every run forever, or missing from the index after a mid-index failure, previously reported success. |
 | The fingerprint carries a validity flag rather than an in-band value | The write path, which persists `mtime_ns` on both UPDATE and INSERT | **Yes — amended after plan review (finding 1).** This is the consequence the original plan missed: any sentinel the fingerprint carries gets stored and then compares equal to itself on the next run, restoring the silent skip. Validity is therefore checked before the comparison, and the persisted value is never load-bearing. |
 
 ## Documentation & Instruction Impact
@@ -203,7 +261,16 @@ split in this package.
     the unreadable-mtime rule is genuinely **new**. The existing sentence says
     a bag whose `path`, `size_bytes` and `mtime_ns` all match its ledger row is
     skipped, and is silent on a timestamp that cannot be read; that case now
-    forces a re-index and warns. One sentence.
+    forces a re-index and warns. **Widened at pre-push review round 1** from
+    one sentence to the column's units and epoch, the incomplete-walk case, the
+    one-time re-index of every pre-fix `mtime_ns = 0` row, and the residual
+    holes size + mtime cannot see (mtime-preserving rewrites, coarse timestamp
+    granularity, hardlink double-counting) — the doc self-declares as the
+    stable cross-stage contract, so these belong in it rather than in the PR
+    body (must-fix 3).
+  - `marine_survey_index/README.md` — the incremental-skip sentence and the
+    `## Testing` enumeration, both stale once the policy and the test set
+    changed (must-fix 4 and 5).
   - `marine_survey_index/CMakeLists.txt:29-31` — the comment enumerating the
     core library's contents goes stale when `bag_fingerprint.cpp` joins it.
   - The `BagFingerprint` doc-comment does correctly describe the intended
@@ -234,4 +301,6 @@ No open questions remain.
 ## Estimated Scope
 
 Single PR, single project repo (`unh_marine_autonomy`), single package
-(`marine_survey_index`). Five files touched (two new).
+(`marine_survey_index`). Seven files touched (two new): the new header and
+source, `survey_index_bag_main.cpp`, the new test, `CMakeLists.txt`,
+`docs/survey_index_schema.md`, and the package README.
