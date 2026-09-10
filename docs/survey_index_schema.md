@@ -223,9 +223,12 @@ additive, no schema change.
   double-counts hardlinked members, so
   changing a link count changes the fingerprint without any content changing
   (a spurious re-index, the safe direction); and on a network mount it reads
-  what the client's attribute cache holds, not the server (NFS `acregmax`
-  defaults to 60 s), so a bag rewritten on the server and indexed within that
-  window can fingerprint identically — the one on this list that bites on a
-  real survey tree, where the bags live on a NAS and a run can follow a copy
-  by seconds. Delete `survey_index.db` and
-  re-run when a bag tree has been rewritten in place by any of those means.
+  what the client's attribute cache holds, not the server, so a bag rewritten
+  on the server and indexed within that window can fingerprint identically —
+  the one on this list that bites on a real survey tree, where the bags live on
+  a NAS and a run can follow a copy by seconds. The window is the mount's, not
+  a constant: the survey shares in use here are **CIFS with `actimeo=1`**
+  (`cache=strict`, `soft` — verified in `/proc/mounts`), so it is about a
+  second; an NFS mount at the default `acregmax` would be up to 60 s. Delete
+  `survey_index.db` and re-run when a bag tree has been rewritten in place by
+  any of those means.

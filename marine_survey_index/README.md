@@ -57,6 +57,16 @@ case $rc in
 esac
 ```
 
+**A permanently broken bag makes that a permanent `1`.** A truncated or
+otherwise unopenable bag under a scan root fails every run, for good (there is
+one under `~/data/logs/sim` on the dev host) — and a scheduled consumer that aborts on `1`
+therefore aborts forever. The predictable response, `|| true`, throws away the
+whole `0`/`1`/`2`/`3` distinction, so do not reach for it. There is no
+acknowledge or exclude flag yet (a follow-up); what works today is to take the
+bad bag out of the scan tree — move it aside, or rename its `metadata.yaml` so
+the walk no longer nominates it as a bag — and record why, so the exit status
+goes back to meaning "something changed".
+
 Single interleaved chronological pass per bag (the bounded-TF-window pattern
 from cube#63 / the sidescan importer): georeferences every MBES
 `SonarDetections` and sidescan `RawSonarImage` ping, computes its conservative
@@ -123,15 +133,37 @@ symlinked subdirectory, unresolvable symlink, unrepresentable mtime, legacy
 symlink and a FIFO).
 
 The permission-based routes cannot run as root (root ignores the mode bits),
-and both hosted CI and `ci_local.sh` run as root — so each trust flag is
-guarded by at least one route that needs no permission trick (a symlinked
-subdirectory reaches `mtime_valid && !scan_complete` directly). Keep it that
-way: a guard that skips in every merge-gating path defends nothing.
+and the verification that gates a merge here runs as root: `ci_local.sh`
+(ADR-0018). That is not merely the preferred gate for this package — it is the
+**only** one, because the repo's single hosted workflow
+(`.github/workflows/ros-base-docker.yml`) lists `marine_survey_index` in
+neither its build nor its test set, and nothing depends on it. So a test that
+skips as root defends nothing here, and every guard needs at least one route
+that needs no permission trick:
+
+- the fingerprint's trust flags: a symlinked subdirectory reaches
+  `mtime_valid && !scan_complete` directly, and an unresolvable symlink (ELOOP)
+  reaches the same flag through a route root is not exempt from;
+- the scan walk's continuation guards: the enumerability probe is reached by
+  exhausting file descriptors (`ulimit -n` over a chain deeper than the limit
+  — no mode bits involved), and the undeterminable-entry-type branch by a
+  symlink loop;
+- the mid-index rollback: a per-bag-selective write failure, which is also the
+  only shape that can defend the `ROLLBACK` at all (SQLite rolls back at
+  `sqlite3_close` regardless, so only a *later* bag's `BEGIN` observes it).
+
+One guard is a known exception: the mode-000 "cannot tell whether this is a
+bag" branch has no root-observable route. Keep the rest that way — a guard
+that skips in every merge-gating path defends nothing.
 
 `test_indexer_exit_status` runs the built `survey_index_bag` binary, because
 the exit-status contract above lives in `main()` where no library call reaches
 it: an unopenable bag, an indexed-but-untrustworthy bag, a `--scan` subtree
-that was dropped, and a usage error.
+that was dropped or could not be enumerated at all, the walk-continuation
+invariants, an unopenable index DB, the resolved ledger key and the migration
+of a row written through a symlink, the argument-parsing usage errors, the
+lock-wait opt-in, and a bag that fails mid-transaction without taking the next
+bag with it.
 
 ```bash
 colcon test --packages-select marine_survey_index
