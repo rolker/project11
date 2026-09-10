@@ -1,7 +1,7 @@
 # Sonar Processing Chain
 
-How a sonar ping becomes a stored, shareable depth surface: the stages, the one
-component that owns each, and what each stage must be fed.
+How a sonar ping becomes a stored, shareable depth surface: the stages, which
+component owns each, and what each stage must be fed.
 
 This is the third of three sonar pages, and the one to read when you are about
 to write code that touches soundings:
@@ -13,25 +13,30 @@ to write code that touches soundings:
 - **this page** — the *processing chain*: stages, ownership, inputs, units.
 
 It records what the chain is and what it needs. It decides nothing; where a
-decision governs a stage it is cited, not restated. Every claim here was read
-out of the source on 2026-09-10; where the code and its own documentation
-disagree, that disagreement is recorded as a defect rather than smoothed over.
+decision governs a stage it is cited, not restated.
+
+**What "is" means here.** This page describes what ships on the default
+branches. Where a stage is being changed on an open branch, that is marked
+explicitly rather than written in the present tense, because a chain document
+that describes unmerged work is a chain document that lies to whoever reads it
+next. Everything below was read out of source on 2026-09-10; where code and its
+own comments disagree, the disagreement is recorded rather than smoothed over.
 
 ## The chain at a glance
 
 | # | Stage | Owner | In | Out |
 |---|---|---|---|---|
 | 1 | Acquisition | `marine_tools/kongsberg_em_bridge` | EM datagrams | `SonarDetections` + latched `SonarInfo` |
-| 2 | Projection | `cube::DetectionsProjector` | ping + TF + SOG | sonar-frame soundings |
+| 2 | Projection | `cube::DetectionsProjector` | ping + TF + SOG | **sonar-frame** soundings |
 | 3 | Uncertainty | `cube::ErrorModel` | ping + `Platform` + `Vessel` + `Device` | per-sounding TPU |
-| 4 | Georeferencing | `cube::DetectionsProjector` (live), `tf_lift.hpp` (explorer) | soundings + TF | world-frame soundings |
-| 5 | Estimation | `cube::GeoMapSheet` / `cube::Node` | world soundings + `cube::Parameters` | per-node depth, uncertainty, backscatter |
+| 4 | Georeferencing | **no single owner — five copies** | soundings + TF | world / geographic soundings |
+| 5 | Estimation | `cube::GeoMapSheet` / `cube::Node` | geo soundings + `cube::Parameters` | per-node depth, uncertainty, backscatter |
 | 6 | Store write | `cube::store_import` | nodes | GGGS tiles in `marine_bathymetry_store` |
 
-Stages 2, 3 and 4 are **one component**. `DetectionsProjector` exists precisely
-so that projection, the error model and the TF lookup happen together and once.
-Its header forbids node-bound includes so bag replay can reuse it, and both the
-live node and `bag_to_geotiff` are thin adapters over it.
+Stages 2 and 3 are **one component**: `DetectionsProjector` exists so that
+projection and the error model happen together and once, and its header forbids
+node-bound includes so bag replay can reuse it. Stage 4 is **not** in it, and
+that is the chain's weakest joint. See stage 4.
 
 ## Units and conventions
 
@@ -45,17 +50,22 @@ the defects below survived. This table is the contract.
 | `SonarDetections.two_way_travel_times` | seconds | |
 | `PingInfo.tx_beamwidths`, `rx_beamwidths` | **radians** | full −3 dB; may be empty |
 | `PingInfo.frequency`, `sound_speed` | Hz, m/s | **0 means unavailable**, not zero |
-| `cube::Device` beamwidth fields | **degrees** | the one place degrees are used |
+| `cube::Device` beamwidths | **degrees** | |
 | `cube::Platform` roll, pitch | degrees | roll positive port-side-up, pitch positive bow-up |
+| `cube::Vessel` alignments, angular sdevs, static roll | degrees | |
 | `cube::Platform.heave` | metres | **positive down** |
 | `cube::Sounding.depth` | metres | **elevation, positive up** |
 | `SspRayTracer` depths | metres | **positive down**, below a shared surface datum |
-| `cube::Sounding.vertical_error` | m², a **variance** | named "error", holds a variance |
-| `cube::Sounding.horizontal_error` | m², **not a clean variance** | one term is doubled to approximate a 95% bound |
+| `cube::Sounding.vertical_error`, `horizontal_error` | m², **variances** | named "error", hold variances |
 
-Two of these are traps worth naming out loud. `Sounding::depth` and the ray
-tracer's `depth_below_surface` have **opposite signs**; the ray tracer names its
-field the long way round for exactly that reason. And the `_error` fields hold
+Angles on the wire are radians; angles in the `Vessel` and `Device`
+configuration are degrees. That split is the single most common source of
+defects in this chain, and every one of the known defects below is an instance
+of it.
+
+Two further traps. `Sounding::depth` and the ray tracer's
+`depth_below_surface` have **opposite signs**; the ray tracer names its field
+the long way round for exactly that reason. And the `_error` fields hold
 variances, so a consumer that squares them is wrong by a square.
 
 ## Stage 1 — Acquisition
@@ -85,13 +95,29 @@ explicitly sequenced *after* the consumer unit fix. Do not "fix" the driver
 first: publishing correct radians into the current consumer makes the error
 smaller-but-wrong in the more dangerous direction.
 
+**Other drivers do not behave alike**, which matters because the consumer
+branches on whether the array is empty:
+
+| Driver | Beamwidths | Consequence today |
+|---|---|---|
+| `garmin_sidescan` | populated, radians, from a per-generation table; left empty where uncharacterised | takes the per-beam branch, so it is already exposed to that branch's defect |
+| `kongsberg_em_bridge` (M3) | empty, deliberately | takes the fallback branch |
+| `imagenex_deltat` | absent | takes the fallback branch |
+| `r2sonic` | assigned | takes the per-beam branch |
+| `norbit_driver` | `resize(num_beams)` with the assignment commented out, marked "not reported" | **an array of zeros**, which is non-empty, so it takes the per-beam branch with a beamwidth of zero |
+
+The Garmin driver is the pattern the other two should copy: full −3 dB widths in
+radians from a cited table, and **empty rather than guessed** where a model is
+not characterised.
+
 ## Stage 2 — Projection
 
 **What it does.** Turns each beam's travel time and steering angles into a point
-in the sonar frame.
+**in the sonar frame**. It does not georeference; that is stage 4.
 
 **Owner.** `cube::DetectionsProjector`, which delegates the per-beam arithmetic
-to the `cube::Sounding` detections constructor.
+to the `cube::Sounding` detections constructor and writes
+`Sounding::sonar_relative_position`.
 
 **What it must be fed.** `two_way_travel_times`, `tx_angles`, `rx_angles` and
 `ping_info.sound_speed`. Range is `twtt * sound_speed / 2`, so a ping whose
@@ -101,23 +127,23 @@ a range gate: a sounding is kept only when its slant range is within
 diagnostics rather than logged by the projector itself.
 
 **Implemented more than once.** `marine_perception_tools/src/mbes_geometry.hpp`
-re-implements the same projection for the survey explorer, with the same
-formula and a single sound speed. Its header calls itself a QC-grade
-projection, which is honest, but it is a second copy of stage 2.
+re-implements the same projection for the survey explorer, with the same formula
+and a single sound speed. Its header calls itself a QC-grade projection, which
+is honest, but it is a second copy of stage 2.
 
-**A third geometry exists and is not this one.**
-`cube::SspRayTracer` is a constant-gradient ray tracer, the shared forward model
-agreed on [#300](https://github.com/rolker/unh_marine_autonomy/issues/300). It
-is not yet in the production path; it is consumed by the sound-speed inversion
-work and is the intended basis for re-projection through a real profile
+**A third geometry exists and is not this one.** `cube::SspRayTracer` is a
+constant-gradient ray tracer, the shared forward model agreed on
+[#300](https://github.com/rolker/unh_marine_autonomy/issues/300). It is not in
+the production path; it is consumed by the sound-speed inversion work and is the
+intended basis for re-projection through a real profile
 ([marine_perception_tools#28](https://github.com/rolker/marine_perception_tools/issues/28)).
-Straight-line projection is what ships today.
+Straight-line projection is what ships.
 
 ## Stage 3 — Uncertainty
 
 **What it does.** Attaches a per-sounding vertical and horizontal error budget.
-This is the stage that decides how much CUBE trusts each sounding, and it is the
-least validated stage in the chain.
+This decides how much CUBE trusts each sounding, and it is the least validated
+stage in the chain.
 
 **Owner.** `cube::ErrorModel::compute(detections, platform)`, constructed with a
 `Vessel` and a `Device`.
@@ -145,50 +171,68 @@ reports it in `diagnostics.missing_attitude`. A missing heave transform defaults
 heave to zero, which the projector documents as non-critical because heave
 enters the budget only squared. Speed over ground may be passed as NaN.
 
-**The `Vessel` half has no offline configuration path.** Offline tools construct
-it with defaults, meaning zero lever arms and nominal standard deviations, so an
+**Neither `Vessel` nor `Device` has an offline configuration path.** The offline
+tools set only the frames and the range gate and leave both structs at their
+defaults — zero lever arms, nominal standard deviations, 2° beamwidths — so an
 archive cannot be reprocessed with the real geometry. That is
-[cube_bathymetry#145](https://github.com/rolker/cube_bathymetry/issues/145).
+[cube#145](https://github.com/rolker/cube_bathymetry/issues/145).
 
-**Implemented more than once.**
-`marine_perception_tools/src/sounding_uncertainty.hpp` is a stand-in that
-propagates a range error and an angular error through each beam's own angle and
-slant range, seeded from `cube::Device`'s constants. Its own header says it
-lasts "until detections are carried through". It is not a small divergence: it
-carries no roll, pitch, heave, sound-speed-profile or lever-arm terms at all,
-and it applies the floor to each propagated component rather than to the range.
-The explorer's bag reader holds the ping and the transform buffer at the same
+**What the survey explorer runs instead.** On the default branch the explorer
+does **not** use this model at all. `cube_lab.cpp` computes a depth-only
+placeholder, `v_std = 0.1 + 0.007·d` and `h_std = 0.2 + 0.01·d`, squares them,
+and hands those to CUBE. There is no angle term, no attitude, no lever arms.
+An angle-aware replacement is in review on
+[marine_perception_tools#50](https://github.com/rolker/marine_perception_tools/pull/50);
+it is still a stand-in seeded from `cube::Device`'s constants, and
+`cube_lab.hpp` says it lasts "until detections are carried through". The
+explorer's bag reader holds the ping and the transform buffer at the same
 moment, so carrying detections through to `DetectionsProjector` is practical
 rather than aspirational.
 
 **Validation status.** The estimator core was compared term by term against
 Brian Calder's original C, which ships in this repo under `original_cube/`, in
-[cube_bathymetry#30](https://github.com/rolker/cube_bathymetry/issues/30). The
-verdict there is worth repeating: the **estimator is a faithful port** — feed it
-the same soundings with the same uncertainty and the grid matches Calder. The
+[cube#30](https://github.com/rolker/cube_bathymetry/issues/30). The verdict
+there is worth repeating: the **estimator is a faithful port** — feed it the
+same soundings with the same uncertainty and the grid matches Calder. The
 divergences are concentrated in this stage, the upstream error budget.
 
 ## Stage 4 — Georeferencing
 
-**What it does.** Lifts sonar-frame soundings into the world frame.
+**What it does.** Lifts sonar-frame soundings into a geographic frame, by
+looking up `earth <- <sonar frame>` at the ping stamp and converting through
+ECEF to latitude and longitude.
 
-**Owner.** `DetectionsProjector` on the live path, using the configured frames:
-`base_link`, a level north-aligned `base_link_north_up`, and `map_tide`.
-Namespaced deployments must override those names.
+**Owner: nobody.** This is the finding that most deserves your attention. The
+lift is written out five times:
 
-**What it must be fed.** A TF buffer covering the ping stamp. Lookups fall back
-to the latest available transform when TF is momentarily behind, which is normal
-under bag replay; attitude and heave vary slowly enough that tens of
-milliseconds of staleness is harmless.
+| Where | File |
+|---|---|
+| live CUBE node | `cube_bathymetry/src/cube_bathymetry_node.cpp` |
+| bag to GeoTIFF | `cube_bathymetry/src/bag_to_geotiff.cpp` |
+| store import | `cube_bathymetry/src/import_bag_main.cpp` |
+| batch regeneration | `cube_bathymetry/src/batch_regen_main.cpp` |
+| survey explorer | `marine_perception_tools/src/tf_lift.hpp` |
 
-**Implemented more than once.** The explorer lifts separately in
-`marine_perception_tools/src/tf_lift.hpp`. As of
-[marine_perception_tools#42](https://github.com/rolker/marine_perception_tools/issues/42)
-that is one shared helper with copy-then-overwrite semantics, so a field added
-to the sounding type rides along rather than being silently dropped. It had
-previously been two hand-written copies, and both dropped the beam angle and
-slant range, which left every bag-loaded sounding unable to reach stage 3 at
-all.
+The node's own comment says it is "mirroring `bag_to_geotiff.cpp`", which is the
+duplication admitting itself in a code comment. Four of the five live in one
+package, so this is not even a cross-repo problem — it is the same package
+solving the same problem four times.
+
+**What it must be fed.** A TF buffer covering the ping stamp, containing the
+`earth` frame. Lookups fall back to the latest available transform when TF is
+momentarily behind, which is normal under bag replay; attitude and heave vary
+slowly enough that tens of milliseconds of staleness is harmless. A ping with no
+`earth` transform is dropped, and on the live node the grid simply does not
+update.
+
+**A recent instance of the cost.** The explorer's copy was itself written twice,
+in two files, field by field. Both copies dropped the beam angle and slant
+range, which left every bag-loaded sounding unable to reach a stage 3 that reads
+them — filed as
+[marine_perception_tools#49](https://github.com/rolker/marine_perception_tools/issues/49)
+and fixed on the branch in review, where the two copies become one helper with
+copy-then-overwrite semantics so a field added later rides along instead of
+being dropped.
 
 ## Stage 5 — Estimation
 
@@ -200,19 +244,19 @@ hypotheses with Kalman updates, monitoring and intervention.
 The live node accumulates into a geographic map sheet so that persistence needs
 no lossy Cartesian-to-geographic step.
 
-**What it must be fed.** World-frame soundings carrying depth, vertical error
-and horizontal error, plus intensity, beam angle and slant range when the
+**What it must be fed.** Geographic soundings carrying depth, vertical error and
+horizontal error, plus intensity, beam angle and slant range when the
 backscatter product is wanted
-([ADR-0007](decisions/0007-mbes-backscatter-store.md)). The horizontal error is
-what sets the influence radius, so an under-stated horizontal budget pins every
+([ADR-0007](decisions/0007-mbes-backscatter-store.md)). The horizontal error
+sets the influence radius, so an under-stated horizontal budget pins every
 radius to the cell size.
 
 **Implemented more than once.** `marine_perception_tools/src/cube_lab.cpp`
 drives `cube::Node` directly rather than going through the grid, mirroring the
-grid's insert effect square. It does so for a stated reason: the grid's
-value extraction is depth-only, while the node extraction carries the
-CUBE-settled backscatter the lab drapes with. That is the most defensible of the
-three duplications, but it is a copy of the insert loop and will drift.
+grid's insert effect square. It does so for a stated reason: the grid's value
+extraction is depth-only, while the node extraction carries the CUBE-settled
+backscatter the lab drapes with. That is the most defensible of the
+duplications, but it is a copy of the insert loop and will drift.
 
 ## Stage 6 — Store write
 
@@ -226,42 +270,44 @@ crash-atomic**.
 **What it must be fed.** Estimated nodes plus the store layout rules from
 [ADR-0002](decisions/0002-bathymetric-data-store.md),
 [ADR-0010](decisions/0010-geospatial-world-model.md) and
-[ADR-0011](decisions/0011-overview-pyramid.md). Layer naming is a live trap:
-the MBES backscatter store was collapsed to a single `survey` layer by
-ADR-0007 A.2, and imagery layer names are not renamed to match the depth theme.
+[ADR-0011](decisions/0011-overview-pyramid.md). Layer naming is a live trap: the
+MBES backscatter store was collapsed to a single `survey` layer by ADR-0007 A.2,
+and imagery layer names are not renamed to match the depth theme.
 
-**Implemented more than once.** The explorer exports its own GeoTIFF through
-`cube_export`. That is a different product — a single file for sharing, not
-tiles — so it is not really a duplicate stage, but it does mean two places know
-how to turn nodes into rasters.
+**A different product, not a duplicate stage.** The explorer exports a single
+GeoTIFF for sharing through `cube_export`, rather than tiles. Two places
+nonetheless know how to turn nodes into rasters.
 
 ## Known defects in the chain
 
-Recorded here because a chain document that hides them is worse than none. All
-are filed; none are fixed as of 2026-09-10.
+Recorded here because a chain document that hides them is worse than none. None
+are fixed as of 2026-09-10.
 
 | Where | Defect | Direction | Issue |
 |---|---|---|---|
 | Stage 3 | Beamwidth fallback uses a degrees field as radians | 57× too large | [cube#144](https://github.com/rolker/cube_bathymetry/issues/144) |
 | Stage 3 | Per-beam branch converts a radians field as degrees | 57× too small | [cube#144](https://github.com/rolker/cube_bathymetry/issues/144) |
-| Stage 3 | Angular term omits Calder's beam-footprint widening | no angle dependence at all | [cube#144](https://github.com/rolker/cube_bathymetry/issues/144) |
-| Stage 3 | No offline `Vessel`/`Device` configuration | archive cannot be reprocessed | [cube#145](https://github.com/rolker/cube_bathymetry/issues/145) |
-| Stage 1 | Drivers publish no beamwidths | works around the above | [marine_tools#82](https://github.com/rolker/marine_tools/issues/82) |
+| Stage 3 | Angular term omits Calder's beam-footprint widening | no angle dependence | [cube#144](https://github.com/rolker/cube_bathymetry/issues/144) |
+| Stage 3 | A zero-filled beamwidth array is accepted as a measurement | angular term vanishes | [cube#144](https://github.com/rolker/cube_bathymetry/issues/144) |
+| Stage 3 | A doc comment claims a doubling the code does not do | reader misled | [cube#144](https://github.com/rolker/cube_bathymetry/issues/144) |
+| Stage 3 | No offline `Vessel` or `Device` configuration | archive cannot be reprocessed | [cube#145](https://github.com/rolker/cube_bathymetry/issues/145) |
+| Stage 4 | Five copies of the world lift, four in one package | drift, and it has already happened | [cube#146](https://github.com/rolker/cube_bathymetry/issues/146) |
+| Stage 1 | M3 and DeltaT publish no beamwidths | works around the above | [marine_tools#82](https://github.com/rolker/marine_tools/issues/82) |
 
 ### The beamwidth units defect, in full
 
 The angular error term reads beamwidth in the wrong units in **both** of its
-branches. The proof that the fallback is a bug and not a convention sits two
-lines away in the same constructor: the along-track beamwidth is converted with
+branches. The proof that the fallback is a bug and not a convention is in the
+same file: the `ErrorModel` constructor converts the along-track beamwidth with
 `* M_PI / 180.0`, exactly as Calder's original does with its `DEG2RAD` macro,
-while the across-track fallback is not converted at all.
+while `swath_angle_error` uses the across-track one unconverted. Same struct,
+same documented units, two behaviours.
 
 The per-beam branch has the opposite problem. It multiplies
 `ping_info.rx_beamwidths[i]` by `M_PI / 180.0`, but that field is radians. The
-message says radians in both the released `marine_msgs` source and the installed
-copy; `cube::Ping`'s own doc comment says radians; the bizzyboat retrofit script
-writes radians; `marine_sidescan_mosaic` consumes radians. The error model is the
-only dissenter in the workspace.
+installed message definition says radians, `cube::Ping`'s own doc comment says
+radians, the bizzyboat retrofit script writes radians, and
+`marine_sidescan_mosaic` consumes radians. The error model is the only dissenter.
 
 This changes the fix. Converting the fallback "the way the per-beam branch does"
 would lock in the 57×-too-small error and make it the live branch the moment the
@@ -270,31 +316,44 @@ the estimator over-trust every sounding. Normalise the units once at the
 boundary instead, so a field documented in degrees cannot reach the formula
 unconverted.
 
-A third divergence sits alongside them. Calder widens the across-track beamwidth
-by `1 / cos(angle)` before forming the angular error, so the term grows toward
-the swath edge. The port has no angle dependence in that term at all.
+**Normalising is not enough on its own.** The branch is selected on array
+length, so the Norbit driver's zero-filled array is accepted as a measurement of
+zero and removes the angular term entirely. The boundary needs to validate, not
+just convert: a non-finite or non-positive beamwidth is not a measurement and
+should fall back rather than be believed.
 
-**What the port's own divergence record already says, and where it needs
-correcting.** `cube_bathymetry/docs/divergences_from_calder.md` records the
-degrees-versus-radians inconsistency between the two branches, and leaves two
-questions open. Both can now be closed:
+### What the port's divergence record says, and where it needs correcting
+
+`cube_bathymetry/docs/divergences_from_calder.md` records the
+degrees-versus-radians inconsistency and leaves two questions open. Both can now
+be closed:
 
 - It says "the live path is the normal one (real pings carry `rx_beamwidths`);
   the fallback only fires when the message omits them." That is **backwards for
-  every sonar in service**. The M3 driver leaves the arrays empty deliberately,
-  so the fallback is not the rare path — it is the only path, on every ping. The
-  severity is correspondingly higher than that note implies.
+  the sonar the fleet surveys with**. The M3 driver leaves the arrays empty
+  deliberately, so for M3 data the fallback is not the rare path — it is the
+  only path, on every ping.
 - It leaves open whether the divisor should be `12` or the textbook
-  uniform-distribution `sqrt(12)`. Calder's own device code settles it: in the
-  amplitude-detection branch the angular sigma is `bw / 12.0`, where `bw` is
-  already `DEG2RAD(across_width) / cos(angle)`. The divisor **does** match
-  Calder. What does not match is everything around it: the conversion to
-  radians, and the widening by `1 / cos(angle)`.
+  `sqrt(12)`. Calder's device code settles it: for the flat-plate and FFT
+  beamformer devices the angular sigma is `bw / 12.0`, where `bw` is already
+  `DEG2RAD(across_width) / cos(angle)`. The divisor **does** match Calder. What
+  does not match is the conversion to radians and the widening around it.
 
-The note is also right about something worth keeping: Calder's angular error is
+The widening is device-dependent in Calder, not universal: several device
+families use a bare `DEG2RAD(across_width)` with no `1 / cos(angle)` term. The
+note is also right about something worth keeping: Calder's angular error is
 **per device**, a switch over sonar models with different detection modes, while
 the port has one generic formula. Fixing the units does not make the port
-device-aware, and should not be described as if it did.
+device-aware and should not be described as if it did.
+
+### The `horizontal_error` comment is wrong
+
+`error_model.h` says the horizontal positioning term returns "twice the nominal
+variance in order to approximate the 95% conf. interval". **The code does not do
+this**, and neither does Calder's, whose corresponding function returns a plain
+sum. `swath_horizontal` sums four variances with no factor anywhere.
+`horizontal_error` is a clean variance in m². The comment is inherited text that
+was never true of this port; it should be deleted rather than trusted.
 
 ## Related
 

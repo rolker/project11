@@ -113,9 +113,34 @@ into `.agent/knowledge/` as a side effect.
 
 ## Open Questions
 
-- Whether the explorer's stand-in uncertainty is recorded as a defensible
-  duplication or as debt with an issue behind it. Resolve by reading how far
-  its numbers actually diverge, not by preference.
+- ~~Whether the explorer's stand-in uncertainty is recorded as a defensible
+  duplication or as debt with an issue behind it.~~ **Resolved by the
+  verification pass**: on the default branch the explorer does not run a
+  stand-in of the error model at all, but a depth-only placeholder with no
+  angle term. The angle-aware stand-in exists only on the branch in review
+  (marine_perception_tools#50). Recorded as what ships, with the branch state
+  marked, rather than as a duplication.
+
+## What the verification pass changed
+
+The first draft attributed stage 4 to `DetectionsProjector` and described the
+explorer's unmerged work in the present tense. An accuracy review against
+source corrected both, and turned up three defects the draft had not found:
+
+- **Stage 4 has no owner.** The projector returns sonar-frame soundings; the
+  world lift is hand-rolled four times inside `cube_bathymetry` and once in the
+  explorer. Filed as
+  [cube#146](https://github.com/rolker/cube_bathymetry/issues/146) and now the
+  document's headline structural finding.
+- **A zero-filled beamwidth array is believed.** `norbit_driver` resizes the
+  arrays without assigning them, so the per-beam branch is selected on length
+  and the angular term vanishes. Added to
+  [cube#144](https://github.com/rolker/cube_bathymetry/issues/144): the fix
+  must validate, not only convert.
+- **`horizontal_error` IS a clean variance.** The draft repeated the header's
+  claim that one term is doubled to approximate a 95% bound. The code does no
+  such thing and neither does Calder's; the comment is inherited text that was
+  never true of this port. Also added to #144.
 
 ## Estimated Scope
 
