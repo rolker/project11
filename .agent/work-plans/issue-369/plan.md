@@ -344,6 +344,30 @@ is in this repo, so no second PR is needed):
 | `marine_bathymetry_store/src/overview_pyramid.cpp` | Comment corrected: whole-tile suppression is a coarse-tier consequence, not a dischargeable writer obligation |
 | `docs/decisions/0010-geospatial-world-model.md` | D9: the corrected `bestSource` wording, the per-query fan-out consequence (#371), and the unsatisfiable writer obligation restated as a display consequence |
 
+**Added after review round 3** (the round-2 fixes all verified good, but a fresh
+adversarial read found that the region-aware query covers the GGGS *query cell*,
+which is strictly smaller than the *costmap cell* whose cost it decides — so
+40-82% of every costmap cell's ground was still never read, and the layer's new
+docs had begun to claim otherwise. The operator directed fixing it in code here,
+documenting the partial-no-data rule as it stands, and recording the residency
+consequence as a follow-up):
+
+| File | Change |
+|------|--------|
+| `bathymetry_layer/src/bathymetry_layer.cpp` | New `evaluateCostmapCell`: reads every GGGS query cell the costmap cell's ground overlaps and keeps the most hazardous verdict; both render paths now derive each cell's four corners (a shared corner lattice on the fast path) instead of its centre; the partial-no-data rule inside a query cell documented at the decision site |
+| `bathymetry_layer/src/bathymetry_layer.hpp` | `evaluateCostmapCell` declared; the coverage claim corrected to name the costmap cell; new residency consequence (#376) |
+| `bathymetry_layer/test/test_bathymetry_layer.cpp` | Three tests, each verified to fail against centre sampling, including the deliberate across-cells / within-cell asymmetry under `unsurveyed_is_lethal` |
+| `bathymetry_layer/README.md` | Two new sections: the query-cell-vs-costmap-cell geometry, and store residency |
+| `marine_bathymetry_store/src/bathymetry_store.cpp` | `finestLevelOver`: the draft-clear walk runs at the finest level covering *this* draft cell, not the finest in the whole import (10^9 point resolutions in a mixed-level bulk import) |
+| `marine_bathymetry_store/test/test_store.cpp` | Equivalence test: a distant fine tile must not change which draft cells clear |
+| `marine_bathymetry_store/src/cell_geometry.hpp` | `boxContains` dropped — documented, never called |
+| `marine_bathymetry_store/src/query.cpp` | The "bounded by data, not geometry" claim corrected: only tiles are data-gated |
+| `marine_bathymetry_store/README.md` | `hasAnyData` documented; the "every query returns `std::optional`" line corrected |
+| `marine_bathymetry_store/include/marine_bathymetry_store/bathymetry_store.hpp` | `coarse_draft_cells_retained` reframed: a large residue is the normal shallow-water case, not an edge |
+| `docs/decisions/0010-geospatial-world-model.md` | D9: the costmap-cell coverage unit, the two-level no-data asymmetry, and the residency consequence (#376) |
+| `docs/sonar_ecosystem.md` | Bathy-store rows: the clear is level-aware, and `processed` itself is mixed-level |
+| `marine_bathymetry_store/src/import_geotiff_main.cpp`, `test/test_geotiff_import.cpp` | *(round 2, table row missed at the time)* the retained-residue count printed by the CLI, with two tests pinning the propagation |
+
 ## Principles Self-Check
 
 | Principle | Consideration |
@@ -375,6 +399,10 @@ is in this repo, so no second PR is needed):
 | `processed` becomes mixed-level | The overview pyramid's whole-tile native-wins suppression drops a shallow band's fold where it shares a parent with a deep band's native tile | **Restated in round 2.** Round 1 recorded this as a writer obligation ("never emit two native levels over the same ground"); that is unsatisfiable — the ladder *guarantees* mixed native levels under one parent, so the obligation would forbid depth-adaptive tiling. It is a **coarse display-tier consequence**, not something cube_bathymetry#143 can discharge. Safety is unaffected (navigation reads the region-aware native query, never an LOD level). Recorded in the ADR and at the suppression site |
 | `bathymetry_layer` reads a store finer than its costmap resolution | The safety **existence gate** must be region-aware too, not just the depth queries | Yes — added in round 2. `bestSource` gated `evaluateCell` and returned early on a no-data centre cell, so the round-1 region-aware query never ran on the path that steers the boat |
 | Safety queries read every covered native cell | **Per-query fan-out on the live Nav2 costmap thread.** The query level is `fromCellSize(resolution_)`, so the fan-out is a *config* parameter: 4× at a 2 m global over today's uniform level-10 `processed`, 16× at 4 m — both reachable now — and 256× for a 1 m global over level-14 tiles (~2.56 M cell visits per 100×100 tile). `generateTile` checks its time budget only *between* tiles, so one tile is uninterruptible | Recorded in round 2 in the ADR, `bathymetry_layer`'s header and its README. **Bounding or measuring it is [#371](https://github.com/rolker/unh_marine_autonomy/issues/371)** — deliberately not done here: point-sampling is the defect just fixed, so the remedy is a measurement then a bound, not a narrower query |
+| `bathymetry_layer` costs a costmap cell from a GGGS query cell | The query cell is **smaller** than the costmap cell (0.60 m² of 1.00 m² at 1 m / 43.5°N; 18% of it just under a level boundary), so every overlapping query cell must be read and the most hazardous verdict kept | Yes — added in round 3. Costing from the centre query cell left 40-82% of each costmap cell unread at every store resolution |
+| A query cell may be partly no-data | Which unit answers "is this land?" under `unsurveyed_is_lethal` | Yes — round 3, operator's decision: **inside** a query cell partial no-data still counts as surveyed (fine surfaces are gappy by construction); **across** the query cells of a costmap cell, an unsurveyed one is land. Documented at both sites and in the ADR |
+| `processed` tiles get finer | **Store residency**, not just per-query CPU: a tile is ~14.7 MB at every level, so ~19 MB per km² at level 10 becomes ~1.2 GB at level 13 and ~4.9 GB at level 14, and `refreshWindow` loads the whole window uncapped, before and outside the render budget | Recorded in round 3 in the ADR, the layer header and its README. **Bounding it is [#376](https://github.com/rolker/unh_marine_autonomy/issues/376)** — an eviction-policy design, and reachable only once the writer (cube_bathymetry#143) lands |
+| `DraftClearResult` / `ProcessedImportResult` gain a field | Every layer that links `marine_bathymetry_store` must be rebuilt together — `cube_bathymetry` (sensors_ws) takes `clearOverlappedDraft`'s result **by value** | Yes — round 3. A `make build` rebuilds the layers in order and the downstream build already tracks this header, so the hazard is a core_ws-only rebuild; called out in the PR body |
 | A depth-adaptive policy exists in `marine_bathymetry_store` | `cube_bathymetry`'s `import_bag` must be re-architected to call it — one `GeoMapSheet` per run today (`import_bag_main.cpp:1030`, `:1130-1133`) ties the estimation grid to the store tiling | **No — filed as [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143)**. Load-bearing: this PR alone changes no on-disk behaviour |
 | Tile counts rise 4×–256× in shallow water | `import_bag`'s `max_resident_tiles` budget; store disk planning | Named here; belongs to cube_bathymetry#143 |
 | Existing level-10 Shoals/Massabesic `processed` stores stay untouched | Retroactive reprocess | No — tracked separately, gated on #366 (operator scope decision 4) |
