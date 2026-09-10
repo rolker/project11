@@ -125,12 +125,21 @@ protected:
 
   RunResult runIndexerWithDb(const std::string & db, const std::string & args) const
   {
+    return runIndexerUnderShell("", db, args);
+  }
+
+  // @p shell_prefix runs in the same shell before the binary, for the one
+  // resource limit that reproduces a real failure root is not exempt from
+  // (`ulimit -n`). It is test-authored text, never interpolated input.
+  RunResult runIndexerUnderShell(
+    const std::string & shell_prefix, const std::string & db, const std::string & args) const
+  {
     // stderr merged in: the summary line and the warnings both go there.
     // Everything the test interpolates is quoted: a build path or a TMPDIR
     // containing a space would otherwise mis-parse into extra argv words and
     // the test would be measuring the wrong invocation.
     const std::string cmd =
-      quote(SURVEY_INDEX_BAG_EXE) + " --db " + quote(db) + " " + args + " 2>&1";
+      shell_prefix + quote(SURVEY_INDEX_BAG_EXE) + " --db " + quote(db) + " " + args + " 2>&1";
     RunResult result;
     FILE * pipe = ::popen(cmd.c_str(), "r");
     if (pipe == nullptr) {
@@ -354,6 +363,53 @@ TEST_F(IndexerExitStatusTest, ScanWalkContinuesPastADirectoryItCannotList)
   EXPECT_EQ(run.status, 1) << run.output;
 }
 
+// The enumerability probe's guard, root-observably: a directory that cannot be
+// opened because the process is out of file descriptors. The recursive walk
+// holds one open directory per level, so a chain deeper than the descriptor
+// limit exhausts them part way down -- EMFILE, which root is not exempt from,
+// unlike the mode bits the two tests above need.
+//
+// This matters because `ci_local.sh` (ADR-0018's merge verification, and the
+// only one that reaches this package -- no hosted workflow builds it) runs as
+// root: without a route like this one, the invariant that a walk survives a
+// directory it cannot open would execute in no merge-gating path at all.
+//
+// The assertion is the same order- and depth-independent invariant: every bag
+// outside the unopenable subtree is still nominated, and the walk never
+// reports having stopped.
+TEST_F(IndexerExitStatusTest, ScanWalkContinuesPastADirectoryItHasNoDescriptorFor)
+{
+  const auto root = dir_ / "root";
+  ASSERT_TRUE(std::filesystem::create_directories(root));
+  for (const std::string name : {"bag_1", "bag_2", "bag_3", "bag_4"}) {
+    makeUnopenableBag("root/" + name);
+  }
+  std::filesystem::path deep = root / "deep";
+  for (int i = 0; i < 400; ++i) {
+    deep /= "d";
+  }
+  std::error_code deep_ec;
+  std::filesystem::create_directories(deep, deep_ec);
+  ASSERT_FALSE(deep_ec) << "could not build the deep chain: " << deep_ec.message();
+
+  // Lowering a soft limit is always permitted, so this is not a flaky
+  // privilege test -- but a host whose *hard* limit is already below 256 could
+  // not raise it back, and `ulimit` would fail rather than lie. 111 says so.
+  const auto run = runIndexerUnderShell(
+    "ulimit -n 256 || exit 111; ", (dir_ / "index.db").string(),
+    "--scan " + quote(root.string()));
+  if (run.status == 111) {
+    GTEST_SKIP() << "this host's hard descriptor limit is below 256";
+  }
+  EXPECT_NE(run.output.find("could not enumerate"), std::string::npos)
+    << "a directory the walk has no descriptor for must be reported: " << run.output;
+  EXPECT_EQ(run.output.find("stopped at"), std::string::npos)
+    << "and must not abandon the walk: " << run.output;
+  EXPECT_NE(run.output.find("(of 4 nominated)"), std::string::npos)
+    << "every bag outside the deep chain must still be nominated: " << run.output;
+  EXPECT_EQ(run.status, 1) << run.output;
+}
+
 // An entry whose type cannot be established at all (a symlink loop: ELOOP,
 // which root is not exempt from) is the third scan report, and the
 // root-observable one. It costs the run its clean exit, and must not cost it
@@ -501,14 +557,50 @@ TEST_F(IndexerExitStatusTest, APreFixDuplicateRowIsRemovedRatherThanLeftDoubleRe
     << "CASCADE must take the stale row's passes: they are the double report";
 }
 
-// The mid-index failure handler: a bag that opened fine and then failed part
-// way through must ROLL BACK (not commit a partial index and mark the bag
-// indexed), be counted, and take the run non-zero. Reached by re-indexing a
-// changed bag into a read-only index DB -- the write fails at the first
-// statement, with the transaction already open.
+// The mid-index failure handler, in the shape that actually defends the
+// `ROLLBACK`: a bag that failed with its transaction open must not leave that
+// transaction open, or the NEXT bag's `BEGIN` fails and one bad bag takes the
+// rest of the run with it. SQLite rolls a transaction back at `sqlite3_close`
+// anyway, so nothing a single-bag run can observe distinguishes the statement
+// being there from it being gone -- which is why the read-only-DB test below
+// left it undefended, and why the honesty note there used to give the wrong
+// reason for that.
 //
-// Permission-based, so it skips as root; the sibling test above covers the
-// same counter root-observably through a bag that cannot be opened at all.
+// The failure has to be per-bag selective for a second bag to reach `BEGIN` at
+// all. A trigger keyed on the bag's own path is exactly that, and needs no
+// permission trick, so unlike the sibling below it runs as root -- which is
+// the only environment that gates a merge here (ADR-0018's `ci_local.sh` runs
+// as root, and this package is in no hosted workflow's build or test list).
+TEST_F(IndexerExitStatusTest, ABagThatFailsMidTransactionRollsBackSoTheNextBagStillIndexes)
+{
+  const auto bad = makeEmptyBag("bag_bad");
+  const auto good = makeEmptyBag("bag_good");
+  const auto db = (dir_ / "index.db").string();
+  execSql(
+    db,
+    "CREATE TRIGGER fail_one_bag BEFORE INSERT ON bags WHEN NEW.path LIKE '%bag_bad%'"
+    " BEGIN SELECT RAISE(ABORT, 'synthetic mid-index write failure'); END;");
+
+  // Order matters: the failing bag first, so the good one has to survive it.
+  const auto run = runIndexerWithDb(db, quote(bad.string()) + " " + quote(good.string()));
+  EXPECT_NE(run.output.find("failed to index"), std::string::npos) << run.output;
+  EXPECT_NE(
+    run.output.find("1 bag(s) indexed, 0 unchanged skipped, 1 failed (of 2 nominated)"),
+    std::string::npos)
+    << "the failed bag must cost the run exactly itself: " << run.output;
+  EXPECT_EQ(run.status, 1) << run.output;
+  EXPECT_EQ(queryScalar(db, "SELECT COUNT(*) FROM bags"), "1")
+    << "the rolled-back bag must leave no ledger row, and the good bag must have one";
+  EXPECT_EQ(queryScalar(db, "SELECT path FROM bags"), good.string());
+}
+
+// The same counter by the route a field operator hits (a DB that cannot be
+// written), reached by re-indexing a changed bag into a read-only index DB --
+// the write fails at the first statement, with the transaction already open.
+//
+// Permission-based, so it skips as root. Its guard is defended
+// root-observably by the trigger test above; what this one adds is the real
+// sqlite write error, and it is kept for that.
 TEST_F(IndexerExitStatusTest, BagThatFailsMidIndexIsRolledBackAndCounted)
 {
   if (runningAsRoot()) {
