@@ -45,6 +45,7 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -95,6 +96,82 @@ MsgT deserialize(const rosbag2_storage::SerializedBagMessageSharedPtr & bag_msg)
   MsgT out;
   rclcpp::Serialization<MsgT>().deserialize_message(&serialized, &out);
   return out;
+}
+
+// Every flag this CLI accepts, and whether it takes a value.
+//
+// Both facts are needed to parse an argument list without losing a bag. The
+// old loop assumed *every* `--`-prefixed token took a value, so an
+// unrecognised flag swallowed the token behind it: `--verbose BAG` indexed
+// nothing, said nothing, and exited 0 -- while the contract below promises
+// that 0 means every nominated bag is in the index. A `--scan` with nothing
+// behind it (`--scan $ROOT` with `ROOT` unset and unquoted) dropped the whole
+// tree the same way. Unknown flags and missing values are usage errors now.
+struct FlagSpec
+{
+  const char * name;
+  bool takes_value;
+};
+
+constexpr FlagSpec kFlags[] = {
+  {"--help", false},
+  {"--scan", true},
+  {"--db", true},
+  {"--mbes-topic", true},
+  {"--port-topic", true},
+  {"--stbd-topic", true},
+  {"--mbes-level", true},
+  {"--sidescan-level", true},
+  {"--level", true},
+  {"--merge-gap", true},
+  {"--nav-stride-m", true},
+  {"--earth-frame", true},
+  {"--sound-speed", true},
+};
+
+const FlagSpec * findFlag(const std::string & arg)
+{
+  for (const FlagSpec & spec : kFlags) {
+    if (arg == spec.name) {
+      return &spec;
+    }
+  }
+  return nullptr;
+}
+
+// True when the argument list is well formed. Checked before any value is
+// read, so a flag whose value is missing can never fall through to a default.
+bool argsAreWellFormed(int argc, char ** argv)
+{
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg.rfind("--", 0) != 0) {
+      continue;  // a positional bag URI
+    }
+    const FlagSpec * spec = findFlag(arg);
+    if (spec == nullptr) {
+      std::cerr << "error: unrecognised flag '" << arg
+                << "' (see --help); refusing to run, because guessing whether it"
+                << " takes a value is what used to swallow the bag behind it\n";
+      return false;
+    }
+    if (!spec->takes_value) {
+      continue;
+    }
+    if (i + 1 >= argc) {
+      std::cerr << "error: " << arg << " requires a value\n";
+      return false;
+    }
+    // A known flag where a value should be is a missing value, not a value:
+    // `--scan --db X` would otherwise scan a directory called "--db".
+    if (findFlag(argv[i + 1]) != nullptr) {
+      std::cerr << "error: " << arg << " requires a value, but is followed by '"
+                << argv[i + 1] << "'\n";
+      return false;
+    }
+    ++i;
+  }
+  return true;
 }
 
 std::string argValue(int argc, char ** argv, const std::string & flag, const std::string & dflt)
@@ -374,6 +451,12 @@ int main(int argc, char ** argv)
     return 2;
   }
 
+  // Before any value is read: an unrecognised flag or a flag with no value is
+  // a usage error (2), never a silently dropped bag.
+  if (!argsAreWellFormed(argc, argv)) {
+    return 2;
+  }
+
   const std::string db_path = argValue(argc, argv, "--db", "survey_index.db");
   const std::string base = "/bizzy/sensors/";
   const std::string mbes_topic = argValue(argc, argv, "--mbes-topic", base + "m3/detections");
@@ -417,16 +500,17 @@ int main(int argc, char ** argv)
   std::vector<std::string> scan_problems;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
-    if (arg == "--scan") {
-      if (i + 1 < argc) {
+    // `argsAreWellFormed()` has already established that every flag here is
+    // known and that a value-taking one has its value, so this loop can trust
+    // the table instead of guessing.
+    if (const FlagSpec * spec = findFlag(arg)) {
+      if (arg == "--scan") {
         const auto found = scanForBags(argv[i + 1], scan_problems);
         bags.insert(bags.end(), found.begin(), found.end());
       }
-      ++i;
-      continue;
-    }
-    if (arg.rfind("--", 0) == 0) {
-      ++i;  // every other flag takes a value
+      if (spec->takes_value) {
+        ++i;
+      }
       continue;
     }
     bags.emplace_back(arg);

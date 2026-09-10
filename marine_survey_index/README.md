@@ -32,7 +32,7 @@ distinguish the causes):
 |------|---------|
 | `0` | every nominated bag is in the index, and every fingerprint is trustworthy |
 | `1` | the index is **incomplete**: a bag failed mid-index or could not be opened, a `--scan` tree could not be fully enumerated (bags may be missing outright), or the index DB itself could not be opened (nothing was done) |
-| `2` | usage error — bad flag value, or nothing nominated by a well-formed command line |
+| `2` | usage error — an unrecognised flag, a flag with no value, a bad flag value, `--help`, a bare invocation, or nothing nominated by a well-formed command line |
 | `3` | the index is complete, but at least one bag cannot be fingerprinted authoritatively and so **re-indexes on every run** until the cause is fixed |
 
 `1` dominates `3`, and it also dominates `2`: a `--scan` tree that could not be

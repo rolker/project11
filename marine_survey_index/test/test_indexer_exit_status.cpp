@@ -435,6 +435,48 @@ TEST_F(IndexerExitStatusTest, BagThatFailsMidIndexIsRolledBackAndCounted)
   EXPECT_EQ(run.status, 1) << run.output;
 }
 
+// Argument parsing, and the reason it belongs in the exit-status file: the
+// contract says 0 means every nominated bag is in the index. A `--scan` with
+// nothing behind it walked no tree, reported no problem and exited 0 -- the
+// exact shape of `--scan $ROOT` with `ROOT` unset and unquoted, where the
+// quoted spelling (`--scan ""`) already exited 1. Both spellings must now
+// refuse to run.
+TEST_F(IndexerExitStatusTest, ValuelessScanIsAUsageErrorNotASilentlyEmptyRun)
+{
+  const auto run = runIndexer("--scan");
+  EXPECT_EQ(run.status, 2) << run.output;
+  EXPECT_NE(run.output.find("--scan requires a value"), std::string::npos) << run.output;
+  EXPECT_EQ(run.output.find("done:"), std::string::npos)
+    << "nothing was walked, so there is no run to summarise: " << run.output;
+
+  // The quoted spelling of the same slip: an empty root is a root that cannot
+  // be enumerated, which is an incomplete index (1), not a usage error.
+  const auto quoted = runIndexer("--scan ''");
+  EXPECT_EQ(quoted.status, 1) << quoted.output;
+}
+
+// The other half: an unknown flag used to be assumed to take a value, so the
+// positional bag behind it was consumed as that value and the run exited 0
+// having indexed nothing.
+TEST_F(IndexerExitStatusTest, UnrecognisedFlagDoesNotSwallowTheBagBehindIt)
+{
+  const auto bag = makeEmptyBag("bag_ok");
+  const auto run = runIndexer("--verbose " + quote(bag.string()));
+  EXPECT_EQ(run.status, 2) << run.output;
+  EXPECT_NE(run.output.find("unrecognised flag '--verbose'"), std::string::npos) << run.output;
+  EXPECT_EQ(run.output.find("done:"), std::string::npos)
+    << "the bag was never indexed, so no summary may claim a run: " << run.output;
+}
+
+// A known flag where a value should be is a missing value, not a value: this
+// would otherwise scan a directory literally called "--db".
+TEST_F(IndexerExitStatusTest, AFlagFollowedByAnotherFlagIsAMissingValue)
+{
+  const auto run = runIndexer("--scan --level 14");
+  EXPECT_EQ(run.status, 2) << run.output;
+  EXPECT_NE(run.output.find("--scan requires a value"), std::string::npos) << run.output;
+}
+
 TEST_F(IndexerExitStatusTest, NoBagsIsAUsageError)
 {
   const auto run = runIndexer("");
