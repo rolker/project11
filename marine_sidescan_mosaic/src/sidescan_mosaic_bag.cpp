@@ -139,8 +139,10 @@ int main(int argc, char ** argv)
     argValue(argc, argv, "--stbd-topic", base + "sonar_image_starboard");
   const std::string nadir_topic = argValue(argc, argv, "--nadir-topic", base + "nadir_depth");
   const std::string earth_frame = argValue(argc, argv, "--earth-frame", "earth");
-  const double sound_speed_fallback = toDouble(argValue(argc, argv, "--sound-speed", "1500.0"), "--sound-speed");
-  const double nadir_staleness_s = toDouble(argValue(argc, argv, "--nadir-staleness", "5.0"), "--nadir-staleness");
+  const double sound_speed_fallback =
+    toDouble(argValue(argc, argv, "--sound-speed", "1500.0"), "--sound-speed");
+  const double nadir_staleness_s =
+    toDouble(argValue(argc, argv, "--nadir-staleness", "5.0"), "--nadir-staleness");
   const int expected_bins = toInt(argValue(argc, argv, "--bins", "2048"), "--bins");
 
   // Bounded TF cache: the projection only needs the transforms bracketing each
@@ -289,10 +291,10 @@ int main(int argc, char ** argv)
     pp.frame_id = msg.header.frame_id;
     marine_sidescan_mosaic::Tier1Ping & p = pp.p;
     p.stamp_ns = ping_ns;
-    p.channel = is_port ? marine_sidescan_mosaic::Tier1Channel::Port
-      : marine_sidescan_mosaic::Tier1Channel::Starboard;
-    p.sound_speed = msg.ping_info.sound_speed > 0.0 ? msg.ping_info.sound_speed
-      : sound_speed_fallback;
+    p.channel = is_port ? marine_sidescan_mosaic::Tier1Channel::Port :
+      marine_sidescan_mosaic::Tier1Channel::Starboard;
+    p.sound_speed = msg.ping_info.sound_speed > 0.0 ? msg.ping_info.sound_speed :
+      sound_speed_fallback;
     p.sample_rate = msg.sample_rate;
     p.sample0 = static_cast<std::int32_t>(msg.sample0);
     // Snapshot the held nadir at the ping's own time (not at drain), matching the
@@ -303,8 +305,8 @@ int main(int argc, char ** argv)
     // Along-track tx −3 dB beamwidth (Tier-1 v2), so offline Tier-2 reproduces the
     // footprint without re-reading the bag; 0 when the driver didn't publish it.
     p.tx_beamwidth_rad =
-      (!msg.ping_info.tx_beamwidths.empty() && msg.ping_info.tx_beamwidths[0] > 0.0F)
-      ? msg.ping_info.tx_beamwidths[0] : 0.0F;
+      (!msg.ping_info.tx_beamwidths.empty() && msg.ping_info.tx_beamwidths[0] > 0.0F) ?
+      msg.ping_info.tx_beamwidths[0] : 0.0F;
     const auto raw = marine_sidescan_mosaic::decodeSamples(msg);
     p.samples.assign(raw.begin(), raw.end());   // double -> float (lossless for GCV range).
 

@@ -112,9 +112,9 @@ GeoHeading ecefPoseToGeoHeading(
   out.longitude_deg = p.lon_deg;
   out.altitude_m = p.alt_m;
   // Body +X axis (column 0 of body→NED): the aerospace ZYX yaw.
-  out.heading_rad = p.valid
-    ? std::atan2(p.r_body_ned[1 * 3 + 0], p.r_body_ned[0 * 3 + 0])
-    : 0.0;
+  out.heading_rad = p.valid ?
+    std::atan2(p.r_body_ned[1 * 3 + 0], p.r_body_ned[0 * 3 + 0]) :
+    0.0;
   return out;
 }
 
