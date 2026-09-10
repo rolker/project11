@@ -24,9 +24,9 @@
 namespace bathymetry_layer
 {
 
-using marine_bathymetry_store::bestSource;
 using marine_bathymetry_store::BathymetryStore;
 using marine_bathymetry_store::DepthSample;
+using marine_bathymetry_store::hasAnyData;
 using marine_bathymetry_store::reliableSamples;
 
 // Expand a leading "~" or "~/" in a path to $HOME so one portable store_path
@@ -388,8 +388,11 @@ std::vector<BathymetryLayer::CoverageBox> BathymetryLayer::buildCoverage() const
   if (!store_) {
     return coverage;
   }
-  // The store holds only the windowed coverage (a handful of GGGS tiles for a
-  // lake), so this is cheap. One AABB per resident tile across all source layers.
+  // One AABB per resident tile across all source layers. "A handful of tiles for
+  // a lake" held while `processed` was uniformly level 10; a depth-adaptive store
+  // (uma#369) puts 4^(level-10) times as many tiles over the same ground, and
+  // `tileHasCoverage` scans this vector once per rendered tile — see the
+  // residency note in the class doc and #376.
   for (const auto layer : marine_bathymetry_store::source_layers_by_priority) {
     for (const auto & entry : store_->tiles(layer)) {
       const gggs::GridIndex & grid = entry.first;
@@ -472,18 +475,51 @@ void BathymetryLayer::generateTile(
       tile_size_, tile_size_, resolution_, world_min_x, world_min_y,
       nav2_costmap_2d::NO_INFORMATION);
     const double inv = 1.0 / static_cast<double>(tile_size_);
-    for (int ty = 0; ty < tile_size_; ++ty) {
-      const double fy = (static_cast<double>(ty) + 0.5) * inv;
-      for (int tx = 0; tx < tile_size_; ++tx) {
-        const double fx = (static_cast<double>(tx) + 0.5) * inv;
+    // Corner LATTICE, not cell centres (round 3): the cost of a costmap cell is
+    // decided over the cell's whole ground, so each cell needs its four corner
+    // geos, and adjacent cells share them. One (tile_size+1)^2 lattice is both
+    // cheaper than four bilinear evaluations per cell and exactly consistent at
+    // the shared edges.
+    const int lattice_n = tile_size_ + 1;
+    std::vector<double> lat_lattice(static_cast<size_t>(lattice_n) * lattice_n);
+    std::vector<double> lon_lattice(lat_lattice.size());
+    for (int iy = 0; iy < lattice_n; ++iy) {
+      const double fy = static_cast<double>(iy) * inv;
+      for (int ix = 0; ix < lattice_n; ++ix) {
+        const double fx = static_cast<double>(ix) * inv;
         const double w00 = (1.0 - fx) * (1.0 - fy);
         const double w10 = fx * (1.0 - fy);
         const double w01 = (1.0 - fx) * fy;
         const double w11 = fx * fy;
-        const double lat = w00 * clat[0] + w10 * clat[1] + w01 * clat[2] + w11 * clat[3];
-        const double lon = w00 * clon[0] + w10 * clon[1] + w01 * clon[2] + w11 * clon[3];
-        const gggs::CellIndex cell = store_->cellIndex(lat, lon);
-        const std::optional<unsigned char> evaluated = evaluateCell(cell);
+        const size_t k = static_cast<size_t>(iy) * lattice_n + ix;
+        lat_lattice[k] = w00 * clat[0] + w10 * clat[1] + w01 * clat[2] + w11 * clat[3];
+        lon_lattice[k] = w00 * clon[0] + w10 * clon[1] + w01 * clon[2] + w11 * clon[3];
+      }
+    }
+    // One memo per rendered tile: query cells shared between neighbouring costmap
+    // cells are evaluated once. Scoped to the tile so it cannot outlive a store
+    // window refresh.
+    std::map<gggs::CellIndex, std::optional<unsigned char>> memo;
+    for (int ty = 0; ty < tile_size_; ++ty) {
+      for (int tx = 0; tx < tile_size_; ++tx) {
+        const size_t sw = static_cast<size_t>(ty) * lattice_n + tx;
+        const size_t se = sw + 1;
+        const size_t nw = sw + lattice_n;
+        const size_t ne = nw + 1;
+        const std::optional<unsigned char> evaluated = evaluateCostmapCell(
+          std::min(
+            std::min(lat_lattice[sw], lat_lattice[se]),
+            std::min(lat_lattice[nw], lat_lattice[ne])),
+          std::min(
+            std::min(lon_lattice[sw], lon_lattice[se]),
+            std::min(lon_lattice[nw], lon_lattice[ne])),
+          std::max(
+            std::max(lat_lattice[sw], lat_lattice[se]),
+            std::max(lat_lattice[nw], lat_lattice[ne])),
+          std::max(
+            std::max(lon_lattice[sw], lon_lattice[se]),
+            std::max(lon_lattice[nw], lon_lattice[ne])),
+          &memo);
         if (evaluated) {
           tile->setCost(
             static_cast<unsigned int>(tx), static_cast<unsigned int>(ty), *evaluated);
@@ -503,16 +539,37 @@ void BathymetryLayer::generateTile(
   auto tile = std::make_shared<nav2_costmap_2d::Costmap2D>(
     tile_size_, tile_size_, resolution_, world_min_x, world_min_y,
     nav2_costmap_2d::NO_INFORMATION);
+  std::map<gggs::CellIndex, std::optional<unsigned char>> fallback_memo;
   for (int ty = 0; ty < tile_size_; ++ty) {
     for (int tx = 0; tx < tile_size_; ++tx) {
       double wx;
       double wy;
       tile->mapToWorld(
         static_cast<unsigned int>(tx), static_cast<unsigned int>(ty), wx, wy);
-      gggs::CellIndex cell;
+      // The cell's four corners, not its centre: the cost is decided over the
+      // cell's whole ground (round 3). A throw at any corner skips the cell,
+      // exactly as the centre-only projection did.
+      const double half = 0.5 * resolution_;
+      double min_lat = 0.0;
+      double min_lon = 0.0;
+      double max_lat = 0.0;
+      double max_lon = 0.0;
       try {
-        const auto geo = worldToLatLon(wx, wy, to_earth);
-        cell = store_->cellIndex(geo.latitude, geo.longitude);
+        bool first = true;
+        for (int c = 0; c < 4; ++c) {
+          const auto geo = worldToLatLon(
+            wx + ((c & 1) ? half : -half), wy + ((c & 2) ? half : -half), to_earth);
+          if (first) {
+            min_lat = max_lat = geo.latitude;
+            min_lon = max_lon = geo.longitude;
+            first = false;
+            continue;
+          }
+          min_lat = std::min(min_lat, geo.latitude);
+          max_lat = std::max(max_lat, geo.latitude);
+          min_lon = std::min(min_lon, geo.longitude);
+          max_lon = std::max(max_lon, geo.longitude);
+        }
       } catch (const tf2::TransformException & e) {
         RCLCPP_WARN_THROTTLE(
           logger_, *clock_, 10000,
@@ -520,7 +577,8 @@ void BathymetryLayer::generateTile(
           name_.c_str(), e.what());
         continue;
       }
-      const std::optional<unsigned char> evaluated = evaluateCell(cell);
+      const std::optional<unsigned char> evaluated =
+        evaluateCostmapCell(min_lat, min_lon, max_lat, max_lon, &fallback_memo);
       if (evaluated) {
         tile->setCost(
           static_cast<unsigned int>(tx), static_cast<unsigned int>(ty), *evaluated);
@@ -735,9 +793,9 @@ void BathymetryLayer::updateBounds(
         name_.c_str(), global_frame_id_.c_str(), e.what());
     }
 
-    // The store holds only the windowed coverage (a handful of GGGS tiles for a
-    // lake); collect their lat/lon AABBs once so generateTile can cheaply skip the
-    // per-cell projection on tiles that fall entirely outside coverage.
+    // Collect the resident tiles' lat/lon AABBs once so generateTile can cheaply
+    // skip the per-cell projection on tiles that fall entirely outside coverage.
+    // The list is no longer "a handful" under a depth-adaptive store (#376).
     const std::vector<CoverageBox> coverage = buildCoverage();
 
     // #2 safety: an EMPTY store window under unsurveyed_is_lethal_ would make
@@ -876,6 +934,102 @@ unsigned char BathymetryLayer::computeCost(double worst_case_clearance, bool tru
   return static_cast<unsigned char>(scaled);
 }
 
+std::optional<unsigned char> BathymetryLayer::evaluateCostmapCell(
+  double min_lat, double min_lon, double max_lat, double max_lon,
+  std::map<gggs::CellIndex, std::optional<unsigned char>> * memo) const
+{
+  if (!store_) {
+    return std::nullopt;
+  }
+  const gggs::Level & level = store_->level();
+
+  // The GGGS query cell is SMALLER than the costmap cell it costs (round 3).
+  // `BathymetryStore::fromCellSize(resolution_)` returns the coarsest level whose
+  // cells are AT OR FINER than the costmap resolution, so a query cell's latitude
+  // extent lies in (resolution/2, resolution] and its longitude extent is that
+  // times cos(latitude). At 1 m resolution and 43.5°N that is 0.906 m × 0.657 m =
+  // 0.60 m² of a 1.00 m² costmap cell; just under a level boundary (1.80 m
+  // resolution, still level 10) it is 0.60 m² of 3.24 m². Costing the cell from
+  // the single GGGS cell under its CENTRE therefore left 40-82% of its ground
+  // unread — a 0.3 m rock in the remainder was never queried, no matter how fine
+  // `processed` was, which defeated the region-aware walk uma#369 exists for.
+  //
+  // So: read EVERY GGGS cell overlapping the costmap cell and keep the most
+  // hazardous verdict. Two consequences, both deliberate:
+  //
+  //  - The lat/lon box is the AABB of a cell that is axis-aligned in the MAP
+  //    frame, so under a rotated map->WGS84 relation it is slightly larger than
+  //    the cell. Over-reading neighbouring ground can only ADD a hazard, never
+  //    hide one; under-reading is the failure that grounds the boat.
+  //  - A cell the box covers that is UNSURVEYED makes the whole costmap cell
+  //    LETHAL when unsurveyed_is_lethal_ is set (its evaluateCell returns
+  //    LETHAL, and this fold keeps the max). That is a stricter rule than the
+  //    one INSIDE a query cell, where partial no-data still counts as surveyed
+  //    (see evaluateCell) — deliberately: there the no-data cells are routine
+  //    gaps inside one fused surface, here they are whole query cells of a
+  //    closed basin's prior, which is what the flag calls land.
+  //
+  // Cost, measured over 1,600 costmap-cell placements with the real iterators:
+  // 4 to 9 query cells per costmap cell, mean 5.48 (4 in 38% of placements, 6 in
+  // 54%, 9 in 8% — the 9s are the cells whose box straddles both a grid row and
+  // a grid column). That multiplies the per-query fan-out recorded on
+  // unh_marine_autonomy#371, which is why the memo above is not optional.
+  // Antimeridian straddle. A costmap cell is metres wide, so a box spanning more
+  // than half the globe is not a wide cell — it is a cell whose corners fell on
+  // both sides of 180 and were folded into one AABB by the callers' min/max. The
+  // test is the SPAN, not `max_lon < min_lon`: min/max over the same four values
+  // can never invert, so that comparison was dead code, and the box it let
+  // through would have iterated every grid column at the query level (~46,000 at
+  // level 10) on the costmap thread.
+  if (max_lon - min_lon > 180.0) {
+    // Fall back to the centre cell — the pre-round-3 behaviour, and the one
+    // place the partial coverage this function exists to fix survives. The
+    // centre is found by measuring across the seam, not across the fold.
+    double centre_lon = max_lon + 0.5 * (360.0 - (max_lon - min_lon));
+    if (centre_lon > 180.0) {
+      centre_lon -= 360.0;
+    }
+    return evaluateCell(store_->cellIndex(0.5 * (min_lat + max_lat), centre_lon));
+  }
+  const auto south_west = gggs::geoPoint(min_lat, min_lon);
+  const auto north_east = gggs::geoPoint(max_lat, max_lon);
+  std::optional<unsigned char> worst;
+  for (gggs::GridAreaIterator grid_it(
+      level.gridIndex(min_lat, min_lon), level.gridIndex(max_lat, max_lon));
+    grid_it.valid(); grid_it.next())
+  {
+    for (gggs::CellAreaIterator cell_it(*grid_it, south_west, north_east);
+      cell_it.valid(); cell_it.next())
+    {
+      // Adjacent costmap cells SHARE query cells — a query cell is smaller than a
+      // costmap cell but not by a whole factor, so a 100x100 tile at 1 m covers
+      // ~16.8k distinct query cells while the cells between them ask for ~54.8k
+      // evaluations. Each one is a full region walk plus a heap-allocated sample
+      // vector, so without the per-tile memo the honest fix above would cost
+      // 3.26x what it needs to on the live costmap thread.
+      std::optional<unsigned char> cost;
+      if (memo != nullptr) {
+        const auto seen = memo->find(*cell_it);
+        if (seen != memo->end()) {
+          cost = seen->second;
+        } else {
+          cost = evaluateCell(*cell_it);
+          memo->emplace(*cell_it, cost);
+        }
+      } else {
+        cost = evaluateCell(*cell_it);
+      }
+      if (!cost) {
+        continue;   // unknown: leave it to another prior, as the single-cell path did
+      }
+      if (!worst || *cost > *worst) {
+        worst = cost;
+      }
+    }
+  }
+  return worst;
+}
+
 std::optional<unsigned char> BathymetryLayer::evaluateCell(
   const gggs::CellIndex & cell) const
 {
@@ -892,34 +1046,61 @@ std::optional<unsigned char> BathymetryLayer::evaluateCell(
     return std::nullopt;
   }
 
-  // Two-query no-data policy (review M1, ADR-0002 §D7):
-  //   1. bestSource — quality-blind "is there ANY data here?"
-  const std::optional<DepthSample> any = bestSource(*store_, cell);
-  if (!any) {
-    // Truly unsurveyed. By default leave the master cost untouched
-    // (NO_INFORMATION) so another prior (e.g. s57_layer) can contribute. When
-    // unsurveyed_is_lethal_ is set, treat no-data as an obstacle instead — for a
-    // closed basin whose prior fills the whole interior, the only no-data cells
-    // are land (see the class doc). This still sits behind the MF1 tide gate
-    // above, so no lethal-land is written before a valid tide arrives.
-    if (unsurveyed_is_lethal_) {
-      return nav2_costmap_2d::LETHAL_OBSTACLE;
-    }
-    return std::nullopt;
-  }
-
-  //   2. reliableSamples(∞) — EVERY sample WITHOUT a finite-σ reject filter
+  // Two-query no-data policy (review M1, ADR-0002 §D7), BOTH queries
+  // region-aware (uma#369).
+  //
+  //   1. reliableSamples(∞) — EVERY sample WITHOUT a finite-σ reject filter
   //   (ADR-0010 D7). Passing infinity keeps every finite-σ sample eligible so σ
   //   drives *cost*, not rejection; only NaN-σ samples are dropped (∞ > ∞ is
   //   false, so a literal σ=∞ sample IS returned and the isfinite branch below
-  //   folds it into the same conservative path as NaN). An EMPTY result means
-  //   data exists (bestSource above) but every sample has a NaN σ → the
-  //   pre-existing "data but no reliable sample" → conservative LETHAL path. A
-  //   surveyed-but-unusable cell must NOT be treated as unsurveyed (review M1).
+  //   folds it into the same conservative path as NaN).
   //   (The pre-#248 per-cell staleness gate was retired — ADR-0002 A2.4.)
+  //
+  //   This runs FIRST, and it is the whole point of uma#369. `processed` is
+  //   depth-adaptive, so a level-14 store tile sits under a level-10 costmap
+  //   query cell: 256 native cells to one costmap cell, and a 0.2-0.5 m rock can
+  //   be in any of them. `reliableSamples` reads every one (uma-ADR-0013 D8);
+  //   the previous order gated it behind `bestSource`, a POINT lookup at the
+  //   query cell's centre, so one no-data native cell there — a gated-drop hole,
+  //   a between-lines gap, an absent fine tile beside a present one — returned
+  //   early and dropped the rock in the other 255. Never gate the region-aware
+  //   query behind a point query.
+  //   PARTIAL COVERAGE INSIDE THE QUERY CELL — the operator's call, round 3.
+  //   One covered native cell holding data makes the whole query cell SURVEYED,
+  //   and the cost comes from the cells that hold data. A query cell that is
+  //   mostly no-data with a little deep water in it therefore reads as deep
+  //   water, including under unsurveyed_is_lethal_, where it previously
+  //   depended on whatever the centre happened to hold. The alternative — any
+  //   covered no-data cell means land — was considered and declined: unfilled
+  //   cells inside a fine tile are routine (a gated-drop hole, a between-lines
+  //   gap), so that rule would turn surveyed open water lethal wherever the
+  //   surface is sparse, which is most of a depth-adaptive store's fine band.
+  //   The land question is answered one level up instead, across the query
+  //   cells of a costmap cell, where an uncovered cell is a whole cell of the
+  //   basin's prior with nothing in it (see evaluateCostmapCell).
   const std::vector<DepthSample> samples =
     reliableSamples(*store_, cell, std::numeric_limits<double>::infinity());
+
   if (samples.empty()) {
+    //   2. hasAnyData — quality-blind, region-aware "is there ANY data here?".
+    //   Only reached when nothing usable covers the cell, and it is what
+    //   separates the two very different no-sample causes (review M1):
+    //     - NO data anywhere under the cell ⇒ truly UNSURVEYED. By default leave
+    //       the master cost untouched (NO_INFORMATION) so another prior (e.g.
+    //       s57_layer) can contribute. When unsurveyed_is_lethal_ is set, treat
+    //       no-data as an obstacle instead — for a closed basin whose prior fills
+    //       the whole interior, the only no-data cells are land (see the class
+    //       doc). This still sits behind the MF1 tide gate above, so no
+    //       lethal-land is written before a valid tide arrives.
+    //     - Data exists but every sample has a NaN σ ⇒ SURVEYED BUT UNUSABLE ⇒
+    //       conservative LETHAL. A surveyed-but-unusable cell must NOT be
+    //       treated as unsurveyed.
+    if (!hasAnyData(*store_, cell)) {
+      if (unsurveyed_is_lethal_) {
+        return nav2_costmap_2d::LETHAL_OBSTACLE;
+      }
+      return std::nullopt;
+    }
     return nav2_costmap_2d::LETHAL_OBSTACLE;
   }
 

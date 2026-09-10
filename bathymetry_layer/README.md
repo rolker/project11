@@ -54,8 +54,10 @@ re-read the store live as the boat surveys — that is the D2 follow-on (see
 
 Per cell the layer uses a **two-query** pattern (ADR-0002 §D7; review finding M1):
 
-1. `bestSource(store, cell)` — quality-blind: "is there *any* data here?"
-2. If `bestSource` is `nullopt` → the cell is **truly unsurveyed** → by default the
+1. `reliableSamples(store, cell, ∞)` — every usable sample covering the cell.
+2. If that set is **empty**, `hasAnyData(store, cell)` — quality-blind: "is there
+   *any* data here?" — separates the two causes. If `hasAnyData` is `false` → the
+   cell is **truly unsurveyed** → by default the
    layer **leaves the master cost untouched** (NO_INFORMATION) so another prior
    (e.g. `s57_layer`) can fill it in. The layer never *writes* NO_INFORMATION.
    Setting **`unsurveyed_is_lethal: true`** flips this: a no-data cell is written
@@ -65,10 +67,11 @@ Per cell the layer uses a **two-query** pattern (ADR-0002 §D7; review finding M
    blanket rule (every no-data cell, not just "land") and, via max-cost combine,
    overrides other priors on those cells, so enable it per deployment. It stays
    behind the tide gate (below): no lethal-land is written before a valid tide.
-3. If `bestSource` is non-null → the cell **has data** →
-   `reliableSamples(store, cell, ∞)` returns **every** sample **without a finite-σ
-   reject-filter** (∞ keeps all finite-σ samples eligible; only NaN-σ samples are
-   dropped). Each sample is costed by the worst-case-clearance / confidence-gate
+3. If `hasAnyData` is `true` with an empty sample set → the cell is **surveyed but
+   unusable** (its only data carries a NaN σ) → conservative **`LETHAL_OBSTACLE`**.
+4. Otherwise the sample set is non-empty. `reliableSamples` returns **every** sample
+   **without a finite-σ reject-filter** (∞ keeps all finite-σ samples eligible; only
+   NaN-σ samples are dropped). Each sample is costed by the worst-case-clearance / confidence-gate
    model above (ADR-0010 D7), and the cell takes the **MAX (most-hazardous) cost
    over all reliable samples** — so a shallower but untrusted sample cannot mask a
    co-located trusted keepout. A high-σ cell is **costed as caution**, not
@@ -78,6 +81,76 @@ Per cell the layer uses a **two-query** pattern (ADR-0002 §D7; review finding M
    per-cell staleness gate was **retired** — ADR-0002 Amendment A2.4: the bathy
    store holds a surveyed *static* bottom, not a live sensor feed, so per-cell age
    is not a meaningful costmap hazard.)
+
+### Both queries are region-aware, and what that costs (uma#369)
+
+`processed` is depth-adaptive (uma#369): the store writes level 12-14 tiles where
+the water is shallow, so one costmap query cell can cover 16-256 native store
+cells and a 0.2-0.5 m rock can sit in any of them. `reliableSamples` **and**
+`hasAnyData` therefore read every covered native cell (`uma-ADR-0013` D8) rather
+than the one under the query cell's centre. `bestSource` must never be used on
+this path — it is a point lookup, and while it was the gate here (before uma#369
+round 2) a single no-data native cell under the centre suppressed the
+region-aware query entirely and dropped the rock.
+
+The cost of that correctness lands on the **live costmap thread**, and the
+fan-out is a config parameter, not a future concern: the query level comes from
+`BathymetryStore::fromCellSize(resolution_)`, so a 2 m or 4 m global costmap over
+today's uniform level-10 `processed` already fans out 4x or 16x per cell, and a
+1 m global over level-14 tiles would be 256 covered cells per costmap cell —
+about 2.56 M cell visits (each a map find and a `push_back`) for a single
+100x100 tile. `generateTile` checks its time budget only *between* tiles, so one
+tile is uninterruptible once started. Point-sampling is the defect this fixed, so
+the remedy is a bound or an interruption point;
+[#371](https://github.com/rolker/unh_marine_autonomy/issues/371) tracks bounding
+or measuring it. `hasAnyData` short-circuits at the first cell holding data, so
+the existence gate costs one cell over surveyed ground; only a genuinely empty
+region pays its full walk.
+
+### The query cell is smaller than the costmap cell (uma#369, round 3)
+
+`fromCellSize(resolution)` returns the coarsest level whose cells are *at or
+finer than* the costmap resolution, so the GGGS query cell is always smaller than
+the costmap cell it costs: 0.60 m² of a 1.00 m² cell at 1 m resolution and 43.5
+degrees north, and as little as 18% of the cell at a resolution just under a
+level boundary. The layer therefore evaluates every query cell the costmap cell's
+ground overlaps and keeps the **most hazardous** verdict, rather than the one
+under the cell's centre — otherwise 40-82% of every costmap cell went unqueried
+no matter how fine the store was.
+
+Two asymmetries are deliberate. The lat/lon box of a map-frame-aligned cell
+over-covers under a rotated map, which can only add a hazard. And an *unsurveyed*
+query cell inside the costmap cell makes it lethal under `unsurveyed_is_lethal`,
+which is stricter than the rule inside a query cell, where partial no-data still
+counts as surveyed: within a cell the gaps are routine holes in one fused
+surface, across cells they are whole cells of the basin's prior with nothing in
+them.
+
+**What the closed-basin flag now costs in channel width.** Because a costmap
+cell goes lethal when *any* overlapping query cell is unsurveyed, and a query
+cell counts even where it overlaps the cell by a sliver, the lethal boundary
+advances past the true unsurveyed edge by one costmap cell plus one query cell:
+**1.90 m in latitude and 1.66 m in longitude** at 1 m resolution and 43.5
+degrees north, against roughly 0.5 m under the old centre test. That is about
+1.2 to 1.4 m more per side, so a surveyed gap between two unsurveyed shoals
+loses ~2.5 m of usable width, and nothing is logged when it does. The direction
+is the shoal-safe one and the flag exists for basins whose prior fills the
+interior, but the magnitude is an operational input, not a rounding error: on a
+lake where the boat threads a 4 m gap, this is the difference between transiting
+it and refusing it.
+
+### Store residency, the other half of the lever (uma#369, round 3)
+
+A store tile is a 960x960 pair of `double` bands — about **14.7 MB at every
+level**; only the ground it covers shrinks. That is ~19 MB per km² of survey at
+level 10, ~1.2 GB at level 13 and ~4.9 GB at level 14. `refreshWindow` loads the
+whole buffered costmap window with no tile or byte cap, synchronously, and it
+runs before and outside the per-cycle budget that guards rendering. A 1 km global
+costmap over a shallow level-13/14 store is therefore a multi-gigabyte
+synchronous load on the costmap thread: an OOM kill, or a stall the planner sees
+as a costmap that is not current. Reachable once the depth-adaptive writer lands
+(cube_bathymetry#143); bounding it is an eviction-policy design, tracked in
+[#376](https://github.com/rolker/unh_marine_autonomy/issues/376).
 
 The critical distinction: a surveyed-but-noisy cell is a **navigable-with-caution
 obstacle**, costed by its worst-case clearance — not an unsurveyed cell (treating

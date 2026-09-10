@@ -29,6 +29,10 @@ merged, host-verified work):
 - D9 — `reference` native-wins pyramid (mixed-level generalisation; amends the
   `reference` line below) —
   [uma#331](https://github.com/rolker/unh_marine_autonomy/issues/331)
+- D9 — depth-adaptive `processed` levels (the policy function and the amendment
+  below; the writer is a separate repo) —
+  [uma#369](https://github.com/rolker/unh_marine_autonomy/issues/369) +
+  [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143)
 
 Open follow-ons (adopted target, not yet fully materialized):
 
@@ -440,6 +444,218 @@ full-data replay remain offline properties).
   generated ([uma#188](https://github.com/rolker/unh_marine_autonomy/issues/188))
   with **shallowest-preserving aggregation** — never a mean; the rock must
   survive the downsample.
+
+  **Amended 2026-09-09
+  ([#369](https://github.com/rolker/unh_marine_autonomy/issues/369)):
+  `processed` is *to be* a depth-adaptive, mixed-level layer — one level per
+  store tile, chosen from the depth that tile covers. `draft` is unchanged and
+  stays fixed-level.** (The policy and the store-side support are decided and
+  landed; the writer is not — see "the writer is pending" below.) "Born at fine native levels" read as *one* fine level per
+  layer, and every `processed` tile written to date is level 10 (~0.906 m
+  cells) regardless of whether it holds 2 m or 15 m of water. CUBE's own capture
+  radius already follows depth — `capture_distance_scale · |depth|`
+  (`cube_bathymetry/.../parameters.h`, `node.cpp:154`) — so the lattice was the
+  only part of the chain that did not.
+
+  *The policy.* `marine_bathymetry_store::depthAdaptiveLevel` (this repo, #369)
+  requests a cell size of `0.05 · |depth|` — **no floor** — and maps it through
+  `gggs::Level::fromCellSize` (the level at or finer than the request), clamped
+  to `[8, 14]`:
+
+  | Level | Cell size | Applies when |
+  |---|---|---|
+  | 8 (coarse clamp) | 3.624 m | depth ≥ 72.47 m |
+  | 9 | 1.812 m | 36.24–72.47 m |
+  | 10 (every tile today) | 0.906 m | 18.12–36.24 m |
+  | 11 | 0.453 m | 9.06–18.12 m |
+  | 12 | 0.227 m | 4.53–9.06 m |
+  | 13 | 0.113 m | 2.26–4.53 m |
+  | 14 (fine clamp) | 0.057 m | depth < 2.26 m |
+
+  CUBE's 0.5 m term is deliberately **not** carried over: it is a minimum
+  *acceptance distance*, not a claim about achievable resolution, and treating
+  it as a resolution floor pins every depth shallower than ~18 m to level 11 —
+  a new fixed level across the whole surveyed range rather than an adaptive one.
+
+  *Storage, stated plainly.* Each level step is a **4× cell- and tile-count
+  increase over the same ground**, so against today's uniform level 10 the
+  multiplier is `4^(L-10)`: 4× at level 11, 16× at 12, 64× at 13 and **256× at
+  the level-14 clamp**. The whole-survey figure depends on the survey's
+  depth-area histogram, which has not been computed; it is bounded by 1/16×
+  (all water ≥ 72.5 m — the coarse clamp is level 8, two steps *coarser* than
+  today's 10, so levels 9 and 8 are 1/4× and 1/16×) and 256× (all water
+  < 2.26 m). Tiles are dense 960×960 rasters whether or not the survey fills
+  them, and a level-14 tile spans only 54.4 m,
+  so shallow water also pays a partial-tile overhead — and `import_bag`'s
+  `max_resident_tiles` budget means something different at 16–256× the tile
+  count. The **coarse clamp is a bound, not a floor at today's resolution**:
+  between ~36 m and ~72 m the ladder returns level 9, coarser than today's 10.
+  That is deeper than either operator platform surveys, which is why it is
+  acceptable rather than a regression; if "never coarser than today" is ever
+  required, the coarse clamp becomes 10.
+
+  *The decision unit.* One level per **store tile**, sized from the
+  **shallowest** depth in that tile — the shallowest sounding carries the
+  tightest capture radius, so sizing from it keeps every sounding in the tile
+  within its own capture distance of a node. `depthAdaptiveLevel`'s scalar
+  signature encodes exactly that, and **may change** (to a depth range, say)
+  when the writer lands.
+
+  *The writer is pending — this is a decided policy, not as-built behaviour.*
+  Nothing writes depth-adaptive `processed` tiles yet, and no existing store is
+  affected. `import_bag` constructs one `cube::GeoMapSheet` for an entire run
+  (`import_bag_main.cpp:1030`) and pins the store cell size to that sheet
+  (`:1130-1133`), so CUBE's estimation grid and the store tiling are the same
+  resolution by construction; decoupling them is a re-architecture of the import
+  pipeline, tracked as
+  [cube_bathymetry#143](https://github.com/rolker/cube_bathymetry/issues/143).
+  Retroactive reprocessing of the existing level-10 Isles of Shoals and
+  Massabesic stores is out of scope and gated on
+  [#366](https://github.com/rolker/unh_marine_autonomy/issues/366) (import
+  ledger) — this policy applies to new imports only.
+
+  *Why a mixed-level `processed` is safe — two store changes it required.*
+  [ADR-0013](0013-bounded-lod-navigation.md) D8: safety queries never consult an
+  LOD level, and read the finest available data **for a region**. That is the
+  obligation this amendment makes binding, not a guarantee it inherited: two
+  store mechanisms assumed `processed` was single-level and had to change with
+  it (both landed with the policy, in #369).
+
+  1. **The safety query now reads the region, not a point — including its
+     existence gate.** `shallowestReliable()` and `reliableSamples()` re-resolved
+     *one* cell per level from the query cell's centre. Under a level-10/11
+     costmap query, a level-13/14 `processed` tile covers that cell with 64-256
+     native cells, so the walk read one of them and a 0.2-0.5 m rock — precisely
+     what those levels exist to resolve — could fall between samples. Both
+     queries now enumerate **every** native cell a query cell covers at any finer
+     level and keep the shoalest reliable value.
+
+     A *third* query had to change with them, and it is the one that decides
+     whether the other two run at all. `bathymetry_layer::evaluateCell`
+     implements the ADR-0002 D7 two-query no-data policy, and its first query —
+     "is there ANY data here?" — was `bestSource()`, a point lookup. On
+     `nullopt` it returned early, so the region-aware query never ran: one
+     no-data native cell under the query cell's **centre** (a gated-drop hole, a
+     between-lines gap, an absent 54.4 m tile beside a present one) declared the
+     whole costmap cell unsurveyed and dropped a rock in any of the other 255.
+     The existence gate is now `hasAnyData()`, region-aware over the same ground
+     as the depth queries and quality-blind as D7 requires, and `evaluateCell`
+     runs `reliableSamples()` **first** — the region-aware query is never gated
+     behind a point query. `bestSource()` itself stays a point lookup by design:
+     it is the best-available *display* query. What was wrong before #369 round 2
+     was not `bestSource`'s contract but the safety path's use of it, and its
+     `@warning` now says so.
+  2. **The cross-layer anti-clobber (D8, below) is now level-aware.**
+     `clearOverlappedDraft` keyed on the processed tile's `GridIndex`, which
+     carries its level, so a finer `processed` tile matched no fixed-level
+     `draft` tile, cleared nothing and said nothing — superseded draft blunders
+     would have kept winning `shallowestReliable`. The clear now walks every
+     level `draft` holds; a `draft` cell coarser than the processed tile clears
+     only where that tile fully supersedes it, and the partly-covered ones are
+     kept and **counted**, never silently skipped.
+
+  *The consequence of reading the region: per-query fan-out on the live costmap
+  thread.* Correctness here is not free, and the cost is a **config parameter**,
+  not a future condition. `bathymetry_layer` derives its query level from
+  `BathymetryStore::fromCellSize(resolution_)`, so the gap between the query
+  level and the store's native level is set by the costmap's resolution against
+  whatever the store holds: a 2 m global costmap over today's *uniform level-10*
+  `processed` already fans out 4 covered cells per costmap cell, a 4 m global
+  16 — both reachable on the boat now, without waiting for the depth-adaptive
+  writer. A 1 m global over level-14 tiles would be 256, about 2.56 M cell visits
+  (each a map find and a `push_back`) inside one 100x100 rendered tile, and
+  `generateTile` checks its time budget only *between* tiles, so a tile is
+  uninterruptible once started. This has not been measured, and no bound exists.
+  Narrowing the query back toward a point sample is not the remedy — that is the
+  defect just fixed — so the remedy is a measurement and then a bound or an
+  interruption point, tracked as
+  [#371](https://github.com/rolker/unh_marine_autonomy/issues/371). The existence
+  gate is the cheap half: `hasAnyData()` stops at the first cell holding data, so
+  over surveyed ground it costs one cell and only a genuinely empty region pays
+  the full walk.
+
+
+  **Round 3 — the costmap cell, and the memory the levels cost.** Two further
+  consequences surfaced in the third review round; both are recorded here
+  because they are properties of the *policy*, not of the patch that implements
+  it.
+
+  *The unit the query covers.* `fromCellSize` returns the coarsest level whose
+  cells are at or finer than the costmap resolution, so a GGGS query cell is
+  always **smaller** than the costmap cell whose cost it decides — 0.60 m² of a
+  1.00 m² cell at 1 m and 43.5 degrees north, and as little as 18% of the cell
+  just under a level boundary. Costing a costmap cell from the single query cell
+  under its centre therefore left 40-82% of its ground unread *at every store
+  resolution*: the same point-sampling defect the region-aware walk exists to
+  remove, one level up, and it would have made this amendment's own safety claim
+  false. `bathymetry_layer::evaluateCostmapCell` now reads every query cell the
+  costmap cell overlaps and keeps the most hazardous verdict. It also settles
+  where the "no data means land" question is answered: **inside** a query cell,
+  partial no-data still counts as surveyed (unfilled cells within one fused fine
+  surface are routine), while **across** the query cells of a costmap cell, an
+  unsurveyed one is land under `unsurveyed_is_lethal`. That asymmetry is the
+  operator's decision, taken with both alternatives on the table. Its cost is
+  measurable and belongs beside it: the lethal boundary now advances past the
+  true unsurveyed edge by one costmap cell plus one query cell — 1.90 m in
+  latitude, 1.66 m in longitude at 1 m and 43.5 degrees north, against about
+  0.5 m under the old centre test — so a surveyed gap between two unsurveyed
+  shoals loses roughly 2.5 m of usable width, silently. Shoal-safe in direction,
+  but an operational input for anyone running the flag on a lake where the boat
+  threads a narrow gap.
+
+  *Residency, not just fan-out.* The fan-out above is CPU. The same lever moves
+  memory, and harder: a tile is ~14.7 MB at **every** level, so what a finer
+  level buys in resolution it pays in tiles per unit ground — ~19 MB per km² at
+  level 10, ~1.2 GB at level 13, ~4.9 GB at level 14. `refreshWindow` loads the
+  whole buffered costmap window with no tile or byte cap, synchronously, before
+  and outside the per-cycle render budget. A 1 km global costmap over a shallow
+  level-13/14 store is thus a multi-gigabyte synchronous load on the costmap
+  thread — an OOM kill, or a stall the planner sees as a stale costmap. Like the
+  fan-out it is a design consequence of the ladder rather than a defect in the
+  writer, and like the fan-out it is recorded rather than bounded here: bounding
+  it means choosing an eviction policy and deciding what the layer reports while
+  a window is partly resident. Tracked as
+  [#376](https://github.com/rolker/unh_marine_autonomy/issues/376), sibling to
+  #371.
+
+  With those in place a native level boundary *inside* `processed` carries no
+  operational risk — the same argument the `reference` bullet below makes for
+  its native-wins pyramid, and the same one that exempts `chart` above. The
+  D2/D3 obligations that come with a mixed-level layer are discharged
+  generically: `buildDepthOverviewPyramid`
+  ([#331](https://github.com/rolker/unh_marine_autonomy/issues/331))
+  emits per-tile geometric error and a coverage manifest for `draft`,
+  `processed` and `reference` alike, so it needs no change when `processed`
+  starts holding more than one level. It does, however, interact with native-wins
+  in a way that is a **known coarse-tier consequence, not a dischargeable writer
+  obligation**. Native-wins suppresses a derived parent as a *whole tile*, and
+  unlike `reference`'s disjoint S-102 footprints, depth bands within one
+  contiguous survey share parent indices; where a shallow and a deep band write
+  native tiles under one parent, the shallow band's fold is dropped at that level
+  and every level coarser.
+
+  An earlier draft of this amendment stated that as an obligation on the writer —
+  "never emit two native levels over the same ground". That is **unsatisfiable**,
+  and recording it as discharged would have been false: the ladder *guarantees*
+  mixed native levels under one parent. A 217 m level-12 tile that is deep on one
+  half and shallow on the other yields native level 12 beside native 13/14 under
+  the same parent index; the only writer that could honour the obligation is one
+  that is not depth-adaptive across a tile boundary, which is the whole policy.
+
+  Safety is unaffected — it is held by the region-aware native query above, which
+  never consults an LOD level (ADR-0013 D8). What is affected is the **coarse
+  display tier**: at levels above the native boundary, the shallow band's fold
+  may be missing where the deep band's native tile wins the parent. Record it as
+  a display consequence for `camp` and a design input for the coarse-tier work,
+  alongside the level-transition asymmetry below — not as something
+  cube_bathymetry#143 can fix.
+
+  *One asymmetry, for the display consumers.* `reference`'s mixed levels come
+  from **disjoint** source regions (S-102 footprints); `processed`'s come from
+  **depth bands within one contiguous survey**. A display consumer therefore
+  sees far more frequent level transitions across a single pass than `reference`
+  ever produces. That is a display/UX consideration for `camp`, not a
+  store-contract change.
 - **`reference`**: overview levels are generated, **native-wins**
   ([#331](https://github.com/rolker/unh_marine_autonomy/issues/331)). Fold
   upward from the layer's finest native level toward the apex, writing a derived

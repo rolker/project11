@@ -32,6 +32,7 @@ find_package(marine_vertical_datum REQUIRED)
 
 add_library(${PROJECT_NAME}
   src/bathymetry_store.cpp
+  src/depth_adaptive_level.cpp
   src/geotiff_import.cpp
   src/overview_pyramid.cpp
   src/query.cpp
@@ -144,6 +145,13 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_store test/test_store.cpp)
   target_link_libraries(test_store ${PROJECT_NAME})
+
+  # The depth -> GGGS level policy (uma-ADR-0010 D9 as amended by #369): level
+  # transition depths, both clamps, monotonicity and the fail-loud edge cases.
+  # Pure arithmetic over the GGGS level table — no disk, no GDAL, so the ament
+  # default timeout is plenty.
+  ament_add_gtest(test_depth_adaptive_level test/test_depth_adaptive_level.cpp)
+  target_link_libraries(test_depth_adaptive_level ${PROJECT_NAME})
 
   ament_add_gtest(test_query test/test_query.cpp)
   target_link_libraries(test_query ${PROJECT_NAME})

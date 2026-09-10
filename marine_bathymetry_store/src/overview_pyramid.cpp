@@ -295,6 +295,24 @@ LevelCounts buildLevel(
     // NATIVE-WINS. Compiled data is never overwritten and never merged into, so
     // the "what should a fold of harbour data into an approach-band tile mean?"
     // question is not answered here — it is removed.
+    //
+    // Suppression is WHOLE-TILE, and under a mixed-level producer (uma#369's
+    // depth-adaptive `processed`) that has a KNOWN consequence for the coarse
+    // display tier. `reference`'s mixed levels come from disjoint S-102
+    // footprints, but depth bands within one contiguous survey share parent
+    // indices, and the depth ladder GUARANTEES it: a 217 m level-12 tile deep on
+    // one half and shallow on the other yields native 12 beside native 13/14
+    // under one parent. Where that happens the shallow band's fold is dropped at
+    // that level and every level coarser.
+    //
+    // This is NOT a writer obligation — "never emit two native levels over the
+    // same ground" is unsatisfiable for a depth-adaptive writer, and stating it
+    // as one (as an earlier draft of the ADR-0010 D9 amendment did) would be
+    // telling cube_bathymetry#143 not to be depth-adaptive across a tile
+    // boundary. Safety is unaffected: navigation reads the region-aware NATIVE
+    // query and never an LOD level (uma-ADR-0013 D8). What is affected is the
+    // coarse display tier — a design input for the coarse-tier work, recorded in
+    // the ADR-0010 D9 amendment. The pyramid itself needs no change.
     if (native.contains(group.first)) {
       ++counts.suppressed_by_native;
       continue;
