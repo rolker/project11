@@ -185,7 +185,9 @@ std::vector<std::filesystem::path> scanForBags(
   // with no warning, no counter and exit 0.
   fs::recursive_directory_iterator it(root, ec), end;
   if (ec) {
-    problems.push_back("could not scan '" + root.string() + "': " + ec.message());
+    problems.push_back(
+      "could not scan '" + root.string() + "': " + ec.message() +
+      " - no bag anywhere under it is in this run");
     return bags;
   }
   while (it != end) {
@@ -194,7 +196,8 @@ std::vector<std::filesystem::path> scanForBags(
     const bool dir = it->is_directory(entry_ec);
     if (entry_ec && !resolvesToNothing(entry_ec)) {
       problems.push_back(
-        "could not determine the type of '" + current.string() + "': " + entry_ec.message());
+        "could not determine the type of '" + current.string() + "': " + entry_ec.message() +
+        " - if it is a bag, or holds one, it is missing from this run");
     } else if (!entry_ec && dir) {
       std::error_code meta_ec;
       if (fs::exists(current / "metadata.yaml", meta_ec)) {
@@ -202,7 +205,8 @@ std::vector<std::filesystem::path> scanForBags(
         it.disable_recursion_pending();
       } else if (meta_ec && !resolvesToNothing(meta_ec)) {
         problems.push_back(
-          "could not tell whether '" + current.string() + "' is a bag: " + meta_ec.message());
+          "could not tell whether '" + current.string() + "' is a bag: " + meta_ec.message() +
+          " - it, and any bag beneath it, are missing from this run");
         // Reporting is not enough: descent has to be cancelled too. A failed
         // `increment()` ends the WHOLE walk (see below), so leaving recursion
         // pending on a directory we already know we cannot read would drop
@@ -217,7 +221,8 @@ std::vector<std::filesystem::path> scanForBags(
         if (it->is_symlink(link_ec) && !link_ec) {
           problems.push_back(
             "'" + current.string() +
-            "' is a symlink to a directory, which is not scanned for bags");
+            "' is a symlink to a directory, which is not scanned for bags"
+            " - any bag beneath it is missing from this run");
         } else {
           // Ask whether this directory can be enumerated *before* the walk
           // descends into it. A traverse-only directory (mode 0111) probes
@@ -229,7 +234,8 @@ std::vector<std::filesystem::path> scanForBags(
           fs::directory_iterator probe(current, enum_ec);
           if (enum_ec) {
             problems.push_back(
-              "could not enumerate '" + current.string() + "': " + enum_ec.message());
+              "could not enumerate '" + current.string() + "': " + enum_ec.message() +
+            " - any bag beneath it is missing from this run");
             it.disable_recursion_pending();
           }
         }
@@ -238,7 +244,8 @@ std::vector<std::filesystem::path> scanForBags(
     it.increment(ec);
     if (ec) {
       problems.push_back(
-        "scan of '" + root.string() + "' stopped at '" + current.string() + "': " + ec.message());
+        "scan of '" + root.string() + "' stopped at '" + current.string() + "': " +
+        ec.message() + " - every bag after that point in the walk is missing from this run");
       break;
     }
   }
@@ -424,9 +431,12 @@ int main(int argc, char ** argv)
     }
     bags.emplace_back(arg);
   }
+  // Each problem names its own consequence: a dropped subtree, an entry of
+  // unknown type and a walk that stopped part-way lose different things, and a
+  // blanket "any bag beneath it" was wrong for the last of those -- what is
+  // missing there is every bag after that point in the walk.
   for (const std::string & problem : scan_problems) {
-    std::cerr << "warning: " << problem
-              << " - any bag beneath it is missing from this run\n";
+    std::cerr << "warning: " << problem << "\n";
   }
   if (bags.empty()) {
     // Precedence: a scan that could not be enumerated is an INCOMPLETE index
