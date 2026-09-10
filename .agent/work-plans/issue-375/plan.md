@@ -183,12 +183,20 @@ executable — see the amendment under Approach step 1.)
      `scanForBags` no longer passes `skip_permission_denied` and no longer
      discards its `error_code`s.
    - **Both trust flags are now guarded by tests that do not need a non-root
-     user**, because both hosted CI and `ci_local.sh` run as root and this repo
-     has no hosted build/test workflow — a permission-based test that skips
-     there defends nothing (mutation-proved: the `scan_complete` conjunct broke
-     zero tests). The symlinked-subdirectory route reaches
-     `mtime_valid && !scan_complete` directly, and the flag truth table is also
-     asserted on a directly constructed fingerprint.
+     user**, because the verification that gates a merge here runs as root — a
+     permission-based test that skips there defends nothing (mutation-proved:
+     the `scan_complete` conjunct broke zero tests). The symlinked-subdirectory
+     route reaches `mtime_valid && !scan_complete` directly, and the flag truth
+     table is also asserted on a directly constructed fingerprint.
+
+     **Corrected at round 4.** This repo *does* have a hosted workflow
+     (`.github/workflows/ros-base-docker.yml`), but it lists
+     `marine_survey_index` in neither its build nor its test set and nothing
+     depends on the package — so the root-run `ci_local.sh` attestation
+     (ADR-0018) is not merely the *preferred* gate here, it is the **only**
+     verification this package's tests ever run under. That is what makes a
+     root skip total rather than partial, and it is why round 4 added two
+     root-observable routes (below).
 
 5. **Update `survey_index_bag_main.cpp`** to `#include
    "marine_survey_index/bag_fingerprint.hpp"`, drop the moved
@@ -244,20 +252,73 @@ executable — see the amendment under Approach step 1.)
      the filesystem clamps or refuses the timestamp — a test must not assert
      filesystem behaviour it cannot guarantee.
 
-     **As shipped, this grew past the outline above** (18 cases in
-     `test_bag_fingerprint`): a symlinked subdirectory, an unresolvable symlink
+     **As shipped, this grew past the outline above** (19 cases in
+     `test_bag_fingerprint`, the last added at round 4: a missing bag URI must
+     read as missing, not as undeterminable): a symlinked subdirectory, an
+     unresolvable symlink
      (a loop — ELOOP, which root is not exempt from), the flag truth table on a
      constructed fingerprint, the routes that must *not* be penalised (dangling
      symlink, FIFO, symlink to a regular file), the problem-string/flags
      agreement invariant, and an unreadable member of a listable directory.
-     Every permission-based route now has a root-observable counterpart
-     guarding the same branch — see the round-2 amendment in step 4.
+     Every permission-based route in `test_bag_fingerprint` has a
+     root-observable counterpart guarding the same branch — see the round-2
+     amendment in step 4. `test_indexer_exit_status`'s scan-walk routes are
+     accounted for separately, in step 8.
    - **the exit-status contract**, in a separate `test_indexer_exit_status`
      that runs the built `survey_index_bag` binary, because the contract lives
      in `main()` where no library call reaches it (which is how the
      unopenable-bag hole survived a full review round): an unopenable bag, a
      real empty rosbag2 bag with a symlinked subdirectory (exit 3), a dropped
      `--scan` subtree, and a usage error.
+
+     **As shipped this grew, like `test_bag_fingerprint` above: 20 cases.**
+     The additions are the scan-walk continuation invariants (rounds 2-4), the
+     ledger-key and ledger-migration cases (rounds 3-4), the argument-parsing
+     usage errors and the lock-wait opt-in (round 4) — each listed where it was
+     added, in steps 4 and 8.
+
+8. **Added at pre-push review round 4** — four fixes the review reproduced or
+   disproved, all inside the contract this PR authors rather than new scope:
+
+   - **An unknown flag, or a flag with no value, is a usage error (2).** The
+     argument loop assumed every `--`-prefixed token took a value, so
+     `--verbose BAG` swallowed the bag and exited **0**, and a trailing
+     `--scan` (i.e. `--scan $ROOT` with `ROOT` unset and unquoted) walked no
+     tree and exited **0** — while the quoted spelling of the same slip already
+     exited 1. Pre-existing parsing, fixed here on the standing that this PR is
+     what promises exit 0 means every nominated bag is in the index. Flags now
+     live in one table with whether each takes a value, and the list is
+     validated before any value is read.
+   - **A pre-fix ledger row keyed through a symlink is migrated, not
+     orphaned.** Round 3's resolved key (`bags.path`) made such a row
+     unmatchable: the lookup missed, a second row was inserted, and the stale
+     row's passes double-reported that bag through the undeduplicated join
+     permanently. The indexer now reconciles the ledger once before looking up
+     any bag — re-key in place where the resolved key is free, delete the stale
+     duplicate (CASCADE takes its passes) where it is taken, leave and warn
+     about a row that cannot be resolved at all, and **refuse to index** if the
+     reconciliation itself fails. Verified a no-op on this host (0 of 177 rows
+     re-key); salmon and gabby are unverified, which is who it is for. A key
+     that cannot be resolved now also fails its *bag* rather than falling back
+     to the unresolved path, which had re-created the double insert on a
+     transient EIO/ESTALE.
+   - **The lock wait moved to the call site.** `openIndexDb` is also the
+     explorer GUI's open (not a read-only one, as `schema.cpp` claimed), and
+     every GUI call runs on the Qt thread, so `PRAGMA busy_timeout` is now a
+     parameter defaulting to `0` — pre-#375 behaviour for every other consumer
+     — with the indexer opting into 10 s. WAL was weighed and rejected
+     (unsafe on network filesystems).
+   - **Two of the three scan-walk guards became root-observable**, because
+     `ci_local.sh` runs as root and is this package's only merge verification:
+     the enumerability probe via descriptor exhaustion (`ulimit -n 256` over a
+     400-deep chain — no mode bits, and lowering a soft limit is always
+     permitted), and the mid-index handler via a per-bag-selective write
+     failure, which is also the only shape that can defend the `ROLLBACK` (a
+     single-bag run cannot: SQLite rolls back at `sqlite3_close` regardless, so
+     only a *subsequent* bag's `BEGIN` observes it). The mode-000 `meta_ec`
+     guard has no root-observable route and is recorded as the known exception.
+     The permission-based siblings are kept for the real failures they
+     reproduce.
 
 ## Files to Change
 
@@ -271,15 +332,18 @@ executable — see the amendment under Approach step 1.)
 | `marine_survey_index/test/test_indexer_exit_status.cpp` | New (round 2). Runs the built `survey_index_bag` to police the exit-status contract, which lives in `main()`. |
 | `marine_survey_index/README.md` | The incremental-skip sentence, the exit-status table, and the `## Testing` enumeration. |
 | `docs/survey_index_schema.md` | Document the new unreadable-mtime rule in the "Incremental re-runs" contract — plan-review finding 3. Round 3 also added the network-mount attribute-cache case to "what size + mtime cannot see", and the `bags.path` column comment now says symlinks are resolved. |
-| `marine_survey_index/package.xml` | Added at round 3. Declare the rosbag2 storage plugins: they are loaded by name at run time, so `rosbag2_cpp` does not pull one in, and without them the indexer opens no bag under a clean-room `rosdep install` — the environment `ci_local.sh` (this repo's only merge verification: there is no hosted build/test workflow) uses. |
+| `marine_survey_index/package.xml` | Added at round 3. Declare the rosbag2 storage plugins: they are loaded by name at run time, so `rosbag2_cpp` does not pull one in, and without them the indexer opens no bag under a clean-room `rosdep install` — the environment `ci_local.sh` uses — which is this package's only merge verification, since the repo's one hosted workflow builds and tests neither it nor anything depending on it (corrected at round 4; the plan previously said the repo had no hosted workflow at all). |
 | `marine_survey_index/src/schema.cpp` | Added at round 3. `PRAGMA busy_timeout` on open, so a GUI holding the index DB during the one-time re-index does not turn indexer writes into failed bags. |
-| `marine_survey_index/test/test_schema.cpp` | Added at round 3. Asserts the open arrives willing to wait for a lock. |
+| `marine_survey_index/test/test_schema.cpp` | Added at round 3. Asserts the open waits for a lock — at round 4, that it waits **only when asked**, since the default now serves a GUI thread. |
+| `marine_survey_index/include/marine_survey_index/schema.hpp` | Added at round 4. `openIndexDb` gains `busy_timeout_ms = 0`; the docstring states that opening writes (it runs the DDL) and that the handle may block. |
+| `marine_survey_index/src/survey_index_bag_main.cpp` (round 4) | Argument validation against a flag table; `ledgerKey()` as one function, failing the bag when it cannot resolve; `reconcileLedgerKeys()` before any lookup; the 10 s lock wait opted into at this call site; nominations deduplicated by resolved key; the scan-problem count in the run summary; `ledgerState()` throwing on an unexpected `sqlite3_step` result; `disable_recursion_pending()` on the undeterminable-type branch. |
+| `marine_survey_index/test/test_indexer_exit_status.cpp` (round 4) | The argument-parsing usage errors, the two ledger-migration cases, the lock-wait opt-in, the descriptor-exhaustion walk route, and the per-bag-selective failure that defends the `ROLLBACK`. |
 
 ## Principles Self-Check
 
 | Principle | Consideration |
 |---|---|
-| Test what breaks | The new tests target the exact regressions named in the issue (mtime accuracy, same-size rewrite, ledger round-trip) plus the unreadable-mtime and incomplete-walk policies this plan adds — not framework glue. Each guard is mutation-tested: removing the condition it defends fails at least one test. Round 3 found this claim was not yet true — the CLI's exit-1 scan conjunct broke no test, and neither did the `!fp.authoritative()` condition — and it now holds for every guard on the branch bar two, both recorded in the round-3 `## Implementation` entry with the reason: `!fp.authoritative()` (provably biconditional with the string it is checked against, so no behavioural test can separate them) and the `ROLLBACK` statement in the mid-index handler. The permission-based tests skip as root, so they do not run under `ci_local.sh --clean-room`; each shares its guard with a root-observable sibling. |
+| Test what breaks | The new tests target the exact regressions named in the issue (mtime accuracy, same-size rewrite, ledger round-trip) plus the unreadable-mtime and incomplete-walk policies this plan adds — not framework glue. Each guard is mutation-tested: removing the condition it defends fails at least one test. Round 3 found this claim was not yet true (the CLI's exit-1 scan conjunct broke no test, and neither did `!fp.authoritative()`), and round 4 found the *reason* recorded for one of the two remaining exceptions was itself wrong. As it now stands, one guard has no behavioural test and one skips as root: **`!fp.authoritative()`** is provably biconditional with the problem string it is checked against, so no behavioural test can separate them; and the **mode-000 `meta_ec` walk guard** has no root-observable route (round 4 could not construct one either) and is the known, recorded exception. The `ROLLBACK` in the mid-index handler is no longer among them — round 4 defends it with a per-bag-selective write failure, the only shape a second bag's `BEGIN` can observe, which is also root-observable. Of the three scan-walk guards, two now run as root (the enumerability probe via descriptor exhaustion, the undeterminable-type branch via ELOOP); their permission-based siblings are kept for the routes they reproduce. |
 | A change includes its consequences | PR description will state the one-time full re-index of all 177 existing (`mtime_ns=0`) rows on the dev host, per the operator's note — this is expected derived-cache-rebuild cost, not a regression, and no data migration is needed. |
 | Human control and transparency | An untrustworthy fingerprint — no readable timestamp, or an incomplete walk — now fails the unchanged test **on its validity flags** (`mtime_valid` / `scan_complete`), checked before any comparison, instead of silently contributing nothing to a max. The "guaranteed-mismatching sentinel" the first draft of this plan proposed was **rejected at plan review and never shipped**: the ledger persists whatever the fingerprint carries, so an in-band sentinel compares equal to itself on the next run and restores the skip. Loudness is the caller's job: the CLI warns per bag, counts them in the run summary, and exits non-zero. |
 | Only what's needed | No ledger schema change, no new DB column, no speculative generalization beyond moving the two functions needed for testability. |
@@ -290,6 +354,7 @@ executable — see the amendment under Approach step 1.)
 | ADR | Triggered | How addressed |
 |---|---|---|
 | None of 0001–0013 (workspace or project) | No | Offline-indexer bug fix; no vehicle control, hardware interface, store schema, or transport change. |
+| ADR-0018 (local-first CI verification) | **Yes** (recorded at round 4; the table previously claimed no ADR was triggered while the plan leaned on it) | The merge gate for this PR is a full-scope `ci_local.sh` attestation, which is not a preference here but the only verification that ever runs this package's tests — the repo's one hosted workflow builds and tests neither it nor any dependent. `ci_local.sh` runs as root, which is why the root-observability of each new guard is tracked in the Principles Self-Check above rather than assumed. |
 
 ## Consequences
 
@@ -298,6 +363,8 @@ executable — see the amendment under Approach step 1.)
 | `mtime_ns` computation becomes non-zero and correct | Existing on-disk indexes (177 rows, `mtime_ns=0`) will compare unequal on next run and each bag re-indexes once | Yes — called out in PR description per the operator's note; no code change needed, the index is a derived cache and self-heals on the next `survey_index_bag` run |
 | `bagFingerprint()`/`fingerprintMatches()` move to the core lib (`ledgerState()` does not — Approach step 1's amendment) | `survey_index_bag_main.cpp`'s includes and any other in-package caller | Yes — the only caller is `main()`, updated in step 5; no caller outside this package exists yet (checked across the workspace's checked-out repos) |
 | New test binary in CMakeLists | `docs/survey_index_schema.md` build/test instructions | N/A — that doc doesn't enumerate test binaries by name |
+| `bags.path` becomes the **symlink-resolved** path (round 3), changing a persisted column's meaning | (a) existing rows keyed through a symlink, which no future run could match — the indexer now re-keys them, or deletes the duplicate when the resolved key is taken, or refuses to run; (b) `docs/survey_index_schema.md`, which said no migration was needed; (c) consumers matching `bags.path` by exact string — `cube_bathymetry/src/batch_regen_main.cpp:421` (already degrades conservatively) and `marine_perception_tools/src/sidescan_viewer_window.cpp:4058` (compares uncanonicalised dialog input for bag identity) | Yes for (a) and (b), added at round 4 — the migration and its refusal path, plus the doc's consumer note. (c) in `marine_perception_tools` is a follow-up on the consumer, out of scope here |
+| `openIndexDb` gains a caller-chosen `busy_timeout_ms` (round 4) | The GUI consumer's behaviour: the default is `0`, i.e. exactly what every consumer had before this PR, so no out-of-repo call site changes meaning; the indexer opts into 10 s at its own call site | Yes — and documented in the schema doc's concurrency ground rule |
 | An unreadable mtime now forces a re-index | `docs/survey_index_schema.md`'s "Incremental re-runs" contract | **Yes — amended after plan review (finding 3).** This is a *new* rule, not the code catching up to an existing description: the doc's contract says a bag whose `path`, `size_bytes` and `mtime_ns` all match is skipped, and says nothing about a timestamp that cannot be read. Widened at pre-push review round 1 (see Documentation & Instruction Impact). |
 | A partial walk now forces a re-index too | The schema doc, the package README, and the walk itself (`skip_permission_denied` had to go) | **Yes — amended after pre-push review round 1 (must-fix 1).** The affected bag re-indexes on *every* run until the cause is fixed. That is deliberate and is the safe direction — the alternative, which is what shipped before this round, is skipping a changed bag permanently — but it needs the loud signal below to be actionable. |
 | `survey_index_bag` now exits non-zero when a bag could not be fingerprinted or failed mid-index | Nothing automated — no script, launch file or test in this workspace consumes this binary's exit status (checked); the README documents the new behaviour | **Yes — amended after pre-push review round 1 (suggestion).** A bag re-indexing every run forever, or missing from the index after a mid-index failure, previously reported success. |
