@@ -170,6 +170,28 @@ bool processedHasDataAt(
   return false;
 }
 
+/// The finest level in @p index holding a tile whose grid overlaps @p box, or
+/// the coarsest level present when none does.
+///
+/// Grid-level, not cell-level: a grid spans 960 cells, so this asks the cheap
+/// question ("could a tile at this level bear on this ground at all?") and errs
+/// toward the finer answer, which is the conservative one — it can only make the
+/// caller walk at a finer granularity than strictly needed, never a coarser one.
+uint8_t finestLevelOver(const ProcessedIndex & index, const GeoBox & box)
+{
+  for (const uint8_t level : index.levels) {   // finest first
+    const gggs::Level lvl(level);
+    for (gggs::GridAreaIterator grid_it(lvl.gridIndex(box.min), lvl.gridIndex(box.max));
+      grid_it.valid(); grid_it.next())
+    {
+      if (index.by_grid.count(*grid_it) != 0) {
+        return level;
+      }
+    }
+  }
+  return *index.levels.rbegin();   // coarsest present; levels is never empty here
+}
+
 /// Does the processed data in @p index fully supersede @p draft_cell — is every
 /// point of the draft cell's ground covered by a processed cell that has data?
 ///
@@ -194,16 +216,28 @@ bool processedSupersedesDraftCell(
   std::set<gggs::CellIndex> & retained)
 {
   const GeoBox draft_box = cellBox(draft_cell);
+  // The walk granularity is the finest level with a tile over THIS draft cell,
+  // not the finest in the whole import (round 3). The two differ exactly when a
+  // depth-adaptive run writes a shallow band finer than the rest, which is the
+  // normal shape under the ladder: one level-14 tile anywhere would otherwise
+  // set the granularity for every draft cell in the import, including the ones
+  // that sit under level-10 processed alone. A level-14 tile covers 60x60
+  // level-10 draft cells and each would walk 256 cells x every level present,
+  // so a few thousand such tiles reach 10^9 point resolutions in one import.
+  // Dropping to the covering level is not an approximation: a level with no
+  // grid over this ground contributes nothing to the decision either way, and
+  // processedHasDataAt still consults every level at each walked cell.
+  const uint8_t finest = finestLevelOver(index, draft_box);
 
-  if (index.finest() <= draft_cell.level()) {
+  if (finest <= draft_cell.level()) {
     // Nothing finer than the draft cell: one containing processed cell per
     // level decides it, and a kept cell here is NOT coarse-retained residue —
     // it is an ordinary gated-drop hole, which the counter has never counted.
     return processedHasDataAt(index, boxCenter(draft_box));
   }
 
-  const GeoBox walk = insetForIteration(draft_box, index.finest());
-  const gggs::Level fine(index.finest());
+  const GeoBox walk = insetForIteration(draft_box, finest);
+  const gggs::Level fine(finest);
   for (gggs::GridAreaIterator grid_it(fine.gridIndex(walk.min), fine.gridIndex(walk.max));
     grid_it.valid(); grid_it.next())
   {

@@ -157,15 +157,6 @@ inline GeoBox insetForIteration(const GeoBox & box, uint8_t level)
     gggs::geoPoint(box.max.latitude - inset, box.max.longitude - inset)};
 }
 
-/// True when @p inner lies entirely within @p outer (edges may coincide).
-inline bool boxContains(const GeoBox & outer, const GeoBox & inner)
-{
-  return inner.min.latitude >= outer.min.latitude &&
-         inner.max.latitude <= outer.max.latitude &&
-         inner.min.longitude >= outer.min.longitude &&
-         inner.max.longitude <= outer.max.longitude;
-}
-
 }  // namespace marine_bathymetry_store
 
 #endif  // CELL_GEOMETRY_HPP_

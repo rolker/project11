@@ -752,6 +752,52 @@ TEST(Store, ClearOverlappedDraftCountsARetainedCoarseCellOnce)
   EXPECT_TRUE(draft->hasData()) << "cleared a draft cell the union does not cover";
 }
 
+TEST(Store, ClearOverlappedDraftIsUnchangedByAFineTileElsewhereInTheImport)
+{
+  // Round 3: the coverage walk runs at the finest level with a tile over THIS
+  // draft cell, not the finest anywhere in the import. A depth-adaptive run
+  // writes a shallow band far finer than the rest, so a single distant level-14
+  // tile used to set the walk granularity for every draft cell in the import.
+  // The verdict must not depend on it: the same import with and without the
+  // distant fine tile clears the same draft cells and retains the same ones.
+  const gggs::GridIndex pgrid = gggs::Level(11).gridIndex(43.0, -70.5);
+  const gggs::Level draft_level(4);
+
+  // A level-14 tile several level-11 grids away — nowhere near the draft cells.
+  const gggs::GridIndex distant = gggs::Level(14).gridIndex(
+    gggs::geoPoint(
+      0.5 * (pgrid.southLatitude() + pgrid.northLatitude()) + 4.0 * pgrid.latitudinalSpan(),
+      0.5 * (pgrid.westLongitude() + pgrid.eastLongitude()) + 4.0 * pgrid.longitudinalSpan()));
+  ASSERT_TRUE(distant.valid());
+
+  const auto run = [&](bool with_distant_fine_tile) {
+      BathymetryStore store(10);
+      const CornerCells corners = cornerCellsOf(pgrid, draft_level);
+      for (const auto & cell : corners.cells) {
+        store.set(SourceLayer::Draft, cell, BathyCell{-5.0, 0.4});
+      }
+      std::map<gggs::GridIndex, marine_bathymetry_store::BathymetryTile> processed;
+      processed.emplace(pgrid, filledProcessedTile(pgrid, -30.0));
+      if (with_distant_fine_tile) {
+        processed.emplace(distant, filledProcessedTile(distant, -1.0));
+      }
+      const auto result = store.clearOverlappedDraft(processed);
+      std::vector<bool> still_has_data;
+      for (const auto & cell : corners.cells) {
+        const auto draft = store.get(SourceLayer::Draft, cell);
+        still_has_data.push_back(draft.has_value() && draft->hasData());
+      }
+      return std::make_pair(result.coarse_draft_cells_retained, still_has_data);
+    };
+
+  const auto without = run(false);
+  const auto with = run(true);
+  EXPECT_EQ(with.first, without.first)
+    << "a distant fine tile changed the retained-residue count";
+  EXPECT_EQ(with.second, without.second)
+    << "a distant fine tile changed which draft cells were cleared";
+}
+
 TEST(Store, ClearOverlappedDraftSupersedesACoarseCellAcrossMIXEDProcessedLevels)
 {
   // The depth-adaptive case (uma#369): the tiles completing one straddling
