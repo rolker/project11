@@ -151,6 +151,48 @@ provenance should be recorded, because a surface built from vendor uncertainty
 and one built from our error model are not the same product even where the
 numbers agree.
 
+**Intensity and beam angle may also be available from such a sensor, and the
+beam angle needs care.** The optional fields exist and a capable driver can fill
+them, but the angle does not mean the same thing for every sonar:
+
+- The **M3 does not use a sound-speed profile.** It works from surface sound
+  speed alone, so its reported receive angle and its geometry are consistent by
+  construction — in our chain the position is *computed from* that angle and one
+  sound speed, so the two cannot disagree.
+- The **EM2040 ray-traces through a profile.** Its soundings are refracted, so
+  the angle it reports at the transducer is a **launch angle**, while the
+  position it reports has been bent on the way down. Launch angle and the
+  apparent angle from the head to the sounding are different numbers, and the
+  angle where the sound actually met the seabed is a third.
+
+That matters because of what consumes the angle. The angular-response correction
+([ADR-0007](decisions/0007-mbes-backscatter-store.md), cube#81) indexes an
+**empirical per-sonar curve** by `|beam angle|` in degrees. An empirical curve
+absorbs whatever convention it was measured against, so the risk is not the
+convention itself but **mixing** conventions: a curve built against one sonar's
+angles applied to another's. For a ray-tracing sonar the launch angle is also a
+weaker proxy for the seabed incidence angle the physics actually depends on, so
+the curve should be expected to be less clean than the M3's.
+
+**`SonarInfo` does not currently declare which angle it means.** It carries the
+curve as "`|angle from nadir|` bin centres in degrees" with no statement of
+whether that is a launch angle, an apparent angle, or an incidence angle. For a
+straight-line sonar the distinction is empty, which is why it has not bitten.
+For a ray-tracing sonar it is not empty, and the curve cannot be safely reused
+without it. That declaration is owed before an EM2040 curve is trusted; not yet
+filed.
+
+**The discrepancy is worth measuring, not just avoiding.** When a sensor
+supplies both a beam angle and an `x, y, z`, the apparent angle implied by the
+position can be compared with the reported launch angle. Under a uniform water
+column they agree; the difference is the accumulated refraction. That makes the
+comparison a cheap self-contained check on whether the profile in use matches
+the water, and a signal the sound-speed inversion work can consume
+([#300](https://github.com/rolker/unh_marine_autonomy/issues/300),
+[marine_perception_tools#28](https://github.com/rolker/marine_perception_tools/issues/28)).
+It is also the honest way to tell which of the two regimes a sensor is in
+without asking its manual.
+
 **3. Soundings with no uncertainties.** A sensor may deliver `x, y, z` and
 nothing else. The DeltaT's live driver is in this class today: it publishes a
 `PointCloud2` on `soundings` — the estimator's own topic — carrying positions
@@ -388,6 +430,7 @@ are fixed as of 2026-09-10.
 | Stage 4 | Five copies of the world lift, four in one package | drift, and it has already happened | [cube#146](https://github.com/rolker/cube_bathymetry/issues/146) |
 | Stage 1 | M3 publishes no beamwidths | works around the above | [marine_tools#82](https://github.com/rolker/marine_tools/issues/82) |
 | Stage 1 | No error model for positions-only sensors; Calder's IHO f(z) is unported | such a sensor's pings are all rejected | not yet filed |
+| Stage 1 | `SonarInfo` does not say whether its curve angle is launch, apparent or incidence | a ray-traced sonar's curve cannot be safely reused | not yet filed |
 
 ### The beamwidth units defect, in full
 
