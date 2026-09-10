@@ -31,6 +31,15 @@
   <depend>rosbag2_storage</depend>
   <depend>sqlite3</depend>
 
+  <!-- Storage plugins are loaded at run time by name, so `rosbag2_cpp` does
+       not pull one in: without these the indexer opens no bag at all (mcap is
+       jazzy's default format; .db3 bags recorded before it are still in
+       ~/data/logs). Declared as runtime dependencies, and again as test
+       dependencies because the exit-status test writes a real bag. -->
+  <exec_depend>rosbag2_storage_mcap</exec_depend>
+  <exec_depend>rosbag2_storage_sqlite3</exec_depend>
+
+  <test_depend>rosbag2_storage_mcap</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

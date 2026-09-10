@@ -1,0 +1,44 @@
+# Unreleased source dependencies for this repo's CI. Consumed by
+# .agent/scripts/ci_local.sh (#577), which clones each entry into an underlay,
+# builds it before this repo's packages, and resolves every ref to a SHA
+# host-side so the attestation note records exactly what was built
+# (`upstream-repo:` lines).
+#
+# Without this file a containerised run never reaches a compiler: rosdep cannot
+# resolve these package names to system dependencies, and the apt fallback then
+# fails outright on `ros-jazzy-geodesy`, which does not exist. Verified to fail
+# identically on an unmodified `jazzy` checkout, so this is setup that was
+# missing rather than a regression (#375).
+#
+# Note: the hosted workflow (.github/workflows/ros-base-docker.yml) does NOT
+# consume this file. It builds a fixed six-package list and tests eight, none of
+# which need these keys, which is why the gap stayed invisible. Ten of this
+# repo's eighteen packages sit outside those lists.
+#
+# geographic_info carries geodesy, needed by marine_survey_index,
+# marine_sidescan_mosaic and bathymetry_layer. Not a resolvable rosdep key on
+# jazzy. Mirrors the same entry in mru_transform/upstream.repos and
+# cube_bathymetry/upstream.repos, declared there for the same reason.
+#
+# unh_marine_navigation carries marine_nav_interfaces (needed by
+# mission_manager, mission_manager_interfaces and
+# marine_autonomy_integration_tests) and marine_nav_tasks (mission_manager).
+#
+# marine_ais carries marine_ais_msgs, needed by marine_web_view.
+#
+# Neither unh_marine_navigation nor marine_ais depends on any package in this
+# repo, so declaring them as an underlay introduces no build cycle (checked
+# across all package.xml files in both, 2026-09-10).
+repositories:
+  geographic_info:
+    type: git
+    url: https://github.com/ros-geographic-info/geographic_info.git
+    version: ros2
+  unh_marine_navigation:
+    type: git
+    url: https://github.com/rolker/unh_marine_navigation.git
+    version: jazzy
+  marine_ais:
+    type: git
+    url: https://github.com/rolker/marine_ais.git
+    version: jazzy

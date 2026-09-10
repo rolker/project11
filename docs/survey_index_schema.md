@@ -17,6 +17,21 @@ checkpoint (2026-07-13); see `.agent/work-plans/issue-259/plan.md`.
   derived cache. Deleting `survey_index.db` and re-running the indexer always
   reproduces it. There are no migrations — an incompatible schema bumps
   `schema_version` and the open fails with a regenerate hint.
+- **Opening the index takes a WRITE lock, and waiting for one is the caller's
+  choice.** `openIndexDb()` executes the schema DDL on every open, so even a
+  reader-to-be locks the file; the explorer GUI opens the same read-write
+  function through `marine_perception_tools`' `survey_index_bridge`, so two
+  write-capable handles on one file is the normal state. The handle's
+  `PRAGMA busy_timeout` is a per-consumer policy passed at open:
+  **`0` by default** — sqlite's own behaviour, fail immediately on someone
+  else's lock, which is what a GUI thread wants — and the **indexer opts into
+  10 s**, because a moment's contention would otherwise become a *failed* bag,
+  and a failed bag is an exit-1 incomplete index with no retry. So an indexer
+  open, and any later statement of its run, may block for up to ten seconds;
+  exceeding that is still a failed bag, not a retry. (`journal_mode` is left at
+  sqlite's default `delete`: WAL would remove the contention outright but is
+  unsafe on network filesystems, and this index sits beside stores that may
+  live on the NAS.)
 - **Index = "where did the sensor look."** Pass intervals are computed from
   ping geometry (nav + sonar extents), independent of what any store
   accepted. Pings rejected by CUBE or absent from store coverage still index.
@@ -39,9 +54,14 @@ CREATE TABLE schema_version (
 
 CREATE TABLE bags (
   id            INTEGER PRIMARY KEY,
-  path          TEXT    NOT NULL UNIQUE,  -- absolute, lexically normalized
+  path          TEXT    NOT NULL UNIQUE,  -- absolute, symlinks resolved (so
+                                          -- one bag is one row however it
+                                          -- was reached)
   size_bytes    INTEGER NOT NULL,         -- fingerprint: total regular-file bytes
-  mtime_ns      INTEGER NOT NULL,         -- fingerprint: newest mtime under the bag
+  mtime_ns      INTEGER NOT NULL,         -- fingerprint: newest mtime under the
+                                          -- bag, UNIX epoch nanoseconds (UTC);
+                                          -- 0 if none was readable (and also a
+                                          -- legal reading) -- see below
   indexed_at_ns INTEGER NOT NULL          -- wall clock when (re-)indexed
 );
 
@@ -125,4 +145,90 @@ additive, no schema change.
   stages do the exact math.
 - **Incremental re-runs.** A bag whose `path`, `size_bytes`, and `mtime_ns`
   all match its ledger row is skipped; a changed bag has its passes deleted
-  and re-indexed atomically (single transaction per bag).
+  and re-indexed atomically (single transaction per bag). **A bag the indexer
+  could not fully read** never satisfies that test: it is treated as changed,
+  re-indexed, and reported on stderr (and the run exits non-zero), so no
+  partial reading can present as an up-to-date bag. Two distinct cases:
+  - **No timestamp at all** — every `stat` beneath the bag failed, or it holds
+    no regular files. `mtime_ns` is then stored as `0`.
+  - **An incomplete walk** — an unreadable subdirectory, a *symlink to* a
+    subdirectory (deliberately not followed: a link can close a cycle a
+    recursive walk would never leave, so it is reported instead), a symlink
+    whose target's existence cannot be established, an entry whose type could
+    not be determined, a file that vanished mid-walk, a path that is not a
+    regular file or directory, or a timestamp outside the range `mtime_ns`
+    can represent. This case matters because a partial walk yields a *stable*
+    size and mtime: it would otherwise match its own stored copy for as long as
+    the cause persisted, skipping a changed bag indefinitely (#375).
+
+  An entry the walk knows *definitively* carries no bag bytes — a FIFO, socket
+  or device node, or a symlink that resolves to nothing — is neither counted
+  nor treated as an incomplete walk: leaving it out hides nothing, and a
+  dangling symlink is not worth a permanent re-index.
+
+  Whatever is stored is never load-bearing — the re-index decision is made
+  before the stored values are read.
+- **`mtime_ns` units and epoch.** UNIX epoch nanoseconds UTC, from `::stat`'s
+  `st_mtim` (**not** `std::filesystem::last_write_time`, whose `file_time_type`
+  epoch is not the UNIX epoch on libstdc++ — that mismatch is #375). `0` is
+  what a bag with no readable timestamp stores, and also what every row written
+  before #375 holds. It is *not* a reserved sentinel: a genuine epoch-zero
+  mtime (`touch -d @0`, and some archive extractions) stores `0` too, with the
+  reading perfectly valid. The distinction never reaches the decision — the
+  trust flags live in memory and the re-index test is made before the stored
+  values are read — but an operator reading `mtime_ns = 0` out of the DB cannot
+  tell the two apart, and should not assume the bag was unreadable.
+- **One-time re-index at the #375 fix.** Every ledger row written by an indexer
+  predating the fix carries `mtime_ns = 0`, so it compares unequal to its bag's
+  real fingerprint and each such bag is re-indexed **once** on the next run
+  (177 rows on the dev host at the time of the fix). This is expected
+  derived-cache rebuild cost, not a regression: the index is regenerable by
+  design and self-heals on that run.
+- **One row *is* migrated at the #375 fix: a `path` recorded through a
+  symlink.** The same fix resolves symlinks out of the key, so a row an older
+  indexer wrote under a symlinked path can no longer be matched by any run —
+  the lookup computes the resolved key, misses, inserts a **second** row, and
+  the stale row's `passes` and `nav_track` keep double-reporting that bag
+  through the undeduplicated join, permanently. The indexer therefore
+  reconciles the ledger once, before it looks up any bag: a stale row whose
+  resolved key is free is **re-keyed in place** (reported as `note: re-keyed
+  the ledger row for …`), and a stale row whose resolved key is already taken
+  is the double report itself, so the duplicate is **deleted** and `ON DELETE
+  CASCADE` takes its passes and nav track (`warning: … removed the stale
+  duplicate row`). If the reconciliation cannot be completed the indexer
+  **refuses to index at all** and says so, rather than inserting beside rows it
+  knows may be stale; the remedy it names is to delete `survey_index.db` and
+  re-run. A row whose path cannot be resolved at all (an unreadable path
+  component, a network mount erroring rather than answering ENOENT) is left
+  alone and warned about — that is not evidence of a symlinked key, and a
+  blinking mount must not delete ledger rows. On the dev host at the time of
+  the fix this was a verified no-op (0 of 177 rows re-key); hosts whose index
+  was built through a symlinked path (e.g. a scan root of links, or a bag tree
+  reached through a linked mount point) are the ones the migration is for.
+- **Consumers that match `bags.path` exactly must canonicalise too.** The
+  writer now stores the resolved path, so a consumer comparing a
+  user-supplied path (a file dialog's output, a config value) against
+  `bags.path` by string equality will miss the row whenever the user's path
+  runs through a symlink. Resolve it (`std::filesystem::weakly_canonical`,
+  `os.path.realpath`) before the comparison, or join on a resolved key.
+- **What size + mtime cannot see.** The fingerprint is a cheap change detector,
+  not a content hash. It misses an mtime-preserving rewrite (`cp -p`,
+  `rsync --times`, `tar -p`, or a restore from backup) at an identical byte
+  count; it can miss a rewrite finished inside one timestamp tick on a
+  coarse-granularity filesystem; it sees only regular files' mtimes, so
+  deleting one member and adding another of the same size, both older than the
+  newest member, leaves size *and* mtime unchanged (the bag directory's own
+  mtime moved, but directory mtimes are not folded into the maximum — doing so
+  would make an unrelated touch of the directory re-index the bag); and it
+  double-counts hardlinked members, so
+  changing a link count changes the fingerprint without any content changing
+  (a spurious re-index, the safe direction); and on a network mount it reads
+  what the client's attribute cache holds, not the server, so a bag rewritten
+  on the server and indexed within that window can fingerprint identically —
+  the one on this list that bites on a real survey tree, where the bags live on
+  a NAS and a run can follow a copy by seconds. The window is the mount's, not
+  a constant: the survey shares in use here are **CIFS with `actimeo=1`**
+  (`cache=strict`, `soft` — verified in `/proc/mounts`), so it is about a
+  second; an NFS mount at the default `acregmax` would be up to 60 s. Delete
+  `survey_index.db` and re-run when a bag tree has been rewritten in place by
+  any of those means.

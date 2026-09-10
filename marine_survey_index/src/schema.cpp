@@ -86,7 +86,7 @@ void execOrThrow(sqlite3 * db, const char * sql)
 
 }  // namespace
 
-sqlite3 * openIndexDb(const std::string & path)
+sqlite3 * openIndexDb(const std::string & path, int busy_timeout_ms)
 {
   sqlite3 * db = nullptr;
   if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
@@ -95,6 +95,21 @@ sqlite3 * openIndexDb(const std::string & path)
     throw std::runtime_error("survey index: cannot open '" + path + "': " + message);
   }
   execOrThrow(db, "PRAGMA foreign_keys = ON;");
+  // How long to wait for someone else's lock is the CALLER's policy, not this
+  // function's. The explorer GUI opens the index through this same read-write
+  // function (marine_perception_tools' survey_index_bridge, in its
+  // constructor), so there are two write-capable handles on this file -- and
+  // opening it here executes DDL, so even opening takes a write lock. Without
+  // a wait, a GUI holding the DB for a moment turns an indexer run into failed
+  // bags, and a failed bag is an exit-1 incomplete index, not a retry. But the
+  // GUI makes every one of its index calls on the Qt GUI thread, so a blanket
+  // wait here would freeze its event loop for the whole timeout instead of
+  // raising the error it already handles. Hence: the default is sqlite's own
+  // behaviour (fail on contact), and the batch writer opts in.
+  if (busy_timeout_ms > 0) {
+    execOrThrow(
+      db, ("PRAGMA busy_timeout = " + std::to_string(busy_timeout_ms) + ";").c_str());
+  }
   execOrThrow(db, kSchemaDdl);
 
   // Version gate: stamp a fresh DB, verify an existing one. Regeneration is

@@ -25,15 +25,73 @@ ros2 run marine_survey_index survey_index_bag <bag_uri ...> [--scan DIR] \
     [--earth-frame earth] [--sound-speed 1500]
 ```
 
+**Exit status** (a scheduler or a store build is the consumer, so the codes
+distinguish the causes):
+
+| Code | Meaning |
+|------|---------|
+| `0` | every nominated bag is in the index, and every fingerprint is trustworthy |
+| `1` | the index is **incomplete**: a bag failed mid-index or could not be opened, a `--scan` tree could not be fully enumerated (bags may be missing outright), or the index DB itself could not be opened (nothing was done) |
+| `2` | usage error — an unrecognised flag, a flag with no value, a bad flag value, `--help`, a bare invocation, or nothing nominated by a well-formed command line |
+| `3` | the index is complete, but at least one bag cannot be fingerprinted authoritatively and so **re-indexes on every run** until the cause is fixed |
+
+`1` dominates `3`, and it also dominates `2`: a `--scan` tree that could not be
+enumerated exits `1` even when it leaves nothing nominated at all — "the survey
+disk is not mounted" is an incomplete index, not a mistyped command line, and a
+scheduler has to be able to tell them apart. Every run that got as far as
+nominating bags prints a `done:` summary line, including that one (`of 0
+nominated`); a run that exits `1` because the index DB itself could not be
+opened prints no summary, because nothing was done.
+
+The distinction only survives a consumer that reads the code. Under `set -e`
+an exit `3` aborts a store build exactly as hard as a `1`, which throws away
+the difference between "the index is unusable" and "the index is fine, one bag
+re-indexes every run" — so take the status yourself:
+
+```bash
+rc=0; survey_index_bag --scan ~/data/logs --db "$db" || rc=$?
+case $rc in
+  0) ;;
+  3) echo "warning: a bag re-indexes every run; index is complete" >&2 ;;
+  *) echo "error: survey index incomplete (rc=$rc)" >&2; exit "$rc" ;;
+esac
+```
+
+**A permanently broken bag makes that a permanent `1`.** A truncated or
+otherwise unopenable bag under a scan root fails every run, for good (there is
+one under `~/data/logs/sim` on the dev host) — and a scheduled consumer that aborts on `1`
+therefore aborts forever. The predictable response, `|| true`, throws away the
+whole `0`/`1`/`2`/`3` distinction, so do not reach for it. There is no
+acknowledge or exclude flag yet (a follow-up); what works today is to take the
+bad bag out of the scan tree — move it aside, or rename its `metadata.yaml` so
+the walk no longer nominates it as a bag — and record why, so the exit status
+goes back to meaning "something changed".
+
 Single interleaved chronological pass per bag (the bounded-TF-window pattern
 from cube#63 / the sidescan importer): georeferences every MBES
 `SonarDetections` and sidescan `RawSonarImage` ping, computes its conservative
 ground-footprint bounding box, and records per-GGGS-tile **pass intervals** in
 a SQLite sidecar. Indexing is from **ping geometry, not store acceptance** —
 pings CUBE rejected still index. Unchanged already-indexed bags are skipped
-(size+mtime ledger); changed bags are re-indexed atomically. A **decimated nav
-track** (one point per ≥ `--nav-stride-m` metres, default 10) is recorded per
-bag so the explorer map can draw the survey track from the index alone.
+(size+mtime ledger); changed bags are re-indexed atomically. A bag the indexer
+could not fully read — no readable timestamp anywhere beneath it, or an
+incomplete walk (an unreadable subdirectory, a *symlinked* subdirectory, an
+entry of undeterminable type, an unrepresentable timestamp) — is never skipped:
+it is treated as changed, warned about on stderr, counted in the run summary,
+and makes the run exit non-zero, because a partial reading is stable and would
+otherwise skip a changed bag indefinitely. Symlinks are deliberately not
+followed *into* directories, by the fingerprint or by `--scan` (a link can
+close a cycle a recursive walk would never leave). This is narrower than it
+sounds: a symlink to a **bag** directory is nominated and indexed normally
+(under the bag's resolved path, so it is not a second bag), so a scan root made
+of links to bags on other volumes works. Only a symlink to an *intermediate*
+directory is reported rather than walked — bags beneath one are missed, so name
+the real path, or those bags, on the command line instead.
+An entry that definitively holds no bag bytes (a FIFO, socket or device node,
+or a symlink that resolves to nothing) is skipped without penalty: it hides
+nothing. A **decimated nav track** (one point per ≥
+`--nav-stride-m` metres, default 10) is recorded per bag so the explorer map
+can draw the survey track from the index alone.
 
 The default level is **L14 (~54 m tiles)** for both sensors — a
 target-inspection neighbourhood, finer than the stores' native tiling (bathy
@@ -65,8 +123,47 @@ see [`docs/survey_index_schema.md`](../docs/survey_index_schema.md).
 
 Bag-I/O-free unit tests cover the DB-open contract, the interval
 merge/split logic, footprint→tile enumeration (boundary straddling), the
-query tile-join (sensor filters, level separation), and the nav-track
-decimation gate and accessors:
+query tile-join (sensor filters, level separation), the nav-track
+decimation gate and accessors, and the bag fingerprint the incremental
+skip decides on (mtime accuracy against `::stat`, a same-size in-place
+rewrite, the ledger round-trip, and every route by which the fingerprint
+must refuse to call a bag unchanged — unreadable timestamp, partial walk,
+symlinked subdirectory, unresolvable symlink, unrepresentable mtime, legacy
+`mtime_ns = 0` row — plus the routes it must *not* penalise, a dangling
+symlink and a FIFO).
+
+The permission-based routes cannot run as root (root ignores the mode bits),
+and the verification that gates a merge here runs as root: `ci_local.sh`
+(ADR-0018). That is not merely the preferred gate for this package — it is the
+**only** one, because the repo's single hosted workflow
+(`.github/workflows/ros-base-docker.yml`) lists `marine_survey_index` in
+neither its build nor its test set, and nothing depends on it. So a test that
+skips as root defends nothing here, and every guard needs at least one route
+that needs no permission trick:
+
+- the fingerprint's trust flags: a symlinked subdirectory reaches
+  `mtime_valid && !scan_complete` directly, and an unresolvable symlink (ELOOP)
+  reaches the same flag through a route root is not exempt from;
+- the scan walk's continuation guards: the enumerability probe is reached by
+  exhausting file descriptors (`ulimit -n` over a chain deeper than the limit
+  — no mode bits involved), and the undeterminable-entry-type branch by a
+  symlink loop;
+- the mid-index rollback: a per-bag-selective write failure, which is also the
+  only shape that can defend the `ROLLBACK` at all (SQLite rolls back at
+  `sqlite3_close` regardless, so only a *later* bag's `BEGIN` observes it).
+
+One guard is a known exception: the mode-000 "cannot tell whether this is a
+bag" branch has no root-observable route. Keep the rest that way — a guard
+that skips in every merge-gating path defends nothing.
+
+`test_indexer_exit_status` runs the built `survey_index_bag` binary, because
+the exit-status contract above lives in `main()` where no library call reaches
+it: an unopenable bag, an indexed-but-untrustworthy bag, a `--scan` subtree
+that was dropped or could not be enumerated at all, the walk-continuation
+invariants, an unopenable index DB, the resolved ledger key and the migration
+of a row written through a symlink, the argument-parsing usage errors, the
+lock-wait opt-in, and a bag that fails mid-transaction without taking the next
+bag with it.
 
 ```bash
 colcon test --packages-select marine_survey_index

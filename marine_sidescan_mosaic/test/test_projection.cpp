@@ -147,9 +147,9 @@ Mat3 shipSensorBodyNed(double yaw, double pitch, double roll, msm::Side side = m
   // Fixed mount: sensor axes expressed in the ship frame (cols: x=fwd, y=up=-down,
   // z=abeam).  Starboard points +Z to ship-starboard (the level "beam due east"
   // matrix above); port mirrors it about forward so +Z points to ship-port.
-  const Mat3 r_mount = side == msm::Side::Starboard
-    ? Mat3{1, 0, 0, 0, 0, 1, 0, -1, 0}
-    : Mat3{1, 0, 0, 0, 0, -1, 0, 1, 0};
+  const Mat3 r_mount_stbd{1, 0, 0, 0, 0, 1, 0, -1, 0};
+  const Mat3 r_mount_port{1, 0, 0, 0, 0, -1, 0, 1, 0};
+  const Mat3 r_mount = side == msm::Side::Starboard ? r_mount_stbd : r_mount_port;
   return matmul(r_ship_ned, r_mount);
 }
 

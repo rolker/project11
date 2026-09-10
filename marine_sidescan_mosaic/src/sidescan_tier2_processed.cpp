@@ -1081,14 +1081,14 @@ int runTool(int argc, char ** argv)
   const int source_id_arg = toInt(argValue(argc, argv, "--source-id", "1"), "--source-id");
   if (source_id_arg < 1 || source_id_arg > 65535) {
     std::cerr << "error: --source-id must be in [1, 65535] (the per-cell band is the uint16 "
-                 "local index; the wide global id lives in the registry, ADR-0005 D4)\n";
+      "local index; the wide global id lives in the registry, ADR-0005 D4)\n";
     return 2;
   }
   const auto source_id = static_cast<std::uint16_t>(source_id_arg);
   if (no_nadir == "assume_zero") {
     std::cerr << "warning: --no-nadir-policy assume_zero collapses grazing (altitude 0 -> "
-                 "grazing 0), so quality floors and best-source degenerates to first-touch; "
-                 "prefer 'drop' for the processed layer.\n";
+      "grazing 0), so quality floors and best-source degenerates to first-touch; "
+      "prefer 'drop' for the processed layer.\n";
   }
   const std::string platform = argValue(argc, argv, "--platform", "bizzyboat");
   const std::string sensor = argValue(argc, argv, "--sensor", "garmin-gcv20");

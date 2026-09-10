@@ -45,8 +45,10 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -65,6 +67,7 @@
 #include "tf2/time.h"
 #include "tf2_msgs/msg/tf_message.hpp"
 
+#include "marine_survey_index/bag_fingerprint.hpp"
 #include "marine_survey_index/footprint.hpp"
 #include "marine_survey_index/interval_accumulator.hpp"
 #include "marine_survey_index/nav_decimation.hpp"
@@ -93,6 +96,80 @@ MsgT deserialize(const rosbag2_storage::SerializedBagMessageSharedPtr & bag_msg)
   MsgT out;
   rclcpp::Serialization<MsgT>().deserialize_message(&serialized, &out);
   return out;
+}
+
+// Every flag this CLI accepts, and whether it takes a value.
+//
+// Both facts are needed to parse an argument list without losing a bag. The
+// old loop assumed *every* `--`-prefixed token took a value, so an
+// unrecognised flag swallowed the token behind it: `--verbose BAG` indexed
+// nothing, said nothing, and exited 0 -- while the contract below promises
+// that 0 means every nominated bag is in the index. A `--scan` with nothing
+// behind it (`--scan $ROOT` with `ROOT` unset and unquoted) dropped the whole
+// tree the same way. Unknown flags and missing values are usage errors now.
+struct FlagSpec
+{
+  const char * name;
+  bool takes_value;
+};
+
+constexpr FlagSpec kFlags[] = {
+  {"--help", false},
+  {"--scan", true},
+  {"--db", true},
+  {"--mbes-topic", true},
+  {"--port-topic", true},
+  {"--stbd-topic", true},
+  {"--mbes-level", true},
+  {"--sidescan-level", true},
+  {"--level", true},
+  {"--merge-gap", true},
+  {"--nav-stride-m", true},
+  {"--earth-frame", true},
+  {"--sound-speed", true},
+};
+
+const FlagSpec * findFlag(const std::string & arg)
+{
+  const auto found = std::find_if(
+    std::begin(kFlags), std::end(kFlags),
+    [&arg](const FlagSpec & spec) {return arg == spec.name;});
+  return found != std::end(kFlags) ? &*found : nullptr;
+}
+
+// True when the argument list is well formed. Checked before any value is
+// read, so a flag whose value is missing can never fall through to a default.
+bool argsAreWellFormed(int argc, char ** argv)
+{
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg.rfind("--", 0) != 0) {
+      continue;  // a positional bag URI
+    }
+    const FlagSpec * spec = findFlag(arg);
+    if (spec == nullptr) {
+      std::cerr << "error: unrecognised flag '" << arg
+                << "' (see --help); refusing to run, because guessing whether it"
+                << " takes a value is what used to swallow the bag behind it\n";
+      return false;
+    }
+    if (!spec->takes_value) {
+      continue;
+    }
+    if (i + 1 >= argc) {
+      std::cerr << "error: " << arg << " requires a value\n";
+      return false;
+    }
+    // A known flag where a value should be is a missing value, not a value:
+    // `--scan --db X` would otherwise scan a directory called "--db".
+    if (findFlag(argv[i + 1]) != nullptr) {
+      std::cerr << "error: " << arg << " requires a value, but is followed by '"
+                << argv[i + 1] << "'\n";
+      return false;
+    }
+    ++i;
+  }
+  return true;
 }
 
 std::string argValue(int argc, char ** argv, const std::string & flag, const std::string & dflt)
@@ -148,54 +225,46 @@ int toLevel(const std::string & s, const std::string & flag)
   return v;
 }
 
-// Bag identity for the incremental-skip ledger: total regular-file bytes and
-// the newest mtime under the bag directory (or of the single file). A re-run
-// over an unchanged bag is a no-op; a changed bag is re-indexed.
-struct BagFingerprint
+// True when an error_code means "this path definitively resolves to nothing"
+// (a dangling symlink, or a name under a non-directory) rather than "the
+// answer could not be obtained". The first hides nothing; the second does.
+bool resolvesToNothing(const std::error_code & ec)
 {
-  std::int64_t size_bytes = 0;
-  std::int64_t mtime_ns = 0;
-};
+  return ec == std::errc::no_such_file_or_directory || ec == std::errc::not_a_directory;
+}
 
-BagFingerprint fingerprint(const std::filesystem::path & bag)
+// The ledger key for a bag: absolute, symlinks resolved, lexically normalised
+// -- so one bag is one row however it was reached. `lexically_normal()` alone
+// does not resolve links while `is_directory()` does, so a bag reached through
+// a symlinked path used to become a SECOND bag under a second `bag_id`, with
+// every pass interval and nav point inserted twice.
+//
+// A failure to resolve is reported to the caller rather than papered over: the
+// old fallback to the unresolved absolute path minted a second key for the
+// same bag, which is exactly the double insert this key exists to prevent, and
+// a transient EIO/ESTALE on a network mount is enough to trigger it.
+std::string ledgerKey(const std::filesystem::path & bag, std::error_code & ec)
 {
-  namespace fs = std::filesystem;
-  BagFingerprint fp;
-  auto consider = [&fp](const fs::path & f) {
-      std::error_code ec;
-      const auto size = fs::file_size(f, ec);
-      if (!ec) {
-        fp.size_bytes += static_cast<std::int64_t>(size);
-      }
-      const auto mtime = fs::last_write_time(f, ec);
-      if (!ec) {
-        const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-          mtime.time_since_epoch()).count();
-        fp.mtime_ns = std::max(fp.mtime_ns, static_cast<std::int64_t>(ns));
-      }
-    };
-  std::error_code ec;
-  if (fs::is_directory(bag, ec)) {
-    // error_code overloads: a broken symlink or unreadable entry sets ec and
-    // ends the walk cleanly instead of throwing and aborting the whole run.
-    for (fs::recursive_directory_iterator it(
-        bag, fs::directory_options::skip_permission_denied, ec), end;
-      !ec && it != end; it.increment(ec))
-    {
-      std::error_code entry_ec;
-      if (it->is_regular_file(entry_ec)) {
-        consider(it->path());
-      }
-    }
-  } else {
-    consider(bag);
+  ec.clear();
+  const std::filesystem::path resolved = std::filesystem::weakly_canonical(bag, ec);
+  if (ec) {
+    return std::string();
   }
-  return fp;
+  return resolved.lexically_normal().string();
 }
 
 // Recursively find rosbag2 bags (directories containing metadata.yaml) under a
 // scan root. A bag directory itself is not descended into further.
-std::vector<std::filesystem::path> scanForBags(const std::filesystem::path & root)
+//
+// Anything that keeps the scan from seeing the whole tree is reported through
+// @p problems, and the caller exits non-zero for it. A dropped subtree is
+// strictly worse than the unreadable-bag case: those bags are absent from the
+// index entirely rather than re-indexed needlessly, and downstream
+// (cube_bathymetry's dirty-tile guard fires only when the dirty set is
+// *entirely* empty) one missing bag yields an authoritative-looking marker
+// over stale store tiles.
+std::vector<std::filesystem::path> scanForBags(
+  const std::filesystem::path & root, std::vector<std::string> & problems)
 {
   namespace fs = std::filesystem;
   std::vector<fs::path> bags;
@@ -206,14 +275,91 @@ std::vector<std::filesystem::path> scanForBags(const std::filesystem::path & roo
   }
   // error_code overloads: a broken symlink or unreadable entry sets ec and
   // ends the walk cleanly instead of throwing and aborting the whole run.
-  for (fs::recursive_directory_iterator it(
-      root, fs::directory_options::skip_permission_denied, ec), end;
-    !ec && it != end; it.increment(ec))
-  {
+  // Deliberately *not* `skip_permission_denied`, and no error_code is
+  // discarded: skipping made an unreadable directory drop every bag beneath it
+  // with no warning, no counter and exit 0.
+  fs::recursive_directory_iterator it(root, ec), end;
+  if (ec) {
+    problems.push_back(
+      "could not scan '" + root.string() + "': " + ec.message() +
+      " - no bag anywhere under it is in this run");
+    return bags;
+  }
+  while (it != end) {
+    const fs::path current = it->path();
     std::error_code entry_ec;
-    if (it->is_directory(entry_ec) && fs::exists(it->path() / "metadata.yaml", entry_ec)) {
-      bags.push_back(it->path());
+    const bool dir = it->is_directory(entry_ec);
+    if (entry_ec && !resolvesToNothing(entry_ec)) {
+      problems.push_back(
+        "could not determine the type of '" + current.string() + "': " + entry_ec.message() +
+        " - if it is a bag, or holds one, it is missing from this run");
+      // Cancel descent here too, for the same reason the next two branches
+      // do: a failed `increment()` ends the WHOLE walk. Where `readdir`
+      // returns a real `d_type` (ext4, and the production CIFS mount) an entry
+      // of unknown type is never a directory and recursion was never pending,
+      // so this is inert; on a `DT_UNKNOWN` backend, where the type comes from
+      // the `stat` that just failed, it is the difference between losing this
+      // entry and losing every bag after it in the walk. Untested for that
+      // reason -- no local filesystem reaches it.
       it.disable_recursion_pending();
+    } else if (!entry_ec && dir) {
+      std::error_code meta_ec;
+      if (fs::exists(current / "metadata.yaml", meta_ec)) {
+        bags.push_back(current);
+        it.disable_recursion_pending();
+      } else if (meta_ec && !resolvesToNothing(meta_ec)) {
+        problems.push_back(
+          "could not tell whether '" + current.string() + "' is a bag: " + meta_ec.message() +
+          " - it, and any bag beneath it, are missing from this run");
+        // Reporting is not enough: descent has to be cancelled too. A failed
+        // `increment()` ends the WHOLE walk (see below), so leaving recursion
+        // pending on a directory we already know we cannot read would drop
+        // every bag after it in readdir order, not just the ones beneath it.
+        it.disable_recursion_pending();
+      } else {
+        std::error_code link_ec;
+        // A symlinked directory is not descended into (a link can close a
+        // cycle a recursive walk would never leave), so any bag beneath one
+        // would be missed silently. Reported, not followed — name the real
+        // path, or that bag, on the command line instead.
+        if (it->is_symlink(link_ec) && !link_ec) {
+          problems.push_back(
+            "'" + current.string() +
+            "' is a symlink to a directory, which is not scanned for bags"
+            " - any bag beneath it is missing from this run");
+        } else {
+          // Ask whether this directory can be enumerated *before* the walk
+          // descends into it. A traverse-only directory (mode 0111) probes
+          // for `metadata.yaml` successfully yet cannot be listed, so it
+          // reaches neither branch above and would abandon the walk in
+          // `increment()` the same way -- as does a directory there is no
+          // descriptor left to open (EMFILE), which is the route the tests
+          // use, root being exempt from mode bits but not from a descriptor
+          // limit.
+          //
+          // It is not free: `increment()` opens the directory again, so this
+          // costs one extra `opendir` per non-bag directory -- measured at
+          // ~+5% of walk time over the CIFS survey tree (672 probes, ~+50 ms
+          // of ~950 ms). What it buys is that a directory the walk cannot
+          // list costs a reported, contained subtree instead of every bag
+          // after it in the walk.
+          std::error_code enum_ec;
+          fs::directory_iterator probe(current, enum_ec);
+          if (enum_ec) {
+            problems.push_back(
+              "could not enumerate '" + current.string() + "': " + enum_ec.message() +
+            " - any bag beneath it is missing from this run");
+            it.disable_recursion_pending();
+          }
+        }
+      }
+    }
+    it.increment(ec);
+    if (ec) {
+      problems.push_back(
+        "scan of '" + root.string() + "' stopped at '" + current.string() + "': " +
+        ec.message() + " - every bag after that point in the walk is missing from this run");
+      break;
     }
   }
   std::sort(bags.begin(), bags.end());
@@ -281,20 +427,128 @@ void stepDoneOrThrow(sqlite3 * db, sqlite3_stmt * stmt)
 
 // Ledger lookup: 0 = not indexed; >0 = bag id (unchanged, skip); <0 = -bag id
 // (changed, re-index: caller deletes old passes and updates the row).
-std::int64_t ledgerState(sqlite3 * db, const std::string & path, const BagFingerprint & fp)
+std::int64_t ledgerState(
+  sqlite3 * db, const std::string & path,
+  const marine_survey_index::BagFingerprint & fp)
 {
-  sqlite3_stmt * stmt = prepareOrThrow(
-    db, "SELECT id, size_bytes, mtime_ns FROM bags WHERE path = ?");
-  sqlite3_bind_text(stmt, 1, path.c_str(), -1, SQLITE_TRANSIENT);
-  std::int64_t result = 0;
-  if (sqlite3_step(stmt) == SQLITE_ROW) {
-    const std::int64_t id = sqlite3_column_int64(stmt, 0);
-    const bool unchanged = sqlite3_column_int64(stmt, 1) == fp.size_bytes &&
-      sqlite3_column_int64(stmt, 2) == fp.mtime_ns;
-    result = unchanged ? id : -id;
+  StmtGuard sel(
+    prepareOrThrow(db, "SELECT id, size_bytes, mtime_ns FROM bags WHERE path = ?"));
+  sqlite3_bind_text(sel.get(), 1, path.c_str(), -1, SQLITE_TRANSIENT);
+  const int step = sqlite3_step(sel.get());
+  if (step == SQLITE_ROW) {
+    const std::int64_t id = sqlite3_column_int64(sel.get(), 0);
+    const bool unchanged = marine_survey_index::fingerprintMatches(
+      fp, sqlite3_column_int64(sel.get(), 1), sqlite3_column_int64(sel.get(), 2));
+    return unchanged ? id : -id;
   }
-  sqlite3_finalize(stmt);
-  return result;
+  // Only DONE means "this bag is not in the ledger". A SQLITE_BUSY that
+  // outlived the busy timeout, or a SQLITE_CORRUPT, used to read as an
+  // unindexed bag and take the INSERT path for a bag that already has a row --
+  // contained today only incidentally, by the `path UNIQUE` constraint. Throw
+  // instead, matching `stepDoneOrThrow`, so it fails this bag loudly.
+  if (step != SQLITE_DONE) {
+    throw SqliteError(std::string("ledger lookup: ") + sqlite3_errmsg(db));
+  }
+  return 0;
+}
+
+// Reconcile ledger rows written before the key resolved symlinks (#375).
+//
+// Such a row can never be matched again: the lookup now computes the resolved
+// key, misses, and INSERTs a second row beside it -- leaving the stale row's
+// passes and nav track in the DB to double-report that bag through
+// `query.cpp`'s undeduplicated join, permanently, since no future run can
+// match the old key either. So the rows are reconciled once, up front, before
+// any bag is looked up:
+//
+//   * a stale row whose resolved key is free is re-keyed in place. The bag did
+//     not move, so its fingerprint, passes and nav track stay valid.
+//   * a stale row whose resolved key is already taken IS the double report:
+//     the canonical row is the one every future run uses, so the stale
+//     duplicate is deleted and `ON DELETE CASCADE` takes its passes and nav
+//     track with it.
+//
+// Both are reported. A row whose path cannot be resolved at all is left alone
+// and warned about -- it is not evidence of a symlinked key, and this must not
+// delete a row because a mount blinked. A failure of the reconciliation itself
+// throws: the caller refuses to index, because inserting beside rows we know
+// may be stale is the condition this exists to end.
+std::size_t reconcileLedgerKeys(sqlite3 * db)
+{
+  struct LedgerRow
+  {
+    std::int64_t id;
+    std::string path;
+  };
+  std::vector<LedgerRow> rows;
+  {
+    StmtGuard sel(prepareOrThrow(db, "SELECT id, path FROM bags"));
+    int step = SQLITE_OK;
+    while ((step = sqlite3_step(sel.get())) == SQLITE_ROW) {
+      const unsigned char * text = sqlite3_column_text(sel.get(), 1);
+      rows.push_back(
+        LedgerRow{sqlite3_column_int64(sel.get(), 0),
+          text != nullptr ? reinterpret_cast<const char *>(text) : ""});
+    }
+    if (step != SQLITE_DONE) {
+      throw SqliteError(std::string("reading the ledger: ") + sqlite3_errmsg(db));
+    }
+  }
+
+  std::size_t reconciled = 0;
+  bool in_transaction = false;
+  for (const LedgerRow & row : rows) {
+    std::error_code key_ec;
+    const std::string key = ledgerKey(row.path, key_ec);
+    if (key_ec) {
+      std::cerr << "warning: could not check whether the ledger row for '" << row.path
+                << "' predates the symlink-resolved key: " << key_ec.message()
+                << " - if it was recorded through a symlink, that bag will be indexed"
+                << " a second time and reported twice\n";
+      continue;
+    }
+    if (key == row.path) {
+      continue;
+    }
+    if (!in_transaction) {
+      execOrThrow(db, "BEGIN TRANSACTION;");
+      in_transaction = true;
+    }
+    std::int64_t canonical_id = 0;
+    {
+      StmtGuard sel(prepareOrThrow(db, "SELECT id FROM bags WHERE path = ?"));
+      sqlite3_bind_text(sel.get(), 1, key.c_str(), -1, SQLITE_TRANSIENT);
+      const int step = sqlite3_step(sel.get());
+      if (step == SQLITE_ROW) {
+        canonical_id = sqlite3_column_int64(sel.get(), 0);
+      } else if (step != SQLITE_DONE) {
+        throw SqliteError(std::string("looking up the resolved key: ") + sqlite3_errmsg(db));
+      }
+    }
+    if (canonical_id != 0) {
+      StmtGuard del(prepareOrThrow(db, "DELETE FROM bags WHERE id = ?"));
+      sqlite3_bind_int64(del.get(), 1, row.id);
+      stepDoneOrThrow(db, del.get());
+      std::cerr << "warning: '" << row.path
+                << "' was recorded through a symlink and '" << key
+                << "' is already indexed: removed the stale duplicate row, whose passes"
+                << " and nav track were double-reporting that bag\n";
+    } else {
+      StmtGuard upd(prepareOrThrow(db, "UPDATE bags SET path = ? WHERE id = ?"));
+      sqlite3_bind_text(upd.get(), 1, key.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int64(upd.get(), 2, row.id);
+      stepDoneOrThrow(db, upd.get());
+      std::cerr << "note: re-keyed the ledger row for '" << row.path
+                << "' to its symlink-resolved path '" << key
+                << "' (recorded before #375; it would otherwise have been indexed"
+                << " a second time)\n";
+    }
+    ++reconciled;
+  }
+  if (in_transaction) {
+    execOrThrow(db, "COMMIT;");
+  }
+  return reconciled;
 }
 
 geographic_msgs::msg::GeoPoint groundOrigin(const marine_sidescan_mosaic::GeoBeam & gb)
@@ -339,6 +593,12 @@ int main(int argc, char ** argv)
     return 2;
   }
 
+  // Before any value is read: an unrecognised flag or a flag with no value is
+  // a usage error (2), never a silently dropped bag.
+  if (!argsAreWellFormed(argc, argv)) {
+    return 2;
+  }
+
   const std::string db_path = argValue(argc, argv, "--db", "survey_index.db");
   const std::string base = "/bizzy/sensors/";
   const std::string mbes_topic = argValue(argc, argv, "--mbes-topic", base + "m3/detections");
@@ -379,32 +639,98 @@ int main(int argc, char ** argv)
 
   // Collect bag list: positional URIs + --scan roots.
   std::vector<std::filesystem::path> bags;
+  std::vector<std::string> scan_problems;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
-    if (arg == "--scan") {
-      if (i + 1 < argc) {
-        const auto found = scanForBags(argv[i + 1]);
+    // `argsAreWellFormed()` has already established that every flag here is
+    // known and that a value-taking one has its value, so this loop can trust
+    // the table instead of guessing.
+    if (const FlagSpec * spec = findFlag(arg)) {
+      if (arg == "--scan") {
+        const auto found = scanForBags(argv[i + 1], scan_problems);
         bags.insert(bags.end(), found.begin(), found.end());
       }
-      ++i;
-      continue;
-    }
-    if (arg.rfind("--", 0) == 0) {
-      ++i;  // every other flag takes a value
+      if (spec->takes_value) {
+        ++i;
+      }
       continue;
     }
     bags.emplace_back(arg);
   }
+  // Each problem names its own consequence: a dropped subtree, an entry of
+  // unknown type and a walk that stopped part-way lose different things, and a
+  // blanket "any bag beneath it" was wrong for the last of those -- what is
+  // missing there is every bag after that point in the walk.
+  for (const std::string & problem : scan_problems) {
+    std::cerr << "warning: " << problem << "\n";
+  }
+  // The same bag nominated twice -- named twice, or named and also reached by a
+  // `--scan` -- is one bag. Reported as "1 indexed, 1 unchanged skipped" it
+  // read as "one bag was already up to date" about a bag this run had written
+  // seconds earlier. Deduplicated on the resolved ledger key, keeping
+  // command-line order so the run still processes bags in the order given. A
+  // bag whose key cannot be resolved is kept as it is: the per-bag loop fails
+  // it loudly, which is a better answer than collapsing two of them on a key
+  // neither could be given.
+  {
+    std::vector<std::filesystem::path> unique_bags;
+    std::set<std::string> seen_keys;
+    for (const std::filesystem::path & bag : bags) {
+      std::error_code key_ec;
+      const std::string key = ledgerKey(bag, key_ec);
+      if (!key_ec && !seen_keys.insert(key).second) {
+        continue;
+      }
+      unique_bags.push_back(bag);
+    }
+    bags = std::move(unique_bags);
+  }
+
   if (bags.empty()) {
+    // Precedence: a scan that could not be enumerated is an INCOMPLETE index
+    // (1), not a usage error (2) — the command line was well formed, the tree
+    // was not readable. Tested before the empty-bag return because that is the
+    // worst instance of it: "the survey disk is not mounted" nominates nothing
+    // at all, and reporting it as "you invoked me wrong" is exactly the
+    // conclusion a scheduler must not draw. Summarised like any other run so
+    // the zero is stated rather than inferred from an absent summary.
+    if (!scan_problems.empty()) {
+      std::cerr << "done: 0 bag(s) indexed, 0 unchanged skipped, 0 failed"
+                << " (of 0 nominated); 0 not fully readable"
+                << "; no bag could be nominated because the scan above could not"
+                << " be enumerated -> " << db_path << " (unchanged)\n";
+      return 1;
+    }
     std::cerr << "error: no bags given (positional URIs and/or --scan DIR)\n";
     return 2;
   }
 
   sqlite3 * db = nullptr;
   try {
-    db = marine_survey_index::openIndexDb(db_path);
+    // Ten seconds: far longer than any read the explorer GUI makes of this
+    // index, far shorter than a survey-tree indexing run. A batch writer would
+    // rather wait than turn a moment's contention into a failed bag, which is
+    // an exit-1 incomplete index with no retry.
+    constexpr int kBusyTimeoutMs = 10000;
+    db = marine_survey_index::openIndexDb(db_path, kBusyTimeoutMs);
   } catch (const std::exception & e) {
     std::cerr << "error: " << e.what() << "\n";
+    return 1;
+  }
+
+  // Migrate any pre-#375 row keyed through a symlink before a single bag is
+  // looked up. Refusing to proceed is the alternative, not proceeding quietly:
+  // a stale row we could not reconcile double-reports its bag forever.
+  try {
+    reconcileLedgerKeys(db);
+  } catch (const std::exception & e) {
+    sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+    sqlite3_close(db);
+    std::cerr << "error: could not reconcile pre-#375 ledger keys in '" << db_path
+              << "': " << e.what()
+              << " - refusing to index, because a row keyed through a symlink would be"
+              << " double-reported beside the new one; delete the index and re-run to"
+              << " regenerate it (the bags are the data of record)\n";
     return 1;
   }
 
@@ -416,11 +742,42 @@ int main(int argc, char ** argv)
   const std::int64_t merge_gap_ns = static_cast<std::int64_t>(merge_gap_s * 1e9);
 
   std::size_t n_bags_indexed = 0, n_bags_skipped = 0;
+  // Durable signals for the exit status: a bag that cannot be fingerprinted
+  // authoritatively re-indexes forever, and a bag that failed mid-index leaves
+  // the ledger without it. Neither may report success.
+  std::size_t n_bags_unreadable = 0, n_bags_failed = 0;
 
   for (const auto & bag : bags) {
     try {
-      const std::string bag_key = std::filesystem::absolute(bag).lexically_normal().string();
-      const BagFingerprint fp = fingerprint(bag);
+      // One bag is one ledger row, however it was reached (see `ledgerKey()`).
+      // A key that cannot be resolved fails the bag: falling back to the
+      // unresolved path would mint a second key for it, which is the double
+      // insert the resolved key exists to prevent.
+      std::error_code key_ec;
+      const std::string bag_key = ledgerKey(bag, key_ec);
+      if (key_ec) {
+        throw std::runtime_error(
+          "could not resolve '" + bag.string() + "' to a ledger key: " + key_ec.message() +
+          " - refusing to index it under a second key");
+      }
+      std::string fingerprint_problem;
+      const marine_survey_index::BagFingerprint fp =
+        marine_survey_index::bagFingerprint(bag, &fingerprint_problem);
+      if (!fp.authoritative()) {
+        // Loud, not silent: this bag cannot be judged unchanged, so it will
+        // re-index on every run until the cause is fixed. The counter and the
+        // exit status key on the fingerprint's own flags — the string is the
+        // message, never the condition, so no empty-string convention has to
+        // hold across the library boundary for the exit code to be right.
+        ++n_bags_unreadable;
+        // The library always sets a reason here (asserted by
+        // ProblemStringAndTrustFlagsAlwaysAgree); the fallback keeps the
+        // warning meaningful rather than blank if that ever drifts.
+        const std::string why = fingerprint_problem.empty() ?
+          "'" + bag_key + "' could not be fingerprinted authoritatively" : fingerprint_problem;
+        std::cerr << "warning: " << why
+                  << " - treating this bag as changed, so it re-indexes every run\n";
+      }
       const std::int64_t state = ledgerState(db, bag_key, fp);
       if (state > 0) {
         ++n_bags_skipped;
@@ -531,7 +888,12 @@ int main(int argc, char ** argv)
       try {
         reader.open(so);
       } catch (const std::exception & e) {
-        std::cerr << "error: cannot open bag " << bag_key << ": " << e.what() << "\n";
+        // Counted, not just printed: this bag is absent from the index, which
+        // is the same durable condition as a mid-index failure. Landing in no
+        // summary bucket at all used to exit 0 on a run that indexed nothing.
+        ++n_bags_failed;
+        std::cerr << "error: cannot open bag " << bag_key << ": " << e.what()
+                  << "; skipping\n";
         continue;
       }
       rosbag2_storage::StorageFilter filter;
@@ -651,6 +1013,9 @@ int main(int argc, char ** argv)
             "UPDATE bags SET size_bytes = ?, mtime_ns = ?, indexed_at_ns = ? WHERE id = ?";
           StmtGuard upd(prepareOrThrow(db, upd_sql));
           sqlite3_bind_int64(upd.get(), 1, fp.size_bytes);
+          // `mtime_ns` is 0 whenever the fingerprint is not valid (struct
+          // invariant), and is never load-bearing: `fingerprintMatches()`
+          // rejects an untrustworthy fingerprint before reading it.
           sqlite3_bind_int64(upd.get(), 2, fp.mtime_ns);
           sqlite3_bind_int64(upd.get(), 3, now_ns);
           sqlite3_bind_int64(upd.get(), 4, bag_id);
@@ -717,13 +1082,48 @@ int main(int argc, char ** argv)
       // its (possibly open) transaction and move on so the remaining bags
       // still index and the db is closed cleanly at the end.
       sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+      ++n_bags_failed;
       std::cerr << "error: failed to index " << bag.string() << ": "
                 << e.what() << "; skipping\n";
     }
   }
 
   sqlite3_close(db);
+  // `indexed + skipped + failed` partitions the nominated bags (hence the
+  // "of N" — a mismatch is a bug), while `not fully readable` cuts across
+  // them: such a bag is never skipped, so it is already counted as indexed or
+  // failed. Reported separately rather than folded in, because it is the one
+  // condition that persists across runs.
   std::cerr << "done: " << n_bags_indexed << " bag(s) indexed, "
-            << n_bags_skipped << " unchanged skipped -> " << db_path << "\n";
-  return 0;
+            << n_bags_skipped << " unchanged skipped, "
+            << n_bags_failed << " failed (of " << bags.size() << " nominated); "
+            << n_bags_unreadable << " not fully readable, so re-indexing every run";
+  // A run that exits 1 solely because of a scan problem would otherwise print
+  // an all-clear summary (`0 failed ... 0 not fully readable`) and then exit
+  // 1, leaving anyone triaging from the summary line with a clean run and an
+  // inexplicable code. The zero-bags path already names its cause; this names
+  // it in the normal summary too, and says what it costs.
+  if (!scan_problems.empty()) {
+    std::cerr << "; " << scan_problems.size()
+              << " scan problem(s) reported above, so bags may be missing outright";
+  }
+  std::cerr << " -> " << db_path << "\n";
+  // Exit status contract (also stated in the README):
+  //   0  every nominated bag is in the index, and every fingerprint is
+  //      authoritative
+  //   1  the index is INCOMPLETE: a bag failed mid-index or could not be
+  //      opened, or a --scan tree could not be fully enumerated (so bags may
+  //      be missing outright). Also returned earlier when the DB itself could
+  //      not be opened, in which case nothing was done at all.
+  //   2  usage error
+  //   3  the index is complete, but at least one bag cannot be fingerprinted
+  //      authoritatively and so re-indexes on every run until the cause is
+  //      fixed -- durable and worth a signal, but not a missing bag.
+  // A run that only said so on stderr left no signal a scheduler or script
+  // could see; conflating the two left a caller unable to tell a permanent
+  // permission wart from an index it cannot rely on.
+  if (n_bags_failed > 0 || !scan_problems.empty()) {
+    return 1;
+  }
+  return n_bags_unreadable > 0 ? 3 : 0;
 }

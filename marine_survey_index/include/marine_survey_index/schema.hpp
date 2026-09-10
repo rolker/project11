@@ -48,10 +48,21 @@ constexpr int kSchemaVersion = 2;
 /// when absent, and verifies the stored schema version matches
 /// ::kSchemaVersion.
 ///
+/// Opening **writes**: it executes the schema DDL, so it takes a write lock on
+/// the file even when the caller only intends to read. With
+/// @p busy_timeout_ms > 0 this call, and every later statement on the returned
+/// handle, may therefore **block** for up to that long while another process
+/// holds the lock (the indexer holds it for one bag's transaction). Leave it at
+/// the default in anything that must stay responsive — a GUI thread — and take
+/// the error instead; a batch writer wants the wait.
+///
 /// @param path Filesystem path (or ":memory:" for tests).
+/// @param busy_timeout_ms `PRAGMA busy_timeout` for the returned handle, in
+///        milliseconds. `0` (the default) is sqlite's own behaviour: fail
+///        immediately on a lock held by someone else.
 /// @return An open handle; the caller owns it (close with `sqlite3_close`).
 /// @throws std::runtime_error on open failure or schema-version mismatch.
-sqlite3 * openIndexDb(const std::string & path);
+sqlite3 * openIndexDb(const std::string & path, int busy_timeout_ms = 0);
 
 }  // namespace marine_survey_index
 

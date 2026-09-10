@@ -230,7 +230,7 @@ BathyDem::BathyDem(
     }
     msg << "). A bathy store that renamed its layers (ADR-0010 D8 re-classifies";
     msg << " survey/ as processed/ and adds draft/) is a --bathy-layers change, "
-           "not an empty store.";
+      "not an empty store.";
     throw std::runtime_error(msg.str());
   }
   if (tile_count_ == 0) {
