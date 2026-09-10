@@ -835,3 +835,33 @@ Lifecycle: **Implementation** → push / open PR → **triage-reviews**. The bra
 ---
 **Authored-By**: `Claude Code Agent`
 **Model**: `Claude Opus 5 (1M context)`
+
+## Integrated Review
+**Status**: complete
+**When**: 2026-09-10 14:22 -04:00
+**By**: Claude Code Agent (Claude Opus 5 (1M context))
+
+**PR**: #372 at `0fccc0c`
+**Sources**: 3 (Copilot review @ `0fccc0c`, `## Local Review (Pre-Push)` rounds 3 and 4 @ `ab272ff`/`aead3e4`, CI rollup)
+**Cross-source confirmations**: 1
+**CI**: `copilot-pull-request-reviewer` success; `build` in progress at triage time
+
+### Findings
+- [ ] (cross-confirmed) The "cost is bounded by data" claim survives in the INSTALLED header — round 3 raised it, the round-3 fix corrected only `query.cpp`, and Copilot flagged the header's copy at the current head. Only tiles are data-gated; inside a present tile the walk is geometric — `marine_bathymetry_store/include/marine_bathymetry_store/query.hpp:96`
+- [ ] (valid, Copilot) `std::tuple_size` is used without including `<tuple>` — it compiles here only through a transitive include from the gggs headers — `marine_bathymetry_store/src/depth_adaptive_level.cpp:48`
+- [ ] (valid, Copilot) `pointInCell` is documented as returning a point *inside* the cell, but the cross-level tests deliberately pass fractions outside [0, 1] to reach neighbouring cells; a reader cannot tell those calls from bugs — `marine_bathymetry_store/test/test_query.cpp:67`
+- [ ] (valid, Copilot) The same helper, the same undocumented deliberate use (fractions up to 3.5) — `marine_bathymetry_store/test/test_store.cpp:44`
+
+### False positives
+
+None. All four Copilot comments hold against the current code.
+
+### Notes
+
+- Copilot ran at review effort **Lite** over 26/26 changed files and produced 4 comments, none of which overlaps the five safety defects the four local adversarial passes found. The cross-confirmed one is a documentation claim, not a behaviour: worth noting that the second-vendor read did not independently reach any of the correctness findings this branch was actually reshaped by.
+- The cross-confirmation is also a lesson about the round-3 fix itself: the same wrong sentence existed in two files and only the one named in the finding was corrected. Grep the claim, not the location.
+- No human review yet. The PR was taken out of draft at 2026-09-10 ~14:05 -04:00 after sitting as a draft overnight without drawing any bot review.
+
+---
+**Authored-By**: `Claude Code Agent`
+**Model**: `Claude Opus 5 (1M context)`
