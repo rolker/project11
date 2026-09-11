@@ -111,6 +111,35 @@ No instruction file changes. If the verification pass turns up a pattern worth
 capturing for other agents, it is raised as a candidate rather than written
 into `.agent/knowledge/` as a side effect.
 
+## Revision after operator review (2026-09-11)
+
+The operator read the first version and left sixteen inline comments on
+[#374](https://github.com/rolker/unh_marine_autonomy/pull/374); each was
+discussed to a decision before the page was edited (the decisions are recorded
+in the page itself and in `progress.md`). The revision changed the plan's
+shape in four ways:
+
+- **Scope.** The page is no longer a single six-stage multibeam chain. It is a
+  shared **spine** (acquisition, georeferencing, store write) with per-product
+  **middles**; sidescan, water column and single/split beam are named branches
+  stated as contracts only. A **water-body model** section (`water/` theme of
+  the world model) and a section on the two **rented stages** (beamforming,
+  bottom detection) were added.
+- **Accuracy.** Six claims in the first version were wrong or stale and are
+  corrected, with a list at the end of the page: the DeltaT driver's actual
+  output, the IHO f(z) recommendation, the ray tracer's consumers, the source
+  of "full −3 dB", the defect table's state after cube PR#153, and the
+  explorer's merged state.
+- **Conventions.** The units table gained the operator's three-category rule,
+  the three divergence justifications, and the defensibility rule for
+  extending the error model — cross-package content that has no other home.
+- **Follow-ups.** The review filed twelve issues the page now links instead of
+  describing: cube#155, #156, #157, #158; marine_tools#84; imagenex_deltat#2;
+  rviz_sonar_image#9; marine_perception_tools#54; unh_echoboats_project11#489;
+  #378, #379, #380 — plus scope notes on cube#129, #146 and #300.
+
+Files-to-change is unchanged (the page, the one link line, this plan).
+
 ## Open Questions
 
 - ~~Whether the explorer's stand-in uncertainty is recorded as a defensible
