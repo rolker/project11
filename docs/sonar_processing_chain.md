@@ -47,7 +47,7 @@ differs per product.
 | bathymetry | Uncertainty | `cube::ErrorModel` (inside the projector) | ping + `Platform` + `Vessel` + `Device` | per-sounding TPU |
 | spine | Georeferencing | **no single owner — five copies** ([cube#146](https://github.com/rolker/cube_bathymetry/issues/146)) | soundings + TF | geographic soundings |
 | bathymetry | Estimation | `cube::GeoMapSheet` / `cube::GeoGrid` / `cube::Node` | **`PointCloud2` on `soundings`** + `cube::Parameters` | per-node depth, uncertainty, backscatter |
-| sidescan | Decode → project → mosaic | `marine_sidescan_mosaic` | `RawSonarImage` + TF + (optionally) a DEM | backscatter mosaic tiles |
+| sidescan | Decode → project → mosaic | `marine_sidescan_mosaic` | `RawSonarImage` + TF + a nadir altitude (`sensor_msgs/Range`) + (optionally) a DEM | backscatter mosaic tiles |
 | spine | Store write | `cube::store_import`, the mosaic node | nodes / mosaic | GGGS tiles in the world model |
 
 Three stages generalize across products and are the spine: acquisition is a
@@ -299,7 +299,7 @@ described a fifth arrival, `x, y, z` and nothing else, and recommended porting
 Calder's depth-based IHO error model for it. Every sensor we own can supply
 geometry, so the class has no members, and the model stays unported for three
 reasons: its horizontal term is a constant independent of depth and angle, and
-horizontal variance sets the CUBE influence radius, so it would smear a shallow
+horizontal variance caps the CUBE influence radius, so it would smear a shallow
 survey uniformly; its coefficients are a survey *acceptance* limit, so feeding
 them in as measured uncertainty writes a policy number into the store where a
 physical one belongs; and nothing needs it. The honest answer for a sensor that
@@ -662,9 +662,12 @@ simply does not update.
 
 ## Stage 5 — Estimation
 
-**What it does.** Runs CUBE: soundings are spread over an influence radius
-derived from their horizontal variance, and each node maintains competing depth
-hypotheses with Kalman updates, monitoring and intervention.
+**What it does.** Runs CUBE: each sounding is spread over an influence radius
+— Calder's capture distance, computed from the ratio of the depth-dependent
+maximum allowed variance to the sounding's vertical variance, scaled by the
+node spacing, **capped** at the 99 % horizontal bound (2.576 × the horizontal
+sigma) and never below one node spacing — and each node maintains competing
+depth hypotheses with Kalman updates, monitoring and intervention.
 
 **Owner.** `cube::GeoMapSheet` over `cube::GeoGrid` over `cube::Node`, tuned by
 `cube::Parameters`. The node — the hypotheses, the median pre-queue, the
@@ -708,7 +711,7 @@ stage-4 duplication). Offline, the same content arrives as `cube::GeoSounding`.
 Either way the estimator needs depth, a vertical variance and a horizontal
 variance, plus intensity, beam angle and slant range when the backscatter
 product is wanted ([ADR-0007](decisions/0007-mbes-backscatter-store.md)). The
-horizontal variance sets the influence radius, so an under-stated horizontal
+horizontal variance caps the influence radius, so an under-stated horizontal
 budget pins every radius to the cell size.
 
 **Backscatter is already carried.** The node co-estimates intensity alongside
@@ -835,7 +838,10 @@ backed by existing work from CCOM and beyond, cited, rather than invented.
 ## The other branches
 
 **Sidescan.** Consumes `RawSonarImage` from `garmin_sidescan` or
-`edgetech_sonar`, plus TF and optionally a DEM from the depths store; produces
+`edgetech_sonar`, plus TF, a timestamped nadir altitude (`sensor_msgs/Range`,
+used for the slant-to-ground correction — the live node drops a ping whose
+altitude is missing or stale unless configured to assume zero), and optionally
+a DEM from the depths store; produces
 backscatter mosaic tiles through `marine_sidescan_mosaic` (decode, per-ping
 projection with a nadir altitude, tier-1 flat and tier-2 DEM-draped mosaics,
 overview pyramids) into the sidescan store
