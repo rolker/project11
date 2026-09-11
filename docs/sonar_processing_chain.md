@@ -15,8 +15,15 @@ to write code that touches soundings:
 - **this page** — the *processing chain*: stages, ownership, inputs, units.
 
 It records what the chain is and what it needs. It decides nothing; where a
-decision governs a stage it is cited, not restated. Where the operator has set
-a direction that no decision record yet carries, it is marked as such.
+decision governs a stage it is cited, not restated. Three directions the
+operator set during this page's review — the `water/` theme, the units rule,
+and the Calder extension rule — have no decision record yet; each is marked
+*operator direction, 2026-09-11, pending [#381](https://github.com/rolker/unh_marine_autonomy/issues/381)*,
+and the record, not this page, will decide them. The four operator statements
+of fact this page rests on (hardware state, the M3 device-table choice, the
+store rebuild, the angular-response direction) are recorded as a comment on
+[PR #374](https://github.com/rolker/unh_marine_autonomy/pull/374) so they have
+a source outside a conversation.
 
 **What "is" means here.** This page describes what ships on the default
 branches. Where a stage is being changed on an open branch, that is marked
@@ -85,7 +92,7 @@ the defects below survived. This table is the contract.
 | `cube::Platform.heave` | metres | **positive down** today (Calder's convention; negated from TF at the boundary) — see the rule below |
 | `cube::Vessel` alignments, angular sdevs, static roll | degrees | user-facing |
 | `cube::Sounding.depth` | metres | **elevation, positive up** |
-| `SspRayTracer` depths | metres | **positive down** today, below a shared surface datum — see the rule below |
+| ray-tracer depths (`ssp_ray_tracer.h`: `cube::traceRay` over `SoundSpeedProfilePoint`s) | metres | **positive down** today, below a shared surface datum — see the rule below |
 | `cube::Sounding.vertical_error`, `horizontal_error` | m², **variances** | named "error", hold variances — rename pending, [cube#158](https://github.com/rolker/cube_bathymetry/issues/158) |
 | `PointCloud2` fields `vertical_uncertainty`, `horizontal_uncertainty` | m², **variances** | named "uncertainty", hold variances — the same rename, [cube#158](https://github.com/rolker/cube_bathymetry/issues/158) |
 
@@ -97,7 +104,8 @@ the question of a stated convention after the fifth instance; the rule below is
 the operator's answer (2026-09-11), and lives here because it spans
 `marine_tools`, `cube_bathymetry` and the explorer.
 
-**The convention rule, in three categories.**
+**The convention rule, in three categories** (operator direction, 2026-09-11,
+pending [#381](https://github.com/rolker/unh_marine_autonomy/issues/381)).
 
 1. **Internal interfaces between our own components follow ROS** (REP-103:
    radians, metres, z up, ENU). `Platform` is filled by our projector and typed
@@ -110,7 +118,7 @@ the operator's answer (2026-09-11), and lives here because it spans
 3. **External data formats keep their native convention only inside their
    reader.** Sound-speed casts are tabulated positive-down in every
    oceanographic dataset, so that sign lives in the cast loader and dies there.
-   `SspRayTracer` talks to the projector, an internal interface, so it should
+   The ray tracer talks to the projector, an internal interface, so it should
    speak elevation; today it speaks depth-below-surface and names its result
    field the long way round so that a missing negation reads wrong at the call
    site. That naming is a mitigation for a crossing that does not need to
@@ -125,8 +133,12 @@ The answer is in the co-maintainer's own consumers and in the migration rule:
 `±0.5 × tx_beamwidth`, its C++ interface compares against
 `tan(tx_beamwidths[0] / 2)`, and the v1→v2 bag migration copies the old
 vendor-defined `azimuth_beamwidth` / `elevation_beamwidth` into the arrays with
-no factor of two. The operator settled the same reading on 2026-06-21 for
-`garmin_sidescan` ([marine_tools#62](https://github.com/rolker/marine_tools/issues/62)).
+no factor of two. The one driver here that publishes beamwidths agrees:
+`garmin_sidescan`'s node states its table holds "the FULL -3 dB widths, NOT
+half-angles" (`garmin_sidescan/node.py`). The March-2022 provenance is commit
+`9937688` in the upstream repository; the migration rule is
+`bmr/order00_projected_sonar_image.bmr`. (The `sonar_image_proc` sources are
+cited from the upstream repository, not from a local checkout.)
 One consumer still reads it as a half-angle and draws every fan twice as wide:
 [rviz_sonar_image#9](https://github.com/rolker/rviz_sonar_image/issues/9).
 Getting that sentence into the message definition is a documentation-only
@@ -139,7 +151,8 @@ hold variances, so a consumer that squares them is wrong by a square — and a
 producer that writes a standard deviation into them is wrong by a square root,
 which is exactly what the DeltaT driver did (stage 1).
 
-**Diverging from Calder.** The estimator is a port of Brian Calder's CUBE and
+**Diverging from Calder** (operator direction, 2026-09-11, pending
+[#381](https://github.com/rolker/unh_marine_autonomy/issues/381)). The estimator is a port of Brian Calder's CUBE and
 error model, which ship in `cube_bathymetry/original_cube/` and are known in the
 hydrographic world. Every divergence is recorded in
 `cube_bathymetry/docs/divergences_from_calder.md`, and the operator has set the
@@ -192,12 +205,14 @@ three raw message types that share it:
 | `RawSonarImage` | per-beam sample data — water column, sidescan, single/split beam | `garmin_sidescan`, `edgetech_sonar` |
 | `ProjectedSonarImage` | imaging-sonar fans with beam directions and range bins | (external imaging-sonar drivers) |
 
-Alongside whichever of those a driver publishes, it publishes a latched
+Alongside its raw message a driver should publish a latched
 `marine_interfaces/SonarInfo` ([ADR-0009](decisions/0009-sonar-info-message.md))
 carrying what `PingInfo` lacks: acquisition settings, intensity semantics, and
 the correction state of the stream. `SonarInfo` is prototyped here on purpose,
 outside the upstream message package, as the candidate for upstreaming
-([#380](https://github.com/rolker/unh_marine_autonomy/issues/380)).
+([#380](https://github.com/rolker/unh_marine_autonomy/issues/380)). **Only
+`kongsberg_em_bridge` publishes it today**; `garmin_sidescan`, `edgetech_sonar`
+and `imagenex_deltat` do not reference the message at all.
 
 ### What the estimator actually consumes
 
@@ -216,8 +231,11 @@ The two optional fields are probed by name, so a producer may omit them. The
 two variance fields are not: a cloud without them throws while the iterators
 are built, and the ping is dropped with a throttled warning. A point whose
 position or variance is non-finite, or whose vertical variance is non-positive,
-is dropped and counted. **Nothing is defaulted.** A sensor that cannot say how
-good its soundings are does not get to have them guessed at.
+is dropped and counted. **Nothing is defaulted on this path.** A sensor that
+cannot say how good its soundings are does not get to have them guessed at. One
+offline tool breaks that rule on the same seam: `bag_to_geotiff` invents a
+sounding uncertainty from the navigation covariance scaled by ten, which is a
+substitution the product does not record.
 
 That contract is the seam. Everything above it is per-sensor; everything below
 it is shared.
@@ -291,8 +309,9 @@ truly cannot give geometry is to say so, not to substitute a standard.
 point the sensor supports, never the derived cloud.** BizzyBoat's logging
 launch records the M3 as detections plus the sonar-info message, so every M3
 bag survives a change to the cloud contract untouched — the cloud regenerates.
-The DeltaT is recorded as its cloud, because the driver has nothing earlier to
-record; those are the only bags [cube#158](https://github.com/rolker/cube_bathymetry/issues/158)
+The DeltaT, where it is recorded, is recorded as its cloud, because the driver
+has nothing earlier to record — BizzyBoat's launch has that topic commented out
+this season (the M3 replaced it) and IzzyBoat's records it; those are the only bags [cube#158](https://github.com/rolker/cube_bathymetry/issues/158)
 touches, and a one-off retrofit script handles them
 ([unh_echoboats_project11#489](https://github.com/rolker/unh_echoboats_project11/issues/489))
 rather than compatibility code in the pipeline.
@@ -312,11 +331,10 @@ rented. They fail differently, and they point at opposite sonars.
 interface, so owning this stage is decoding a described protocol
 ([marine_tools#2](https://github.com/rolker/marine_tools/issues/2) records the
 architecture: the head sends elements over Ethernet to the Windows software,
-which performs all beamforming). **Imagenex added an obfuscation layer to the
-DeltaT's element data in response to our attempt to bypass their software, and
-has patented the hardware/software combination** (operator, 2026-09-11). That
-path is closed to us deliberately, and the judgement about it is the operator's,
-not a technical estimate.
+which performs all beamforming). **The DeltaT's element interface is not open
+to us** — a vendor choice, recorded outside this page (operator, 2026-09-11;
+see the PR #374 comment). That path is closed, and the judgement about it is
+the operator's, not a technical estimate.
 
 **Bottom detection points at the DeltaT.** Its software outputs water column
 *or* soundings, never both, so wanting water column forces us to detect. The M3
@@ -371,8 +389,10 @@ way to reach CUBE at the time, not a shortcut past an existing path. Read cold,
 those lines look like carelessness; they are an artifact of ordering. They are
 nonetheless wrong in four ways now. A one-percent-of-depth figure is shaped
 like a standard deviation and the estimator reads the field as a variance; the
-horizontal floor of 0.01 read as a variance is σ = 0.1 m, which pins every
-CUBE influence radius to the cell size. The intensity field is named `i`, so
+horizontal floor of 0.01 read as a variance is σ = 0.1 m; the floor binds only
+within about a metre of nadir, and outboard the one-percent term understates
+the horizontal budget by the same square-root confusion, so the CUBE influence
+radius is wrong everywhere and smallest where the beams are worst. The intensity field is named `i`, so
 backscatter never arrives. There is no `beam_angle` field, so the angular
 corrections cannot run. And the head's tilt angle is parsed and ignored, with
 every point placed at zero along-track.
@@ -403,8 +423,9 @@ chose empty fields plus the device fallback over inventing one.
 
 The M3's own datagram stream does not carry beamwidth either, so for any
 Kongsberg unit the figure has to come from a device table rather than the wire.
-The same bridge already decodes the XYZ88 datagram, which the M3 exports empty
-but an EM2040 would populate. The package is to be renamed **`kongsberg_dotall`**
+The same bridge carries a decoder for the XYZ88 datagram — the node filters to
+the Raw Range and Angle datagram before parsing, so it is not used — which the
+M3 exports empty but an EM2040 would populate. The package is to be renamed **`kongsberg_dotall`**
 ([marine_tools#84](https://github.com/rolker/marine_tools/issues/84)) — it
 decodes a format and bridges nothing — after the #82 branch lands and riding the
 same boat-config change as the DeltaT swap.
@@ -470,8 +491,9 @@ and a single sound speed. Its header calls itself a QC-grade projection, which
 is honest, but it is a second copy of stage 2.
 
 **Straight-line projection is what ships.** Re-projection through a real
-sound-speed profile is the job of `cube::SspRayTracer`, which is a consumer of
-the [water-body model](#the-water-body-model) and is described there. An earlier
+sound-speed profile is the job of the ray tracer (`ssp_ray_tracer.h`, the free
+function `cube::traceRay`), which is a consumer of the
+[water-body model](#the-water-body-model) and is described there. An earlier
 revision of this page said the tracer was consumed by the sound-speed inversion
 work; it is not consumed by anything outside its own source and tests.
 
@@ -488,15 +510,17 @@ stage in the chain.
 
 - *Per ping, via `cube::Platform`*: timestamp, roll, pitch, heave, surface sound
   speed, geometric-mean sound speed, and vessel speed over ground. The projector
-  draws roll, pitch and heave from TF and takes speed over ground as an
-  argument.
+  draws roll, pitch and heave from TF, fills both sound speeds from the ping's
+  single value, and takes speed over ground as an argument.
 - *Per beam, via `SonarDetections`*: travel times, tx and rx steering angles,
   detection flags, and from `ping_info` the sound speed, frequency and
   beamwidths — the last validated at the boundary, with a per-beam width that
   is non-finite, non-positive or ≥ π falling back to the `Device` figure.
 - *As configuration, via `Vessel`*: lever arms to the GPS and IMU, alignment and
   latency standard deviations, draft, static roll, and the measurement standard
-  deviations for roll, pitch, gyro, sound-speed profile, heave and draft. Also
+  deviations for roll, pitch, gyro, sound-speed profile, heave and draft — none
+  of which is configurable anywhere today, live included; the live node sets
+  three fields and leaves the rest at the defaults. Also
   `ellipsoidal_referenced`, which when true (the default) omits the tide terms
   from the vertical budget — and only the tide terms; see below.
 - *As configuration, via `Device`*: across-track and along-track beamwidths in
@@ -507,10 +531,12 @@ roll and pitch NaN, so the resulting uncertainty is NaN, and the projector
 reports it in `diagnostics.missing_attitude`. A missing heave transform defaults
 heave to zero, which the projector documents as non-critical because heave
 enters the budget only squared. Speed over ground may be passed as NaN, and is
-floored to zero. **Offline replay always supplies NaN**, so every tile produced
-by bag import or batch regeneration carries **zero latency error** in its
-horizontal budget while the live node carries the full term: live and
-reprocessed products disagree on the error budget by construction.
+floored to zero. Bag import and batch regeneration take an odometry topic and
+supply a real per-ping speed when it is given, and NaN when it is not (both
+print the NaN banner unconditionally, which misled an earlier revision of this
+page); the GeoTIFF tool always passes NaN. A run without odometry therefore
+carries **zero latency error** in its horizontal budget while the live node
+carries the full term, and nothing in the product says which it was.
 
 **Neither `Vessel` nor `Device` has an offline configuration path.** The offline
 tools set only the frames and the range gate and leave both structs at their
@@ -522,17 +548,19 @@ zero-speed point above belongs beside it.
 **What the survey explorer runs instead.** The explorer's CUBE lab does not run
 this model. It computes an angle-aware placeholder
 (`marine_perception_tools/src/sounding_uncertainty.hpp`, stored as variances
-per the `Sounding` contract, seeded from `cube::Device`'s defaults), and its own
-header says it lasts "until detections are carried through". The explorer's bag
+per the `Sounding` contract, seeded from `cube::Device`'s defaults), and the
+lab's header (`cube_lab.hpp`) says it lasts "until detections are carried
+through" — now [marine_perception_tools#55](https://github.com/rolker/marine_perception_tools/issues/55). The explorer's bag
 reader holds the ping and the transform buffer at the same moment, so carrying
 detections through to `DetectionsProjector` is practical rather than
 aspirational.
 
 **Validation status.** The estimator core was compared term by term against
 Calder's original C in [cube#30](https://github.com/rolker/cube_bathymetry/issues/30).
-The verdict there is worth repeating: the **estimator is a faithful port** —
-feed it the same soundings with the same uncertainty and the grid matches
-Calder. The divergences are concentrated in this stage, the upstream error
+The verdict there, as recorded on that issue, is worth repeating: the
+**estimator is a faithful port** — feed it the same soundings with the same
+uncertainty and the grid matches Calder — a verdict on the CUBE algorithm, not
+on the error budget. The divergences are concentrated in this stage, the upstream error
 budget.
 
 **What the model does not contain.** Read against Calder's original on
@@ -547,18 +575,24 @@ budget.
   once and gets neither GNSS term.
   [cube#156](https://github.com/rolker/cube_bathymetry/issues/156).
 - **No attitude rate anywhere.** The three timing sigmas the vessel carries are
-  summed into one latency variance and used in exactly one place, the
-  along-track jitter term scaled by speed². Roll and heading uncertainty are
-  static. So a ping timestamped δt from its attitude sample carries an attitude
+  summed into one latency variance (σ ≈ 0.031 s with the defaults, dominated
+  by the 0.03 s GPS term) and used in exactly one place, the along-track jitter
+  term scaled by speed². Roll and heading uncertainty are static. So a ping timestamped δt from its attitude sample carries an attitude
   error of `rate × δt` that the model never sees — the mechanism behind turn
-  noise, and reachable on a straight line in a chop. With the port's defaults,
-  roll rate × latency matches the static roll sigma at about 7 °/s; the heading
-  half needs about 70 °/s and is expected to be small. The term is to be
+  noise, and reachable on a straight line in a chop. Which timing sigma the
+  coupling should use is part of the derivation: attitude-to-ping timing is the
+  IMU and transmit terms (≈ 0.007 s together), on which roll rate × latency
+  matches the static roll sigma at about 7 °/s and the heading half needs
+  about 70 °/s; using the code's summed variance including the GPS term gives
+  about 1.6 °/s and 16 °/s. Either way the heading half is expected to be
+  small and the roll half is not. The term is to be
   located in the literature or derived and cited, and sized against Massabesic
   and Isles of Shoals bags before it is added:
   [cube#155](https://github.com/rolker/cube_bathymetry/issues/155).
 - **A stationary pinging vessel** is not a missing speed term: speed enters only
-  the latency terms, all ∝ speed², so zero speed correctly makes them vanish.
+  the latency terms, three of which scale with speed² and vanish at rest (the
+  fourth, Calder's Eqn. 3.96, is latency² × speed-over-ground sigma², and is
+  zero only because the GPS latency defaults to zero).
   The artifacts under a stationary boat come from CUBE assuming soundings are
   independent while hundreds of the same geometry land in the same nodes — a
   node-level question, to be looked at in a dockside bag before modelling.
@@ -596,7 +630,8 @@ each difference has already produced a defect:
 
 - **Fallback policy.** The live node and the explorer fall back to the latest
   transform when the stamp is uncovered; import and batch regeneration use a
-  bounded buffer and drop-and-count. Both are right for their setting. A shared
+  bounded buffer and drop-and-count; the GeoTIFF tool is a third variant, a
+  bare at-stamp lookup with no counter. Both are right for their setting. A shared
   function takes the policy explicitly — at-stamp-only or at-or-latest — over
   the same `tf2::BufferCore` the projector already takes, which offline tools
   already fill from bag transforms. The difference between real-time and
@@ -604,14 +639,15 @@ each difference has already produced a defect:
 - **The geodetic conversion.** The GeoTIFF tool solves the full ECEF→geodetic
   conversion per sounding. Import and batch regeneration solve it once per ping
   at the sensor origin and linearize each sounding through a local ENU tangent
-  plane (the import performance work). Two of the five copies therefore compute
-  a slightly different number from the other three, by an amount stated
-  nowhere.
+  plane (the import performance work); the live node, like the GeoTIFF tool,
+  solves per sounding. Two of the five copies therefore compute a slightly
+  different number from the other three, by an amount stated nowhere.
 - **Field carriage.** The explorer's copy dropped beam angle and slant range
   when it rebuilt the sounding
   ([marine_perception_tools#49](https://github.com/rolker/marine_perception_tools/issues/49),
-  fixed: the two copies became one helper with copy-then-overwrite semantics,
-  so a field added later rides along).
+  fixed in [marine_perception_tools PR#50](https://github.com/rolker/marine_perception_tools/pull/50):
+  the two copies became one helper with copy-then-overwrite semantics, so a
+  field added later rides along).
 
 The shared function belongs beside `DetectionsProjector` under the same header
 rule — no node-bound includes — which is the extraction that was done for
@@ -619,9 +655,10 @@ projection and the error model and then stopped one stage short. That is
 [cube#146](https://github.com/rolker/cube_bathymetry/issues/146), with the three
 points above recorded on it.
 
-**What it must be fed.** A TF buffer covering the ping stamp, containing the
-`earth` frame. A ping with no `earth` transform is dropped, and on the live node
-the grid simply does not update.
+**What it must be fed.** A TF buffer containing the `earth` frame at the ping
+stamp — or, under the at-or-latest policy, the latest transform it holds. A
+ping with no `earth` transform at all is dropped, and on the live node the grid
+simply does not update.
 
 ## Stage 5 — Estimation
 
@@ -637,8 +674,11 @@ job is spreading and indexing.
 **One grid, geographic.** The package also holds a Cartesian pair, `Grid` and
 `MapSheet`, in metres, from Calder's mapsheet. Nothing in production calls it:
 the live node, import, batch regeneration and the GeoTIFF tool all migrated to
-the geographic sheet, and what remains is includes, comments and a forward
-declaration. Calder's mapsheet was in metres because his soundings arrived
+the geographic sheet. What remains is includes, comments, a forward
+declaration, one test that uses the Cartesian sheet as the correctness oracle
+for the geographic one (`test_publish_equivalence.cpp`), and a `find_path` for
+its header in the explorer's build — so deletion ports that test and touches
+that build file. Calder's mapsheet was in metres because his soundings arrived
 projected; ours arrive georeferenced, and that is not a reason to keep an
 equivalent. The Cartesian pair is to be **deleted**, the single library
 `estimate()` entry point ([cube#129](https://github.com/rolker/cube_bathymetry/issues/129))
@@ -659,8 +699,8 @@ estimator is unaffected: `GeoGrid` computes every influence and capture
 distance in metres (an equirectangular approximation, sub-millimetre against
 the geodesic at these radii). What is not metric is the spacing of the nodes,
 which is why a product's cell size is two numbers (stage 6) and why a lab
-comparing against a reference implementation on a square lattice resamples at
-export.
+comparing against a reference implementation on a square lattice would have to
+resample at export (the explorer does not today).
 
 **What it must be fed.** On the live path, the `PointCloud2` contract from
 stage 1, which this node georeferences itself before accumulating (that is the
@@ -676,7 +716,7 @@ the winning depth hypothesis, the geographic sheet configures the angular
 correction, and the geographic grid exposes both through its node records. The
 gap was only ever on the Cartesian side.
 
-**Parameters.** `cube::Parameters` has 25 fields and, today, header comments as
+**Parameters.** `cube::Parameters` has 28 fields and, today, header comments as
 their only description anywhere. A reference page is
 [cube#157](https://github.com/rolker/cube_bathymetry/issues/157), rendered by
 the explorer's lab as its parameter pop-out
@@ -721,7 +761,9 @@ nonetheless know how to turn nodes into rasters.
 
 ## The water-body model
 
-Operator direction, 2026-09-11. Sound speed ingestion and inference belong with
+Operator direction, 2026-09-11, pending a decision record
+([#381](https://github.com/rolker/unh_marine_autonomy/issues/381); ADR-0010 D3
+governs the store taxonomy and its precedent is a dated amendment). Sound speed ingestion and inference belong with
 temperature and salinity in one **water-body model** — "ocean model" in prose,
 where ocean means any water body, rivers and lakes included — whose fidelity
 ranges from a pure unknown represented by the default 1500 m/s up to a full
@@ -747,13 +789,14 @@ property of the data, not the code:
 
 Every consumer asks one question — value and σ at a position and time — and
 gets an honest answer at whatever rung the data supports, without knowing which
-rung answered. The consumers: `cube::SspRayTracer` for re-projection and for
+rung answered. The consumers: the ray tracer for re-projection and for
 the launch-to-incidence mapping below; the error model's sound-speed σ;
 absorption for transmission loss, from temperature and salinity; sidescan slant
 range; single-beam reduction; simulator replay.
 
-**What exists today.** The ray tracer (`cube_bathymetry/.../ssp_ray_tracer.h`,
-a constant-gradient tracer, the forward model agreed on #300) and the surface
+**What exists today.** The ray tracer (`cube_bathymetry/.../ssp_ray_tracer.h`:
+`cube::traceRay` over a `SoundSpeedProfilePoint` profile, returning a
+`RayTraceResult`; a constant-gradient tracer, the forward model agreed on #300) and the surface
 sound-speed bridge. Nothing handles a profile beyond the tracer's own input;
 the Appledore casts are the first real profile data. The
 [#300](https://github.com/rolker/unh_marine_autonomy/issues/300) epic's
@@ -781,8 +824,8 @@ So a lumped curve cannot transfer between water bodies, and parameterizing it
 by water properties would not fix that, because the seafloor term is not a water
 property — transferring the Massabesic curve to the Shoals would subtract the
 lake's sediment response from the ocean's, which is the signal a backscatter
-product exists to preserve. **The direction (operator, 2026-09-11) is the
-decomposition**: a system term that travels with the sonar, an absorption term
+product exists to preserve. **The direction (operator, 2026-09-11, confirmed on
+PR #374) is the decomposition**: a system term that travels with the sonar, an absorption term
 from the water-body model, an incidence mapping from the ray tracer, and the
 seafloor term left in the data as the product. That is what GeoCoder's angular
 range analysis does (Fonseca & Calder), and ADR-0007 already points there. It
@@ -833,9 +876,10 @@ State as of 2026-09-11.
 | Stage 3 | Detection flags never read | an invalid beam becomes seafloor | open, [cube#154](https://github.com/rolker/cube_bathymetry/issues/154) |
 | Stage 3 | `ellipsoidal_referenced` removes only tide terms | draft/heave over-charged, GNSS term absent | open, [cube#156](https://github.com/rolker/cube_bathymetry/issues/156) |
 | Stage 3 | No attitude-rate × latency coupling | turn and seaway error charged to nothing | open, [cube#155](https://github.com/rolker/cube_bathymetry/issues/155) |
-| Stage 3 | No offline `Vessel`/`Device` configuration; offline speed is NaN → 0 | archive cannot be reprocessed with real geometry; zero latency budget | open, [cube#145](https://github.com/rolker/cube_bathymetry/issues/145) |
+| Stage 3 | No `Vessel`/`Device` configuration path; offline speed is NaN → 0 without an odometry topic | archive cannot be reprocessed with real geometry; latency budget silently zero | open, [cube#145](https://github.com/rolker/cube_bathymetry/issues/145) |
 | Stage 4 | Five copies of the world lift, four in one package | drift, and it has already happened | open, [cube#146](https://github.com/rolker/cube_bathymetry/issues/146) |
 | Stage 5 | A second, Cartesian grid with its own insert loop; a third in the explorer | drift | open, [cube#129](https://github.com/rolker/cube_bathymetry/issues/129) |
+| Stage 3 | `bw/12` applied to every beam with no detection-method input | Calder switches per device | recorded divergence, no issue |
 | Stage 1 | M3 publishes no beamwidths | device fallback on every ping | open; fix on a branch, not yet published, [marine_tools#82](https://github.com/rolker/marine_tools/issues/82) |
 | Stage 1 | DeltaT publishes invented variances, `i` not `intensity`, no beam angle | radius pinned; no backscatter | open, [imagenex_deltat#2](https://github.com/rolker/imagenex_deltat/issues/2) |
 | Stage 1 | Variance fields named "uncertainty" / "error" | producers write σ | open, [cube#158](https://github.com/rolker/cube_bathymetry/issues/158) |
@@ -857,8 +901,8 @@ The fix (cube PR#153, 2026-09-10) **normalises units once at the boundary and
 validates**: a per-beam width that is non-finite, non-positive or ≥ π is not a
 measurement and falls back to the device figure — which is what defeats the
 zero-filled array. The same PR fixed the `Platform` attitude units and the pitch
-sign, corrected Calder's Eqn. 3.49, and added diagnostics counting the beams
-that used the fallback. The stored tiles written before it are not invalidated:
+sign, fixed the port's Eqn. 3.49 term (a porting error — Calder's C was right),
+and added diagnostics counting the beams that used the fallback. The stored tiles written before it are not invalidated:
 the operator's decision is to rebuild every store after the pipeline changes
 are done, not before.
 
@@ -872,7 +916,10 @@ the widening around it. The widening is device-dependent in Calder, not
 universal, and fixing the units did not make the port device-aware
 ([cube#148](https://github.com/rolker/cube_bathymetry/issues/148)). §1 of that
 record describes the tide half of RTK referencing as the whole story; it is
-not ([cube#156](https://github.com/rolker/cube_bathymetry/issues/156)).
+not ([cube#156](https://github.com/rolker/cube_bathymetry/issues/156)). And one
+divergence it records is still live and has no defect-table row: the port
+applies `bw/12` to every beam with no detection-method input, where Calder
+switches per device.
 
 ## What this revision corrected about the page itself
 
