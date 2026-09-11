@@ -1,7 +1,9 @@
 # Sonar & Survey Data Reference
 
 Durable hardware, protocol, and data-location facts behind the
-[sonar ecosystem map](sonar_ecosystem.md). The map tracks *status*; this page
+[sonar ecosystem map](sonar_ecosystem.md). The map tracks *status*, and the
+[sonar processing chain](sonar_processing_chain.md) tracks what happens to a
+ping and what each stage must be fed; this page
 records the facts that don't change with each PR — sensor identities, wire
 protocols, and where the data of record actually lives. Sourced from field
 sessions (2026 Massabesic campaign) and verified against the drivers where
@@ -76,8 +78,10 @@ caches (see the store-redesign discussion in
 
 **Store layout constraints**:
 
-- Bathymetry and backscatter stores **cannot share a directory** — both use a
-  `processed/` layer with different dtypes (Float64 vs Float32).
+- Bathymetry and backscatter stores **cannot share a directory** — the depth
+  store's provenance layers (ADR-0010 D3) and the MBES backscatter store's
+  single `survey/` layer (ADR-0007 A.2) carry different dtypes (Float64 vs
+  Float32) and different layer sets.
 - NoData conventions: chart-bathy and backscatter tiles use **NaN**; sidescan
   uses **0**; the Massabesic source chart raster (`massabesic_bathy.tif`)
   uses **−9999**, converted to NaN on import.
