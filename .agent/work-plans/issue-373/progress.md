@@ -48,3 +48,38 @@ Bot findings, all trivial and all still present at head:
 
 ### False positives
 - None. All three bot comments describe conditions verified present in the file at head, and all sixteen human comments are design direction rather than claims to check.
+
+## Implementation
+**Status**: complete
+**When**: 2026-09-11 (afternoon, -04:00)
+**By**: Claude Code Agent (Claude Fable 5.1)
+
+**Branch**: `feature/issue-373` (PR #374)
+
+All sixteen operator comments from the Integrated Review were discussed to a
+decision one at a time before editing; the page was then rewritten in one pass
+(906 lines, from 517). What changed, mapped to the review findings:
+
+- [x] L1 scope → shared spine + per-product middles; sidescan / water column / single-beam as contract-only branches
+- [x] L93 + L113 → two-axis arrival framing (entry point × completeness); five-tier missing-fields rule; recording rule; rented stages (beamforming → M3, bottom detection → DeltaT; Imagenex obfuscation + patent recorded); IHO f(z) recommendation withdrawn (class empty)
+- [x] L61/L63/L64/L500 → three-category convention rule, divergence justifications, defensibility rule; wire + struct variance rename filed as cube#158; retrofit as unh_echoboats_project11#489
+- [x] L56 → "full −3 dB" sourced to sonar_image_proc + the v1 migration rule; rviz half-angle bug filed as rviz_sonar_image#9; message path tracked in #380 (operator opens the upstream doc issue)
+- [x] L257 → `kongsberg_dotall` rename, marine_tools#84, sequenced after #82
+- [x] L343 → cube#156 (RTK half-job), cube#155 (attitude-rate coupling, data check first); stationary case recorded as an independence question; offline zero-speed budget noted beside cube#145
+- [x] L183 + L286 → angular-response decomposition (GeoCoder) as direction; water-body model section (`water/` theme); ray tracer moved under it; scope note posted on #300
+- [x] L381 → georeferencing = one function + policy switch; the three differences posted on cube#146
+- [x] L409 → Cartesian `Grid`/`MapSheet` to be deleted, GeoGrid the one grid, equal-angle cell property recorded; scope note posted on cube#129
+- [x] L391 → cube#157 (parameter reference) + marine_perception_tools#54 (pop-out)
+- [x] L430 → live transport already source-agnostic; sidescan publisher gap filed as #379
+- [x] integrator: defect table refreshed against cube PR#153; M3-bridge section updated; explorer state updated to merged
+- [x] Copilot ×3: owner clause reworded, cube#81 linked, "not yet filed" replaced by #378
+- [x] DeltaT correction (found during review): imagenex_deltat#2 filed; page rewritten to describe what the driver actually publishes
+- [x] plan.md revision section added
+
+**Not done here**: nothing on the page was left describing unmerged work; the
+stores rebuild after the pipeline changes is the operator's decision, recorded.
+
+### Follow-ups filed by this review
+cube#155, #156, #157, #158; marine_tools#84; imagenex_deltat#2;
+rviz_sonar_image#9; marine_perception_tools#54; unh_echoboats_project11#489;
+#378, #379, #380. Scope notes: cube#129, cube#146, #300.
