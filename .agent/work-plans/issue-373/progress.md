@@ -153,3 +153,32 @@ are the places it did not.
 - [ ] (suggestion) File separately: `import_bag_main.cpp:971` and `batch_regen_main.cpp:688` print "(offline projection, vessel_speed = NaN)" unconditionally, even with `--odom-topic` — the banner is what produced this page's wrong claim
 - [ ] (suggestion) File separately: `imagenex_deltat/nodes/deltat_to_bag.py` already builds `SonarDetections` — prior art for imagenex_deltat#2 the page does not mention; and `imagenex_deltat/setup.py:25` declares a console_script for a module that does not exist
 - [ ] (suggestion) File separately: this repo has no `.pre-commit-config.yaml` at all, so the workspace's "run pre-commit hooks" rule is vacuous here and the green `build` check exercises nothing in a docs diff
+
+## Implementation
+**Status**: complete
+**When**: 2026-09-11 (evening, -04:00)
+**By**: Claude Code Agent (Claude Fable 5.1)
+
+**Branch**: `feature/issue-373` (PR #374) — address-findings pass on the fresh `## Local Review` (16 must-fix, 27 suggestions). Host-inline, because two findings needed operator ground truth (obtained at a checkpoint) and one needed a physics choice.
+
+Must-fix, all addressed:
+- [x] DeltaT recording state corrected (BizzyBoat line commented out this season; IzzyBoat records it)
+- [x] Offline speed: `--odom-topic` supplies real SOG; NaN only without it / in `bag_to_geotiff`; the NaN banner is unconditional
+- [x] Attitude-rate figures: both sigma choices given (0.007 s IMU+tx → 7/70 °/s; summed 0.031 s → 1.6/16 °/s); cube#155 corrected to match
+- [x] `cube::Parameters` = 28 fields; cube#157 corrected
+- [x] `cube::SspRayTracer` → `cube::traceRay` / `SoundSpeedProfilePoint` / `RayTraceResult` at all four sites
+- [x] "full −3 dB" sourced to `garmin_sidescan/node.py`, upstream commit `9937688`, the bmr rule; mt#62 citation removed
+- [x] `SonarInfo` published only by `kongsberg_em_bridge`
+- [x] Cartesian pair: test oracle + explorer `find_path` named as deletion costs
+- [x] Eqn. 3.49: porting error, Calder's C was right
+- [x] field-carriage fix cited to mpt PR#50
+- [x] stage-4 feed sentence reconciled with at-or-latest
+- [x] three decisions marked *operator direction, pending #381* (operator's choice: record later, not strip)
+- [x] four operator statements recorded as a PR #374 comment; the vendor sentence softened to "not open to us — a vendor choice" (operator's choice)
+- [x] plan Open Question updated (mpt#50 merged; mpt#55 is the replacement)
+- [x] Integrated Review checkboxes ticked (20)
+- [x] PR body refreshed + AI signature
+
+Suggestions taken: XYZ88 wording; DeltaT floor claim; Eqn 3.96 phrasing; `bw/12` divergence row; `bag_to_geotiff` invented uncertainty on the same seam; "would resample"; quote located in `cube_lab.hpp`; third fallback variant + live node per-sounding solve; Vessel unconfigurable live too; both sound speeds from one scalar; faithful-port attributed to cube#30 and scoped; `sonar_reference.md` store-layer contradiction fixed. Consequence gaps filed as #382 (cross-links after #368 + DeltaT reference entry).
+
+Not taken: nothing outstanding from the must-fix list; remaining suggestions were wording preferences.
