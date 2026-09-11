@@ -146,9 +146,10 @@ Files-to-change is unchanged (the page, the one link line, this plan).
   duplication or as debt with an issue behind it.~~ **Resolved by the
   verification pass**: on the default branch the explorer does not run a
   stand-in of the error model at all, but a depth-only placeholder with no
-  angle term. The angle-aware stand-in exists only on the branch in review
-  (marine_perception_tools#50). Recorded as what ships, with the branch state
-  marked, rather than as a duplication.
+  angle term. The angle-aware stand-in was then on the branch in review
+  (marine_perception_tools#50), **since merged**; the revised page describes it
+  as shipped, and its replacement by the real model is
+  marine_perception_tools#55.
 
 ## What the verification pass changed
 
